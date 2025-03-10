@@ -339,13 +339,25 @@ Lo script `lancia-locale.sh` è disponibile per gestire i servizi dell'applicazi
 
 ## Servizi Testati e Verificati
 
-I seguenti servizi sono stati completamente implementati e testati:
+I seguenti servizi sono stati specificamente testati e verificati:
 
-- **Auth Service**: Gestione utenti, autenticazione JWT e ruoli utente
-- **Reward Service**: Sistema di ricompense con PostgreSQL in Docker
-- **Quiz Service**: Gestione quiz e domande
-- **Path Service**: Gestione percorsi didattici
-- **API Gateway**: Routing verso tutti i servizi backend
+- **Auth Service** (auth-service):
+  - Registrazione utenti e login/logout con JWT
+  - Verifica dei ruoli utente (admin, parent, student)
+  - Gestione token refresh
+  - Integrazione con PostgreSQL locale
+
+- **Reward Service** (reward-service):
+  - Integrazione con PostgreSQL in Docker
+  - Inizializzazione database con categorie e ricompense
+  - Verifica delle API per categorie e ricompense
+  - Autenticazione con auth-service
+
+I seguenti servizi sono implementati ma richiedono ulteriori test:
+
+- **Quiz Service** (quiz-service)
+- **Path Service** (path-service)
+- **API Gateway**
 
 ## Sviluppi Futuri
 
