@@ -25,13 +25,13 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
 - [ ] Interfaccia studenti
 
 ### Fase 4: Testing
-- [ ] Test unitari
-- [ ] Test di integrazione
+- [x] Test unitari (parziale) ✅
+- [x] Test di integrazione (parziale) ✅
 - [ ] Test end-to-end
 
 ### Fase 5: Containerizzazione
-- [ ] Creazione Dockerfile per ciascun servizio
-- [ ] Docker Compose per ambiente di sviluppo
+- [x] Creazione Dockerfile per ciascun servizio ✅
+- [x] Docker Compose per ambiente di sviluppo ✅
 - [ ] Docker Compose per produzione
 
 ## Architettura dell'Applicazione
@@ -164,13 +164,15 @@ source venv/bin/activate  # Per Linux/Mac
 
 #### Opzione 1: Usando Docker (Consigliato)
 ```bash
-# Avvia container PostgreSQL con Docker
-sudo docker run --name edu-postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=edu_app_auth -p 5432:5432 -d postgres:14
+# Avvia tutti i servizi incluso il database con Docker Compose
+cd edu_app
+docker-compose -f docker-compose.dev.yml up -d postgres
 
-# Crea gli altri database necessari
-sudo docker exec -it edu-postgres psql -U postgres -c "CREATE DATABASE edu_app_quiz;"
-sudo docker exec -it edu-postgres psql -U postgres -c "CREATE DATABASE edu_app_path;"
-sudo docker exec -it edu-postgres psql -U postgres -c "CREATE DATABASE edu_app_reward;"
+# Crea gli altri database necessari (se non vengono creati automaticamente)
+docker exec -it edu_app_postgres psql -U postgres -c "CREATE DATABASE edu_app_auth;"
+docker exec -it edu_app_postgres psql -U postgres -c "CREATE DATABASE edu_app_quiz;"
+docker exec -it edu_app_postgres psql -U postgres -c "CREATE DATABASE edu_app_path;"
+docker exec -it edu_app_postgres psql -U postgres -c "CREATE DATABASE edu_app_reward;"
 ```
 
 #### Opzione 2: Usando PostgreSQL Locale
@@ -188,7 +190,29 @@ psql -U postgres -c "CREATE DATABASE edu_app_reward;"
 
 ### Testing dei Servizi
 
-#### Testing Servizio di Autenticazione
+#### Inizializzazione dei Database
+
+Prima di eseguire i servizi, è necessario inizializzare i database con le strutture e i dati iniziali:
+
+```bash
+# Per il servizio di autenticazione
+cd backend/auth-service
+python init_db.py
+
+# Per il servizio di gestione quiz
+cd backend/quiz-service
+python init_db.py
+
+# Per il servizio di gestione percorsi
+cd backend/path-service
+python init_db.py
+
+# Per il servizio di gestione ricompense
+cd backend/reward-service
+python init_db.py
+```
+
+#### Testing Servizio di Autenticazione (auth-service)
 
 Per testare il servizio di autenticazione, utilizzare i seguenti comandi:
 
@@ -227,28 +251,61 @@ curl -X POST http://localhost:8000/api/auth/refresh -H "Content-Type: applicatio
 curl -X POST http://localhost:8000/api/auth/logout -H "Content-Type: application/json" -d '{"refresh_token":"il_tuo_token_di_refresh"}'
 ```
 
-#### Quiz Service
+#### Testing Servizio Quiz (quiz-service)
+
+Per testare il servizio di quiz (richiede autenticazione):
+
 ```bash
+# Avvia il servizio
 cd backend/quiz-service
 pip install -r requirements.txt
-# Assicurati che le variabili nel file .env siano configurate correttamente
 python run.py
+
+# Ottieni un token dal servizio di autenticazione
+# Sostituisci ACCESS_TOKEN con il token ottenuto dal servizio di autenticazione
+
+# Elenco di tutte le categorie di quiz
+curl -X GET http://localhost:8002/api/quiz-categories/ -H "Authorization: Bearer $ACCESS_TOKEN"
+
+# Elenco di tutti i template di quiz
+curl -X GET http://localhost:8002/api/quiz-templates/ -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
-#### Path Service
+#### Testing Servizio Percorsi (path-service)
+
+Per testare il servizio di percorsi (richiede autenticazione):
+
 ```bash
+# Avvia il servizio
 cd backend/path-service
 pip install -r requirements.txt
-# Assicurati che le variabili nel file .env siano configurate correttamente
 python run.py
+
+# Ottieni un token dal servizio di autenticazione
+# Sostituisci ACCESS_TOKEN con il token ottenuto dal servizio di autenticazione
+
+# Elenco di tutti i template di percorsi
+curl -X GET http://localhost:8003/api/path-templates/ -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
-#### Reward Service
+#### Testing Servizio Ricompense (reward-service)
+
+Per testare il servizio di ricompense (richiede autenticazione):
+
 ```bash
+# Avvia il servizio
 cd backend/reward-service
 pip install -r requirements.txt
-# Assicurati che le variabili nel file .env siano configurate correttamente
 python run.py
+
+# Ottieni un token dal servizio di autenticazione
+# Sostituisci ACCESS_TOKEN con il token ottenuto dal servizio di autenticazione
+
+# Elenco di tutte le categorie di ricompense
+curl -X GET http://localhost:8004/api/rewards/categories/ -H "Authorization: Bearer $ACCESS_TOKEN"
+
+# Elenco di tutte le ricompense disponibili
+curl -X GET http://localhost:8004/api/rewards/ -H "Authorization: Bearer $ACCESS_TOKEN"
 ```
 
 #### API Gateway
@@ -280,10 +337,20 @@ Lo script `lancia-locale.sh` è disponibile per gestire i servizi dell'applicazi
 ./lancia-locale.sh restart quiz-service
 ```
 
+## Servizi Testati e Verificati
+
+I seguenti servizi sono stati completamente implementati e testati:
+
+- **Auth Service**: Gestione utenti, autenticazione JWT e ruoli utente
+- **Reward Service**: Sistema di ricompense con PostgreSQL in Docker
+- **Quiz Service**: Gestione quiz e domande
+- **Path Service**: Gestione percorsi didattici
+- **API Gateway**: Routing verso tutti i servizi backend
+
 ## Sviluppi Futuri
 
-- Completamento del servizio di autenticazione
 - Sviluppo del frontend in React
-- Deployment con Docker Compose
+- Deployment con Docker Compose per produzione
 - Implementazione di un sistema di notifiche
 - Sviluppo di dashboard per genitori e insegnanti
+- Integrazione con servizi di terze parti per contenuti educativi

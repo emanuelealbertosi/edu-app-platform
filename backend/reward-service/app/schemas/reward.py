@@ -30,7 +30,7 @@ class RewardCategoryInDB(RewardCategoryBase):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class RewardCategoryWithRewards(RewardCategoryInDB):
@@ -38,7 +38,7 @@ class RewardCategoryWithRewards(RewardCategoryInDB):
     rewards: List["RewardInDB"] = []
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class RewardBase(BaseModel):
@@ -85,7 +85,7 @@ class RewardInDB(RewardBase):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class RewardWithCategory(RewardInDB):
@@ -93,7 +93,7 @@ class RewardWithCategory(RewardInDB):
     category: RewardCategoryInDB
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class UserRewardBase(BaseModel):
@@ -101,7 +101,7 @@ class UserRewardBase(BaseModel):
     user_id: str
     reward_id: str
     is_displayed: bool = True
-    metadata: Optional[Dict[str, Any]] = None
+    reward_metadata: Optional[Dict[str, Any]] = None
 
 
 class UserRewardCreate(UserRewardBase):
@@ -112,7 +112,7 @@ class UserRewardCreate(UserRewardBase):
 class UserRewardUpdate(BaseModel):
     """Schema per l'aggiornamento di ricompense utente"""
     is_displayed: Optional[bool] = None
-    metadata: Optional[Dict[str, Any]] = None
+    reward_metadata: Optional[Dict[str, Any]] = None
 
 
 class UserRewardInDB(UserRewardBase):
@@ -121,7 +121,7 @@ class UserRewardInDB(UserRewardBase):
     earned_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class UserRewardWithReward(UserRewardInDB):
@@ -129,7 +129,7 @@ class UserRewardWithReward(UserRewardInDB):
     reward: RewardInDB
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class RewardProgressBase(BaseModel):
@@ -138,7 +138,7 @@ class RewardProgressBase(BaseModel):
     reward_id: str
     current_progress: int = 0
     target_progress: int
-    metadata: Optional[Dict[str, Any]] = None
+    progress_metadata: Optional[Dict[str, Any]] = None
 
 
 class RewardProgressCreate(RewardProgressBase):
@@ -150,7 +150,7 @@ class RewardProgressUpdate(BaseModel):
     """Schema per l'aggiornamento del progresso delle ricompense"""
     current_progress: Optional[int] = None
     target_progress: Optional[int] = None
-    metadata: Optional[Dict[str, Any]] = None
+    progress_metadata: Optional[Dict[str, Any]] = None
 
 
 class RewardProgressInDB(RewardProgressBase):
@@ -159,4 +159,4 @@ class RewardProgressInDB(RewardProgressBase):
     last_updated: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True

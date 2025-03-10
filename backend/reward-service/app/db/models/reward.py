@@ -80,7 +80,7 @@ class UserReward(Base):
     user_id = Column(String, nullable=False)  # ID dell'utente
     earned_at = Column(DateTime, default=datetime.utcnow)
     is_displayed = Column(Boolean, default=True)  # Se la ricompensa è mostrata nel profilo
-    metadata = Column(JSON, nullable=True)  # Dati aggiuntivi sulla ricompensa assegnata
+    reward_metadata = Column(JSON, nullable=True)  # Dati aggiuntivi sulla ricompensa assegnata
     
     # Chiavi esterne
     reward_id = Column(String, ForeignKey("rewards.id"))
@@ -99,4 +99,4 @@ class RewardProgress(Base):
     current_progress = Column(Integer, default=0)
     target_progress = Column(Integer, nullable=False)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    metadata = Column(JSON, nullable=True)  # Dati aggiuntivi sul progresso
+    progress_metadata = Column(JSON, nullable=True)  # Dati aggiuntivi sul progresso

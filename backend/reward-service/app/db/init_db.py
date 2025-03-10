@@ -92,12 +92,11 @@ def init_db(db: Session) -> None:
     for category in DEFAULT_CATEGORIES:
         existing_category = RewardCategoryRepository.get_by_name(db, name=category["name"])
         if not existing_category:
+            from app.schemas.reward import RewardCategoryCreate
+            category_create = RewardCategoryCreate(**category)
             RewardCategoryRepository.create(
                 db=db,
-                category_data=RewardCategoryRepository.create(
-                    db=db,
-                    category_data=category
-                )
+                category_data=category_create
             )
             logger.info(f"Creata categoria: {category['name']}")
     
