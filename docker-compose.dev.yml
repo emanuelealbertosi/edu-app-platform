@@ -1,0 +1,149 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    container_name: edu_app_postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_MULTIPLE_DATABASES=edu_app_auth,edu_app_quiz,edu_app_path,edu_app_reward
+    volumes:
+      - ./docker/postgres:/docker-entrypoint-initdb.d
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      
+  api-gateway:
+    build:
+      context: ./backend/api-gateway
+      dockerfile: Dockerfile
+    container_name: edu_app_api_gateway
+    volumes:
+      - ./backend/api-gateway:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - SECRET_KEY=chiave_segreta_dev
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - QUIZ_SERVICE_URL=http://quiz-service:8002
+      - PATH_SERVICE_URL=http://path-service:8003
+      - REWARD_SERVICE_URL=http://reward-service:8004
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8000
+      - DEBUG=true
+    depends_on:
+      - auth-service
+      - quiz-service
+      - path-service
+      - reward-service
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    
+  auth-service:
+    build:
+      context: ./backend/auth-service
+      dockerfile: Dockerfile
+    container_name: edu_app_auth_service
+    volumes:
+      - ./backend/auth-service:/app
+    ports:
+      - "8001:8001"
+    environment:
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=edu_app_auth
+      - POSTGRES_PORT=5432
+      - SECRET_KEY=questa_chiave_deve_essere_cambiata_in_produzione
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      - REFRESH_TOKEN_EXPIRE_MINUTES=10080
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8001
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+  quiz-service:
+    build:
+      context: ./backend/quiz-service
+      dockerfile: Dockerfile
+    container_name: edu_app_quiz_service
+    volumes:
+      - ./backend/quiz-service:/app
+    ports:
+      - "8002:8002"
+    environment:
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=edu_app_quiz
+      - POSTGRES_PORT=5432
+      - SECRET_KEY=chiave_segreta_dev
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8002
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8002 --reload
+
+  path-service:
+    build:
+      context: ./backend/path-service
+      dockerfile: Dockerfile
+    container_name: edu_app_path_service
+    volumes:
+      - ./backend/path-service:/app
+    ports:
+      - "8003:8003"
+    environment:
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=edu_app_path
+      - POSTGRES_PORT=5432
+      - SECRET_KEY=chiave_segreta_dev
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - QUIZ_SERVICE_URL=http://quiz-service:8002
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8003
+    depends_on:
+      postgres:
+        condition: service_healthy
+      quiz-service:
+        condition: service_started
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8003 --reload
+
+  reward-service:
+    build:
+      context: ./backend/reward-service
+      dockerfile: Dockerfile
+    container_name: edu_app_reward_service
+    volumes:
+      - ./backend/reward-service:/app
+    ports:
+      - "8004:8004"
+    environment:
+      - POSTGRES_SERVER=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=edu_app_reward
+      - POSTGRES_PORT=5432
+      - SECRET_KEY=chiave_segreta_dev
+      - AUTH_SERVICE_URL=http://auth-service:8001
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8004
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8004 --reload
+
+volumes:
+  postgres_data:
