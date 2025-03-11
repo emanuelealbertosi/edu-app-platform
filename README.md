@@ -57,8 +57,9 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
     - [x] StudentDashboard con dati da PathService e QuizService
     - [x] AssignedPaths con dati da PathService
     - [x] TakeQuiz con dati da QuizService (completato Marzo 2025)
-  - [ ] Componenti dashboard genitore con dati reali (in corso)
-  - [ ] Componenti dashboard admin con dati reali (in corso)
+    - [x] RewardShop con dati da RewardService
+  - [x] Componenti dashboard genitore con dati reali
+  - [x] Componenti dashboard admin con dati reali
 - [x] Sistema di notifiche a livello applicativo
   - [x] NotificationsContext per gestione centralizzata
   - [x] NotificationsService per esposizione API
@@ -70,7 +71,21 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
   - [x] Effetti hover e animazioni interattive
   - [x] Transizioni di pagina fluide
 
-### Fase 5: Testing
+### Fase 5: Ottimizzazione e Perfezionamento (In Corso)
+- [ ] Ottimizzazione delle prestazioni
+  - [ ] Implementazione caching lato client
+  - [ ] Caricamento ottimizzato delle risorse
+  - [ ] Supporto modalità offline per funzionalità chiave
+- [ ] UX/UI avanzata
+  - [ ] Temi personalizzabili (chiaro/scuro)
+  - [ ] Guide interattive per nuovi utenti
+  - [ ] Miglioramenti accessibilità
+- [ ] Analytics e reportistica
+  - [ ] Dashboard analitiche avanzate
+  - [ ] Sistema di reportistica per genitori/insegnanti
+  - [ ] Visualizzazioni dettagliate progresso studenti
+
+### Fase 6: Testing
 - [x] Test unitari 
 - [x] Test di integrazione 
 - [x] Adattamento test per integrare autenticazione JWT 
@@ -78,7 +93,7 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
 - [x] Verifica funzionamento autenticazione tra servizi e API Gateway 
 - [ ] Test end-to-end
 
-### Fase 6: Containerizzazione
+### Fase 7: Containerizzazione
 - [x] Creazione Dockerfile per ciascun servizio 
 - [x] Docker Compose per ambiente di sviluppo 
 - [ ] Docker Compose per produzione
