@@ -29,6 +29,21 @@ import PathService from '../../services/PathService';
 import QuizService from '../../services/QuizService';
 import RewardService from '../../services/RewardService';
 
+// Importazione componenti di animazione
+import { 
+  FadeIn,
+  SlideInUp, 
+  SlideInLeft, 
+  SlideInRight,
+  HoverAnimation
+} from '../../components/animations/Transitions';
+import { 
+  LoadingIndicator, 
+  ProgressBar,
+  CardSkeleton
+} from '../../components/animations/LoadingAnimations';
+import { AnimatedPage, AnimatedList } from '../../components/animations/PageTransitions';
+
 // Interfacce TypeScript
 interface Path {
   id: string;
@@ -53,6 +68,7 @@ interface Reward {
   description: string;
   cost: number;
   image_url?: string;
+  status: string; // Aggiunto il campo status per mostrare se la ricompensa è stata riscattata o meno
   // Altri campi dal servizio vengono ignorati per compatibilità
 }
 
@@ -105,9 +121,23 @@ const StudentDashboard: React.FC = () => {
           title: reward.title,
           description: reward.description,
           cost: reward.pointsCost,
-          image_url: reward.imageUrl
+          image_url: reward.imageUrl,
+          status: 'disponibile' // Stato predefinito per le ricompense disponibili
         }));
-        setRewards(mappedRewards);
+        
+        // Ottieni anche le ricompense già riscattate
+        const redeemedRewards = await RewardService.getRedeemedRewards();
+        const mappedRedeemedRewards = redeemedRewards.map(reward => ({
+          id: reward.id,
+          title: reward.title,
+          description: reward.description,
+          cost: reward.pointsCost,
+          image_url: reward.imageUrl,
+          status: reward.status 
+        }));
+        
+        // Combina le ricompense disponibili e quelle riscattate
+        setRewards([...mappedRedeemedRewards, ...mappedRewards].slice(0, 5));
         setLoading(prev => ({ ...prev, rewards: false }));
 
         // Carica i punti dell'utente
@@ -132,227 +162,261 @@ const StudentDashboard: React.FC = () => {
   }, [user?.id]);
 
   return (
-    <MainLayout title="Dashboard Studente">
-      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-        <Grid container spacing={3}>
-          
-          {/* Sezione "I tuoi punti" */}
-          <Grid item xs={12} md={4} lg={3}>
-            <Paper
-              sx={{
-                p: 2,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                height: 140,
-              }}
-            >
-              <Typography component="h2" variant="h6" color="primary" gutterBottom>
-                I tuoi punti
-              </Typography>
-              <Typography component="p" variant="h4">
-                {loading.points ? "Caricamento..." : points}
-              </Typography>
-              <div>
-                <Link to="/student/rewards" style={{ textDecoration: 'none' }}>
-                  <Button
-                    startIcon={<ShoppingCartIcon />}
-                    color="primary"
-                    sx={{ mt: 2 }}
-                  >
-                    Shop Ricompense
-                  </Button>
-                </Link>
-              </div>
-            </Paper>
-          </Grid>
-          
-          {/* Sezione Quiz Imminenti */}
-          <Grid item xs={12} md={8} lg={9}>
-            <Paper
-              sx={{
-                p: 2,
-                display: 'flex',
-                flexDirection: 'column',
-                height: 140,
-              }}
-            >
-              <Typography component="h2" variant="h6" color="primary" gutterBottom>
-                Quiz Imminenti
-              </Typography>
-              {loading.quizzes ? (
-                <Typography>Caricamento quiz...</Typography>
-              ) : quizzes.length === 0 ? (
-                <Typography>Nessun quiz in programma</Typography>
-              ) : (
-                <List dense>
-                  {quizzes.filter(quiz => !quiz.completed).slice(0, 2).map((quiz) => (
-                    <ListItem
-                      key={quiz.id}
-                      secondaryAction={
-                        <Button 
-                          variant="contained" 
-                          size="small"
-                          component={Link}
-                          to={`/student/quiz/${quiz.id}`}
-                        >
-                          <QuizIcon fontSize="small" sx={{ mr: 1 }} />
-                          Inizia
-                        </Button>
-                      }
-                    >
-                      <ListItemText
-                        primary={quiz.title}
-                        secondary={quiz.path_title || 'Quiz indipendente'}
-                      />
-                    </ListItem>
-                  ))}
-                </List>
-              )}
-              <Box display="flex" justifyContent="flex-end" sx={{ mt: 'auto' }}>
-                <Link to="/student/quizzes" style={{ textDecoration: 'none' }}>
-                  <Button size="small" color="primary">
-                    Vedi tutti
-                  </Button>
-                </Link>
-              </Box>
-            </Paper>
-          </Grid>
+    <AnimatedPage transitionType="fade">
+      <MainLayout title="Dashboard Studente">
+        <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+          <FadeIn>
+            <Typography variant="h4" gutterBottom>
+              Benvenuto, {user?.firstName || 'Studente'}
+            </Typography>
+            <Typography variant="body1" paragraph>
+              Ecco un riepilogo dei tuoi progressi e delle attività disponibili.
+            </Typography>
+          </FadeIn>
 
-          {/* Sezione I tuoi percorsi */}
-          <Grid item xs={12}>
-            <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
-              <Typography component="h2" variant="h6" color="primary" gutterBottom>
-                I tuoi percorsi educativi
-              </Typography>
-              
-              {loading.paths ? (
-                <Typography>Caricamento percorsi...</Typography>
-              ) : paths.length === 0 ? (
-                <Typography>Nessun percorso assegnato</Typography>
-              ) : (
-                <Grid container spacing={3} sx={{ mt: 1 }}>
-                  {paths.map((path) => (
-                    <Grid item xs={12} sm={6} md={4} key={path.id}>
-                      <Card>
-                        <CardContent>
-                          <Typography variant="h6" component="div">
-                            {path.title}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                            {path.description}
-                          </Typography>
-                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                            <Box sx={{ width: '100%', mr: 1 }}>
-                              <LinearProgress variant="determinate" value={path.progress} />
-                            </Box>
-                            <Box sx={{ minWidth: 35 }}>
-                              <Typography variant="body2" color="text.secondary">
-                                {path.progress}%
-                              </Typography>
-                            </Box>
+          {/* Riepilogo punti e ricompense */}
+          <SlideInUp delay={0.1}>
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={12} md={6}>
+                <HoverAnimation scale={1.02}>
+                  <Paper
+                    sx={{
+                      p: 3,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      backgroundColor: 'primary.light',
+                      color: 'primary.contrastText',
+                      borderRadius: 2
+                    }}
+                  >
+                    {loading.points ? (
+                      <LoadingIndicator text="Caricamento punti..." color="#fff" />
+                    ) : (
+                      <>
+                        <Box display="flex" alignItems="center">
+                          <EmojiEventsIcon sx={{ fontSize: 40, mr: 2 }} />
+                          <Box>
+                            <Typography variant="h5">I tuoi punti</Typography>
+                            <Typography variant="h3">{points}</Typography>
                           </Box>
-                          {path.due_date && (
-                            <Typography variant="caption" display="block">
-                              Scadenza: {new Date(path.due_date).toLocaleDateString()}
+                        </Box>
+                        <Typography sx={{ mt: 2 }}>
+                          Puoi utilizzare i tuoi punti per riscattare delle ricompense!
+                        </Typography>
+                        <Box sx={{ mt: 2 }}>
+                          <Button
+                            component={Link}
+                            to="/student/rewards"
+                            variant="contained"
+                            color="secondary"
+                            startIcon={<ShoppingCartIcon />}
+                          >
+                            Vai allo Shop
+                          </Button>
+                        </Box>
+                      </>
+                    )}
+                  </Paper>
+                </HoverAnimation>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <HoverAnimation scale={1.02}>
+                  <Paper sx={{ p: 3, borderRadius: 2 }}>
+                    {loading.rewards ? (
+                      <LoadingIndicator text="Caricamento ricompense recenti..." />
+                    ) : (
+                      <>
+                        <Typography variant="h5" gutterBottom>
+                          Ultime ricompense
+                        </Typography>
+                        <List>
+                          {rewards.length > 0 ? (
+                            <AnimatedList>
+                              {rewards.slice(0, 3).map((reward) => (
+                                <ListItem key={reward.id} divider>
+                                  <ListItemText
+                                    primary={reward.title}
+                                    secondary={`Costo: ${reward.cost} punti - ${reward.status}`}
+                                  />
+                                  <Chip
+                                    color={reward.status === 'riscattato' ? 'success' : 'default'}
+                                    label={reward.status}
+                                    size="small"
+                                  />
+                                </ListItem>
+                              ))}
+                            </AnimatedList>
+                          ) : (
+                            <Typography variant="body2" color="textSecondary">
+                              Non hai ancora riscattato nessuna ricompensa.
                             </Typography>
                           )}
-                        </CardContent>
-                        <CardActions>
-                          <Button 
-                            size="small" 
-                            color="primary"
-                            component={Link}
-                            to={`/student/path/${path.id}`}
-                          >
-                            <MenuBookIcon fontSize="small" sx={{ mr: 1 }} />
-                            Continua
-                          </Button>
-                        </CardActions>
-                      </Card>
-                    </Grid>
-                  ))}
-                </Grid>
-              )}
-              
-              <Box display="flex" justifyContent="flex-end" sx={{ mt: 2 }}>
-                <Link to="/student/paths" style={{ textDecoration: 'none' }}>
-                  <Button size="small" color="primary">
-                    Vedi tutti
-                  </Button>
-                </Link>
-              </Box>
-            </Paper>
-          </Grid>
+                        </List>
+                      </>
+                    )}
+                  </Paper>
+                </HoverAnimation>
+              </Grid>
+            </Grid>
+          </SlideInUp>
 
-          {/* Sezione Ricompense Disponibili */}
-          <Grid item xs={12}>
-            <Paper sx={{ p: 2, display: 'flex', flexDirection: 'column' }}>
-              <Typography component="h2" variant="h6" color="primary" gutterBottom>
-                Ricompense Disponibili
-              </Typography>
+          {/* Percorsi recenti */}
+          <SlideInLeft delay={0.2}>
+            <Paper sx={{ p: 3, mb: 4, borderRadius: 2 }}>
+              <Box display="flex" alignItems="center" sx={{ mb: 2 }}>
+                <MenuBookIcon color="primary" sx={{ mr: 1, fontSize: 30 }} />
+                <Typography variant="h5">I tuoi percorsi</Typography>
+              </Box>
               
-              {loading.rewards ? (
-                <Typography>Caricamento ricompense...</Typography>
-              ) : rewards.length === 0 ? (
-                <Typography>Nessuna ricompensa disponibile</Typography>
+              {loading.paths ? (
+                <CardSkeleton count={2} />
               ) : (
-                <Grid container spacing={3} sx={{ mt: 1 }}>
-                  {rewards.slice(0, 3).map((reward) => (
-                    <Grid item xs={12} sm={6} md={4} key={reward.id}>
-                      <Card>
-                        {reward.image_url && (
-                          <CardMedia
-                            component="img"
-                            height="140"
-                            image={reward.image_url}
-                            alt={reward.title}
-                          />
-                        )}
-                        <CardContent>
-                          <Typography variant="h6" component="div">
-                            {reward.title}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                            {reward.description}
-                          </Typography>
-                          <Chip 
-                            icon={<EmojiEventsIcon />} 
-                            label={`${reward.cost} punti`} 
-                            color="primary" 
-                            variant="outlined" 
-                          />
-                        </CardContent>
-                        <CardActions>
-                          <Button 
-                            size="small" 
-                            variant={points >= reward.cost ? "contained" : "outlined"}
-                            disabled={points < reward.cost}
-                            component={Link}
-                            to={`/student/rewards`}
-                          >
-                            <ShoppingCartIcon fontSize="small" sx={{ mr: 1 }} />
-                            {points >= reward.cost ? "Riscatta" : "Punti insufficienti"}
-                          </Button>
-                        </CardActions>
-                      </Card>
+                <Grid container spacing={3}>
+                  {paths.length > 0 ? (
+                    paths.slice(0, 3).map((path, index) => (
+                      <Grid item xs={12} md={4} key={path.id}>
+                        <HoverAnimation>
+                          <Card>
+                            <CardContent>
+                              <Typography variant="h6" gutterBottom>
+                                {path.title}
+                              </Typography>
+                              <Typography
+                                variant="body2"
+                                color="textSecondary"
+                                sx={{
+                                  mb: 2,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical',
+                                }}
+                              >
+                                {path.description}
+                              </Typography>
+                              <Box sx={{ mt: 1, mb: 1 }}>
+                                <Typography variant="body2" color="textSecondary" gutterBottom>
+                                  Progresso: {path.progress}%
+                                </Typography>
+                                <ProgressBar 
+                                  progress={path.progress} 
+                                  height={8} 
+                                  animated={true}
+                                />
+                              </Box>
+                              {path.due_date && (
+                                <Typography variant="caption" color="textSecondary">
+                                  Da completare entro: {path.due_date}
+                                </Typography>
+                              )}
+                            </CardContent>
+                            <CardActions>
+                              <Button
+                                component={Link}
+                                to={`/student/paths/${path.id}`}
+                                size="small"
+                                color="primary"
+                              >
+                                Continua
+                              </Button>
+                            </CardActions>
+                          </Card>
+                        </HoverAnimation>
+                      </Grid>
+                    ))
+                  ) : (
+                    <Grid item xs={12}>
+                      <Typography variant="body1" color="textSecondary">
+                        Non hai ancora percorsi assegnati.
+                      </Typography>
                     </Grid>
-                  ))}
+                  )}
+                  {paths.length > 0 && (
+                    <Grid item xs={12}>
+                      <Box display="flex" justifyContent="center" mt={2}>
+                        <Button
+                          component={Link}
+                          to="/student/paths"
+                          variant="outlined"
+                          color="primary"
+                        >
+                          Vedi tutti i percorsi
+                        </Button>
+                      </Box>
+                    </Grid>
+                  )}
                 </Grid>
               )}
-              
-              <Box display="flex" justifyContent="flex-end" sx={{ mt: 2 }}>
-                <Link to="/student/rewards" style={{ textDecoration: 'none' }}>
-                  <Button size="small" color="primary">
-                    Vedi tutte
-                  </Button>
-                </Link>
-              </Box>
             </Paper>
-          </Grid>
-        </Grid>
-      </Container>
-    </MainLayout>
+          </SlideInLeft>
+
+          {/* Quiz da completare */}
+          <SlideInRight delay={0.3}>
+            <Paper sx={{ p: 3, borderRadius: 2 }}>
+              <Box display="flex" alignItems="center" sx={{ mb: 2 }}>
+                <QuizIcon color="primary" sx={{ mr: 1, fontSize: 30 }} />
+                <Typography variant="h5">Quiz disponibili</Typography>
+              </Box>
+              
+              {loading.quizzes ? (
+                <CardSkeleton count={2} />
+              ) : (
+                <Grid container spacing={3}>
+                  {quizzes.filter(q => !q.completed).length > 0 ? (
+                    quizzes
+                      .filter(q => !q.completed)
+                      .slice(0, 3)
+                      .map((quiz, index) => (
+                        <Grid item xs={12} md={4} key={quiz.id}>
+                          <HoverAnimation>
+                            <Card>
+                              <CardContent>
+                                <Typography variant="h6" gutterBottom>
+                                  {quiz.title}
+                                </Typography>
+                                {quiz.path_title && (
+                                  <Typography variant="body2" color="textSecondary" gutterBottom>
+                                    Percorso: {quiz.path_title}
+                                  </Typography>
+                                )}
+                                <Chip
+                                  label="Da completare"
+                                  color="warning"
+                                  size="small"
+                                  sx={{ mt: 1 }}
+                                />
+                              </CardContent>
+                              <CardActions>
+                                <Button
+                                  component={Link}
+                                  to={`/student/quiz/${quiz.id}`}
+                                  size="small"
+                                  color="primary"
+                                  variant="contained"
+                                >
+                                  Inizia
+                                </Button>
+                              </CardActions>
+                            </Card>
+                          </HoverAnimation>
+                        </Grid>
+                      ))
+                  ) : (
+                    <Grid item xs={12}>
+                      <Typography variant="body1" color="textSecondary">
+                        Non hai quiz da completare al momento.
+                      </Typography>
+                    </Grid>
+                  )}
+                </Grid>
+              )}
+            </Paper>
+          </SlideInRight>
+        </Container>
+      </MainLayout>
+    </AnimatedPage>
   );
 };
 

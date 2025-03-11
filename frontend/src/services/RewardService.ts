@@ -1,4 +1,13 @@
 import axios, { AxiosInstance } from 'axios';
+import ApiService from './ApiService';
+import NotificationsService from './NotificationsService';
+
+// Fix per errore lint: "Cannot find name 'process'"
+declare const process: {
+  env: {
+    REACT_APP_API_URL?: string;
+  };
+};
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 const REWARD_API_URL = `${API_URL}/reward`;
@@ -56,29 +65,8 @@ export interface RedemptionResponse {
 }
 
 class RewardService {
-  private api: AxiosInstance;
-
   constructor() {
-    this.api = axios.create({
-      baseURL: REWARD_API_URL,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    // Interceptor per aggiungere il token di autenticazione
-    this.api.interceptors.request.use(
-      (config) => {
-        const token = localStorage.getItem('accessToken');
-        if (token) {
-          config.headers['Authorization'] = `Bearer ${token}`;
-        }
-        return config;
-      },
-      (error) => {
-        return Promise.reject(error);
-      }
-    );
+    // ApiService gestisce tutto internamente
   }
 
   // OPERAZIONI SUI TEMPLATE DI RICOMPENSE
@@ -88,16 +76,14 @@ class RewardService {
    * Admin e parent possono vedere tutti i template
    */
   public async getAllRewardTemplates(): Promise<RewardTemplate[]> {
-    const response = await this.api.get<RewardTemplate[]>('/templates');
-    return response.data;
+    return ApiService.get<RewardTemplate[]>(`${REWARD_API_URL}/templates`);
   }
 
   /**
    * Ottiene un template di ricompensa specifico per ID
    */
   public async getRewardTemplate(id: string): Promise<RewardTemplate> {
-    const response = await this.api.get<RewardTemplate>(`/templates/${id}`);
-    return response.data;
+    return ApiService.get<RewardTemplate>(`${REWARD_API_URL}/templates/${id}`);
   }
 
   /**
@@ -105,8 +91,16 @@ class RewardService {
    * Admin e parent possono creare template
    */
   public async createRewardTemplate(template: Omit<RewardTemplate, 'id'>): Promise<RewardTemplate> {
-    const response = await this.api.post<RewardTemplate>('/templates', template);
-    return response.data;
+    try {
+      const result = await ApiService.post<RewardTemplate>(`${REWARD_API_URL}/templates`, template);
+      NotificationsService.success(
+        `La ricompensa "${template.title}" è stata creata con successo.`,
+        'Ricompensa creata'
+      );
+      return result;
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**
@@ -114,8 +108,16 @@ class RewardService {
    * Solo il creatore del template può modificarlo
    */
   public async updateRewardTemplate(id: string, template: Partial<RewardTemplate>): Promise<RewardTemplate> {
-    const response = await this.api.put<RewardTemplate>(`/templates/${id}`, template);
-    return response.data;
+    try {
+      const result = await ApiService.put<RewardTemplate>(`${REWARD_API_URL}/templates/${id}`, template);
+      NotificationsService.success(
+        `La ricompensa "${template.title || 'selezionata'}" è stata aggiornata.`,
+        'Ricompensa aggiornata'
+      );
+      return result;
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**
@@ -123,7 +125,15 @@ class RewardService {
    * Solo il creatore del template può eliminarlo
    */
   public async deleteRewardTemplate(id: string): Promise<void> {
-    await this.api.delete(`/templates/${id}`);
+    try {
+      await ApiService.delete(`${REWARD_API_URL}/templates/${id}`);
+      NotificationsService.success(
+        'La ricompensa è stata eliminata con successo.',
+        'Ricompensa eliminata'
+      );
+    } catch (error) {
+      throw error;
+    }
   }
 
   // OPERAZIONI SULLE RICOMPENSE
@@ -132,32 +142,42 @@ class RewardService {
    * Ottiene tutte le ricompense disponibili per lo studente corrente
    */
   public async getAvailableRewards(): Promise<RewardTemplate[]> {
-    const response = await this.api.get<RewardTemplate[]>('/available');
-    return response.data;
+    return ApiService.get<RewardTemplate[]>(`${REWARD_API_URL}/available`);
   }
 
   /**
    * Ottiene tutte le ricompense riscattate dallo studente corrente
    */
   public async getRedeemedRewards(): Promise<Reward[]> {
-    const response = await this.api.get<Reward[]>('/redeemed');
-    return response.data;
+    return ApiService.get<Reward[]>(`${REWARD_API_URL}/redeemed`);
   }
 
   /**
    * Riscatta una ricompensa
    */
   public async redeemReward(redemption: RedemptionRequest): Promise<RedemptionResponse> {
-    const response = await this.api.post<RedemptionResponse>('/redeem', redemption);
-    return response.data;
+    try {
+      const result = await ApiService.post<RedemptionResponse>(`${REWARD_API_URL}/redeem`, redemption);
+      
+      NotificationsService.success(
+        `Hai riscattato con successo la ricompensa! Ti restano ${result.remainingPoints} punti.`,
+        'Ricompensa riscattata',
+        { autoClose: true, duration: 6000 }
+      );
+      
+      return result;
+    } catch (error) {
+      // Se ci sono errori specifici, mostriamo notifiche più informative
+      // L'ApiErrorHandler si occuperà di mostrare eventuali errori generici
+      throw error;
+    }
   }
 
   /**
    * Ottiene statistiche sulle ricompense di uno studente
    */
   public async getStudentRewardStats(studentId: string): Promise<StudentRewardStats> {
-    const response = await this.api.get<StudentRewardStats>(`/stats/student/${studentId}`);
-    return response.data;
+    return ApiService.get<StudentRewardStats>(`${REWARD_API_URL}/stats/student/${studentId}`);
   }
 
   /**
@@ -165,8 +185,35 @@ class RewardService {
    * Solo parent può aggiornare lo stato (ad es. segnarla come consegnata)
    */
   public async updateRewardStatus(rewardId: string, status: Reward['status']): Promise<Reward> {
-    const response = await this.api.patch<Reward>(`/${rewardId}/status`, { status });
-    return response.data;
+    try {
+      const result = await ApiService.put<Reward>(`${REWARD_API_URL}/${rewardId}/status`, { status });
+      
+      let message = '';
+      let title = 'Stato ricompensa aggiornato';
+      
+      switch(status) {
+        case 'consegnato':
+          message = 'La ricompensa è stata contrassegnata come consegnata.';
+          title = 'Ricompensa consegnata';
+          break;
+        case 'riscattato':
+          message = 'La ricompensa è stata riscattata con successo.';
+          title = 'Ricompensa riscattata';
+          break;
+        case 'scaduto':
+          message = 'La ricompensa è scaduta e non è più disponibile.';
+          title = 'Ricompensa scaduta';
+          NotificationsService.warning(message, title);
+          return result;
+        default:
+          message = `Lo stato della ricompensa è stato aggiornato a: ${status}.`;
+      }
+      
+      NotificationsService.success(message, title);
+      return result;
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**
@@ -174,8 +221,31 @@ class RewardService {
    * Solo parent o admin possono aggiungere punti
    */
   public async addPointsToStudent(studentId: string, points: number, reason: string): Promise<StudentRewardStats> {
-    const response = await this.api.post<StudentRewardStats>(`/points/add`, { studentId, points, reason });
-    return response.data;
+    try {
+      const result = await ApiService.post<StudentRewardStats>(`${REWARD_API_URL}/points/add`, { 
+        studentId, 
+        points, 
+        reason 
+      });
+      
+      if (points > 0) {
+        NotificationsService.success(
+          `Sono stati aggiunti ${points} punti allo studente. Nuovo saldo: ${result.availablePoints} punti.`,
+          'Punti aggiunti',
+          { autoClose: true, duration: 5000 }
+        );
+      } else if (points < 0) {
+        NotificationsService.warning(
+          `Sono stati rimossi ${Math.abs(points)} punti allo studente. Nuovo saldo: ${result.availablePoints} punti.`,
+          'Punti rimossi',
+          { autoClose: true, duration: 5000 }
+        );
+      }
+      
+      return result;
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**
@@ -188,8 +258,7 @@ class RewardService {
     source: 'quiz' | 'path' | 'manual' | 'redemption';
     description: string;
   }>> {
-    const response = await this.api.get(`/points/history/${studentId}`);
-    return response.data;
+    return ApiService.get(`${REWARD_API_URL}/points/history/${studentId}`);
   }
 }
 

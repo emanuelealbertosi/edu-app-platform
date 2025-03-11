@@ -59,6 +59,16 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
     - [x] TakeQuiz con dati da QuizService (completato Marzo 2025)
   - [ ] Componenti dashboard genitore con dati reali (in corso)
   - [ ] Componenti dashboard admin con dati reali (in corso)
+- [x] Sistema di notifiche a livello applicativo
+  - [x] NotificationsContext per gestione centralizzata
+  - [x] NotificationsService per esposizione API
+  - [x] Integrazione con sistema di gestione errori
+  - [x] Componenti UI per visualizzazione notifiche
+- [x] Miglioramenti dell'esperienza utente
+  - [x] Sistema di animazioni e transizioni
+  - [x] Componenti per il feedback visivo durante caricamenti
+  - [x] Effetti hover e animazioni interattive
+  - [x] Transizioni di pagina fluide
 
 ### Fase 5: Testing
 - [x] Test unitari 
@@ -93,6 +103,7 @@ L'applicazione è basata su un'architettura a microservizi:
 - **Frontend**: React con Material-UI
 - **Autenticazione**: OAuth2 con JWT
 - **Validation**: Pydantic V2
+- **Animazioni**: Framer Motion
 - **Containerizzazione**: Docker e Docker Compose (pianificata)
 
 ## Servizi Testati e Verificati

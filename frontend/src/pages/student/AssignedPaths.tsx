@@ -22,6 +22,21 @@ import MainLayout from '../../components/layout/MainLayout';
 import SearchIcon from '@mui/icons-material/Search';
 import PathService from '../../services/PathService';
 
+// Importazione componenti di animazione
+import { 
+  FadeIn, 
+  SlideInUp, 
+  SlideInLeft, 
+  SlideInRight,
+  HoverAnimation 
+} from '../../components/animations/Transitions';
+import { 
+  LoadingIndicator, 
+  ProgressBar,
+  CardSkeleton 
+} from '../../components/animations/LoadingAnimations';
+import { AnimatedPage, AnimatedList } from '../../components/animations/PageTransitions';
+
 interface Path {
   id: string;
   title: string;
@@ -106,26 +121,6 @@ const AssignedPaths: React.FC = () => {
     return Array.from(subjects);
   };
 
-  if (loading) {
-    return (
-      <MainLayout title="Percorsi Assegnati">
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
-          <CircularProgress />
-        </Box>
-      </MainLayout>
-    );
-  }
-
-  if (error) {
-    return (
-      <MainLayout title="Percorsi Assegnati">
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
-          <Typography color="error">{error}</Typography>
-        </Box>
-      </MainLayout>
-    );
-  }
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'non_iniziato':
@@ -165,136 +160,235 @@ const AssignedPaths: React.FC = () => {
     }
   };
 
+  const getActionButtonLabel = (status: string) => {
+    switch (status) {
+      case 'non_iniziato':
+        return 'Inizia';
+      case 'in_corso':
+        return 'Continua';
+      case 'completato':
+        return 'Visualizza';
+      default:
+        return 'Inizia';
+    }
+  };
+
   return (
-    <MainLayout title="Percorsi Assegnati">
-      <Box sx={{ p: 3 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          I Tuoi Percorsi Educativi
-        </Typography>
+    <AnimatedPage transitionType="fade">
+      <MainLayout title="Percorsi Assegnati">
+        <Box sx={{ p: { xs: 2, md: 3 } }}>
+          <FadeIn>
+            <Typography variant="h4" component="h1" gutterBottom>
+              I Tuoi Percorsi Assegnati
+            </Typography>
+            <Typography variant="body1" color="text.secondary" paragraph>
+              Esplora i percorsi assegnati e monitora i tuoi progressi
+            </Typography>
+          </FadeIn>
 
-        {/* Filtri e ricerca */}
-        <Box sx={{ mb: 4, display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-          <TextField
-            label="Cerca percorsi"
-            variant="outlined"
-            size="small"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            sx={{ flexGrow: 1, minWidth: 200 }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-          />
-
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>Materia</InputLabel>
-            <Select
-              value={filterSubject}
-              label="Materia"
-              onChange={(e) => setFilterSubject(e.target.value)}
-            >
-              <MenuItem value="">Tutte</MenuItem>
-              {getUniqueSubjects().map((subject) => (
-                <MenuItem key={subject} value={subject}>
-                  {subject}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>Stato</InputLabel>
-            <Select
-              value={filterStatus}
-              label="Stato"
-              onChange={(e) => setFilterStatus(e.target.value)}
-            >
-              <MenuItem value="">Tutti</MenuItem>
-              <MenuItem value="non_iniziato">Non iniziato</MenuItem>
-              <MenuItem value="in_corso">In corso</MenuItem>
-              <MenuItem value="completato">Completato</MenuItem>
-            </Select>
-          </FormControl>
-        </Box>
-
-        {/* Lista percorsi */}
-        {filteredPaths.length === 0 ? (
-          <Typography variant="body1">
-            Nessun percorso trovato con i criteri di ricerca specificati.
-          </Typography>
-        ) : (
-          <Grid container spacing={3}>
-            {filteredPaths.map((path) => (
-              <Grid item xs={12} sm={6} md={4} key={path.id}>
-                <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                  <CardContent sx={{ flexGrow: 1 }}>
-                    <Typography variant="h6" component="div" gutterBottom>
-                      {path.title}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      {path.description}
-                    </Typography>
-                    
-                    <Box sx={{ mb: 2 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                        <Typography variant="body2">Progresso</Typography>
-                        <Typography variant="body2">{path.progress}%</Typography>
-                      </Box>
-                      <LinearProgress 
-                        variant="determinate" 
-                        value={path.progress} 
-                        sx={{ height: 8, borderRadius: 4 }}
-                      />
-                    </Box>
-                    
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                      <Chip 
-                        label={path.subject} 
-                        size="small" 
-                        color="primary"
-                        variant="outlined"
-                      />
-                      <Chip 
-                        label={path.difficulty} 
-                        size="small" 
-                        color={getDifficultyColor(path.difficulty) as any}
-                      />
-                      <Chip 
-                        label={getStatusLabel(path.status)} 
-                        size="small" 
-                        color={getStatusColor(path.status) as any}
-                      />
-                    </Box>
-                    
-                    {path.targetEndDate && (
-                      <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                        Data obiettivo: {new Date(path.targetEndDate).toLocaleDateString()}
-                      </Typography>
-                    )}
-                  </CardContent>
-                  <CardActions>
-                    <Button 
-                      component={Link} 
-                      to={`/student/path/${path.id}`} 
-                      size="small" 
-                      variant="contained" 
-                      fullWidth
-                      disabled={path.status === 'completato'}
+          {/* Filtri e ricerca */}
+          <SlideInUp delay={0.2}>
+            <Box sx={{ mb: 4, mt: 3 }}>
+              <Grid container spacing={2} alignItems="center">
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    variant="outlined"
+                    placeholder="Cerca percorsi..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={6} md={3}>
+                  <FormControl fullWidth>
+                    <InputLabel>Filtra per materia</InputLabel>
+                    <Select
+                      value={filterSubject}
+                      label="Filtra per materia"
+                      onChange={(e) => setFilterSubject(e.target.value)}
                     >
-                      {path.status === 'non_iniziato' ? 'Inizia' : path.status === 'in_corso' ? 'Continua' : 'Visualizza'}
-                    </Button>
-                  </CardActions>
-                </Card>
+                      <MenuItem value="">Tutte le materie</MenuItem>
+                      {getUniqueSubjects().map((subject) => (
+                        <MenuItem key={subject} value={subject}>
+                          {subject}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={6} md={3}>
+                  <FormControl fullWidth>
+                    <InputLabel>Filtra per stato</InputLabel>
+                    <Select
+                      value={filterStatus}
+                      label="Filtra per stato"
+                      onChange={(e) => setFilterStatus(e.target.value)}
+                    >
+                      <MenuItem value="">Tutti gli stati</MenuItem>
+                      <MenuItem value="non_iniziato">Non iniziato</MenuItem>
+                      <MenuItem value="in_corso">In corso</MenuItem>
+                      <MenuItem value="completato">Completato</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
               </Grid>
-            ))}
-          </Grid>
-        )}
-      </Box>
-    </MainLayout>
+            </Box>
+          </SlideInUp>
+
+          {/* Risultati della ricerca */}
+          {loading ? (
+            <Grid container spacing={3}>
+              {[1, 2, 3, 4, 5, 6].map((item) => (
+                <Grid item xs={12} sm={6} md={4} key={item}>
+                  <CardSkeleton height={280} />
+                </Grid>
+              ))}
+            </Grid>
+          ) : error ? (
+            <SlideInLeft>
+              <Box sx={{ p: 3, bgcolor: 'error.light', borderRadius: 2, color: 'error.dark' }}>
+                <Typography variant="h6">{error}</Typography>
+                <Button 
+                  variant="contained" 
+                  color="primary" 
+                  sx={{ mt: 2 }}
+                  onClick={() => window.location.reload()}
+                >
+                  Riprova
+                </Button>
+              </Box>
+            </SlideInLeft>
+          ) : filteredPaths.length === 0 ? (
+            <SlideInUp>
+              <Box 
+                sx={{ 
+                  p: 5, 
+                  textAlign: 'center', 
+                  bgcolor: 'background.paper', 
+                  borderRadius: 2,
+                  boxShadow: 1
+                }}
+              >
+                <Typography variant="h6" gutterBottom>
+                  Nessun percorso trovato
+                </Typography>
+                <Typography variant="body1" color="text.secondary">
+                  Nessun percorso corrisponde ai criteri di ricerca selezionati.
+                </Typography>
+                <Button 
+                  variant="contained" 
+                  sx={{ mt: 2 }}
+                  onClick={() => {
+                    setSearchQuery('');
+                    setFilterSubject('');
+                    setFilterStatus('');
+                  }}
+                >
+                  Cancella filtri
+                </Button>
+              </Box>
+            </SlideInUp>
+          ) : (
+            <Grid container spacing={3}>
+              <AnimatedList>
+                {filteredPaths.map((path, index) => (
+                  <Grid item xs={12} sm={6} md={4} key={path.id}>
+                    <HoverAnimation delay={index * 0.1}>
+                      <Card 
+                        elevation={3} 
+                        sx={{ 
+                          height: '100%', 
+                          display: 'flex', 
+                          flexDirection: 'column',
+                          position: 'relative',
+                          overflow: 'visible'
+                        }}
+                      >
+                        {path.status === 'completato' && (
+                          <Box 
+                            sx={{ 
+                              position: 'absolute', 
+                              top: -10, 
+                              right: -10, 
+                              bgcolor: 'success.main', 
+                              color: 'white',
+                              px: 2,
+                              py: 0.5,
+                              borderRadius: 1,
+                              zIndex: 1,
+                              transform: 'rotate(5deg)',
+                              boxShadow: 2
+                            }}
+                          >
+                            Completato
+                          </Box>
+                        )}
+                        <CardContent sx={{ flexGrow: 1 }}>
+                          <Typography variant="h6" component="h2" gutterBottom>
+                            {path.title}
+                          </Typography>
+                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+                            <Chip 
+                              size="small" 
+                              label={path.subject} 
+                              color="primary" 
+                              variant="outlined" 
+                            />
+                            <Chip
+                              size="small"
+                              label={getStatusLabel(path.difficulty)}
+                              color={getDifficultyColor(path.difficulty)}
+                            />
+                            {path.targetEndDate && (
+                              <Chip
+                                size="small"
+                                label={`Scadenza: ${new Date(path.targetEndDate).toLocaleDateString()}`}
+                                color="secondary"
+                                variant="outlined"
+                              />
+                            )}
+                          </Box>
+                          <Typography variant="body2" color="text.secondary" paragraph>
+                            {path.description.length > 100
+                              ? `${path.description.substring(0, 100)}...`
+                              : path.description}
+                          </Typography>
+                          <Box sx={{ mb: 1 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                              <Typography variant="body2">Progresso</Typography>
+                              <Typography variant="body2">{path.progress}%</Typography>
+                            </Box>
+                            <ProgressBar progress={path.progress} />
+                          </Box>
+                        </CardContent>
+                        <CardActions>
+                          <Button 
+                            component={Link} 
+                            to={`/student/path/${path.id}`} 
+                            variant="contained" 
+                            fullWidth
+                            disabled={path.status === 'completato'}
+                          >
+                            {getActionButtonLabel(path.status)}
+                          </Button>
+                        </CardActions>
+                      </Card>
+                    </HoverAnimation>
+                  </Grid>
+                ))}
+              </AnimatedList>
+            </Grid>
+          )}
+        </Box>
+      </MainLayout>
+    </AnimatedPage>
   );
 };
 

@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import NotificationsService from './NotificationsService';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 const PATH_API_URL = `${API_URL}/path`;
@@ -107,8 +108,17 @@ class PathService {
    * Admin e parent possono creare template
    */
   public async createPathTemplate(template: Omit<PathTemplate, 'id'>): Promise<PathTemplate> {
-    const response = await this.api.post<PathTemplate>('/templates', template);
-    return response.data;
+    try {
+      const response = await this.api.post<PathTemplate>('/templates', template);
+      NotificationsService.success(
+        `Il percorso "${template.title}" è stato creato con successo.`,
+        'Percorso creato'
+      );
+      return response.data;
+    } catch (error) {
+      // ApiService già gestisce la visualizzazione degli errori tramite ApiErrorHandler
+      throw error;
+    }
   }
 
   /**
@@ -116,8 +126,16 @@ class PathService {
    * Solo il creatore del template può modificarlo
    */
   public async updatePathTemplate(id: string, template: Partial<PathTemplate>): Promise<PathTemplate> {
-    const response = await this.api.put<PathTemplate>(`/templates/${id}`, template);
-    return response.data;
+    try {
+      const response = await this.api.put<PathTemplate>(`/templates/${id}`, template);
+      NotificationsService.success(
+        `Il percorso "${template.title || 'selezionato'}" è stato aggiornato.`,
+        'Percorso aggiornato'
+      );
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**
@@ -125,7 +143,15 @@ class PathService {
    * Solo il creatore del template può eliminarlo
    */
   public async deletePathTemplate(id: string): Promise<void> {
-    await this.api.delete(`/templates/${id}`);
+    try {
+      await this.api.delete(`/templates/${id}`);
+      NotificationsService.success(
+        'Il percorso è stato eliminato con successo.',
+        'Percorso eliminato'
+      );
+    } catch (error) {
+      throw error;
+    }
   }
 
   // OPERAZIONI SUI PERCORSI ASSEGNATI
@@ -151,21 +177,51 @@ class PathService {
    * Solo parent può assegnare percorsi
    */
   public async assignPath(templateId: string, studentId: string, startDate: Date, targetEndDate: Date): Promise<Path> {
-    const response = await this.api.post<Path>('/assign', { 
-      templateId, 
-      studentId, 
-      startDate: startDate.toISOString(), 
-      targetEndDate: targetEndDate.toISOString() 
-    });
-    return response.data;
+    try {
+      const response = await this.api.post<Path>('/assign', {
+        templateId,
+        studentId,
+        startDate: startDate.toISOString(),
+        targetEndDate: targetEndDate.toISOString()
+      });
+      NotificationsService.success(
+        'Percorso educativo assegnato con successo allo studente.',
+        'Percorso assegnato'
+      );
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**
    * Aggiorna lo stato di un percorso
    */
   public async updatePathStatus(pathId: string, status: Path['status']): Promise<Path> {
-    const response = await this.api.patch<Path>(`/${pathId}/status`, { status });
-    return response.data;
+    try {
+      const response = await this.api.put<Path>(`/${pathId}/status`, { status });
+      
+      let message = '';
+      let title = 'Stato percorso aggiornato';
+      
+      switch(status) {
+        case 'in_corso':
+          message = 'Il percorso è stato avviato con successo.';
+          title = 'Percorso avviato';
+          break;
+        case 'completato':
+          message = 'Congratulazioni! Il percorso è stato completato con successo.';
+          title = 'Percorso completato';
+          break;
+        default:
+          message = `Lo stato del percorso è stato aggiornato a: ${status}.`;
+      }
+      
+      NotificationsService.success(message, title);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**
@@ -173,8 +229,40 @@ class PathService {
    * Chiamato automaticamente quando i quiz vengono completati
    */
   public async updatePathProgress(pathId: string, progress: number): Promise<Path> {
-    const response = await this.api.patch<Path>(`/${pathId}/progress`, { progress });
-    return response.data;
+    try {
+      const response = await this.api.put<Path>(`/${pathId}/progress`, { progress });
+      
+      // Mostra notifica solo per progressi significativi (25%, 50%, 75%, 100%)
+      if (progress === 100) {
+        NotificationsService.success(
+          'Congratulazioni! Hai completato il 100% del percorso educativo.',
+          'Percorso completato',
+          { autoClose: true, duration: 6000 }
+        );
+      } else if (progress === 75) {
+        NotificationsService.info(
+          'Ottimo lavoro! Hai completato il 75% del percorso educativo.',
+          'Progresso percorso',
+          { autoClose: true, duration: 4000 }
+        );
+      } else if (progress === 50) {
+        NotificationsService.info(
+          'Buon lavoro! Sei a metà del percorso educativo.',
+          'Progresso percorso',
+          { autoClose: true, duration: 4000 }
+        );
+      } else if (progress === 25) {
+        NotificationsService.info(
+          'Hai completato il 25% del percorso educativo. Continua così!',
+          'Progresso percorso',
+          { autoClose: true, duration: 4000 }
+        );
+      }
+      
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**

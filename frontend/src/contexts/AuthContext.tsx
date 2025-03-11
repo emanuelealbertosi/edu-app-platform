@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import AuthService from '../services/AuthService';
 
 interface User {
@@ -14,6 +14,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   error: string | null;
+  sessionStatus: 'active' | 'expired' | 'invalid';
   login: (email: string, password: string) => Promise<void>;
   register: (userData: {
     email: string;
@@ -22,7 +23,7 @@ interface AuthContextType {
     lastName: string;
     role: 'admin' | 'parent' | 'student';
   }) => Promise<void>;
-  logout: () => void;
+  logout: (logoutAllDevices?: boolean) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,6 +44,42 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sessionStatus, setSessionStatus] = useState<'active' | 'expired' | 'invalid'>('active');
+
+  // Funzione per verificare e aggiornare lo stato della sessione
+  const checkSessionValidity = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      const isValid = await AuthService.validateSession({
+        onLogout: () => {
+          setSessionStatus('expired');
+          setUser(null);
+          setError('La tua sessione è scaduta. Effettua nuovamente il login.');
+        }
+      });
+      
+      if (!isValid) {
+        setSessionStatus('invalid');
+      } else {
+        setSessionStatus('active');
+      }
+    } catch (err) {
+      console.error('Errore durante la validazione della sessione:', err);
+      setSessionStatus('invalid');
+    }
+  }, [user]);
+
+  // Verifica periodicamente la validità della sessione (ogni 5 minuti)
+  useEffect(() => {
+    if (!user) return;
+    
+    const interval = setInterval(() => {
+      checkSessionValidity();
+    }, 5 * 60 * 1000);
+    
+    return () => clearInterval(interval);
+  }, [user, checkSessionValidity]);
 
   useEffect(() => {
     // Verifica se l'utente è già autenticato al caricamento dell'app
@@ -54,12 +91,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         
         if (currentUser) {
           // Se l'utente esiste, verifica che il token sia valido
-          if (AuthService.isAuthenticated()) {
+          const isValid = await AuthService.validateSession();
+          if (isValid) {
             setUser(currentUser);
+            setSessionStatus('active');
           } else {
             // Se il token non è valido, logout
-            AuthService.logout();
+            await AuthService.logout();
             setUser(null);
+            setSessionStatus('expired');
+            setError('La tua sessione è scaduta. Effettua nuovamente il login.');
           }
         }
       } catch (err) {
@@ -109,9 +150,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  const logout = () => {
-    AuthService.logout();
-    setUser(null);
+  const logout = async (logoutAllDevices: boolean = false) => {
+    try {
+      await AuthService.logout(logoutAllDevices);
+      setUser(null);
+    } catch (err: any) {
+      console.error('Errore durante il logout:', err);
+      setError(err.response?.data?.message || 'Errore durante il logout');
+    }
   };
 
   return (
@@ -121,6 +167,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         user,
         loading,
         error,
+        sessionStatus,
         login,
         register,
         logout,

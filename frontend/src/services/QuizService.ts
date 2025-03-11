@@ -1,13 +1,19 @@
-import axios, { AxiosInstance } from 'axios';
+import ApiService from './ApiService';
+import NotificationsService from './NotificationsService';
+
+// Fix per errore lint: "Cannot find name 'process'"
+declare const process: {
+  env: {
+    REACT_APP_API_URL?: string;
+  };
+};
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 const QUIZ_API_URL = `${API_URL}/quiz`;
 
 /**
- * Servizio per gestire le operazioni relative ai quiz
- * Integra con quiz-service attraverso l'API Gateway
+ * Interfaccia per una domanda di quiz
  */
-
 export interface Question {
   id: string;
   text: string;
@@ -71,49 +77,29 @@ export interface QuizResult {
   }>;
 }
 
+/**
+ * Servizio per la gestione dei quiz
+ */
 class QuizService {
-  private api: AxiosInstance;
-
+  // Rimuovere il riferimento all'AxiosInstance che causa errore di tipo
   constructor() {
-    this.api = axios.create({
-      baseURL: QUIZ_API_URL,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    // Interceptor per aggiungere il token di autenticazione
-    this.api.interceptors.request.use(
-      (config) => {
-        const token = localStorage.getItem('accessToken');
-        if (token) {
-          config.headers['Authorization'] = `Bearer ${token}`;
-        }
-        return config;
-      },
-      (error) => {
-        return Promise.reject(error);
-      }
-    );
+    // ApiService gestisce tutto internamente
   }
 
   // OPERAZIONI SUI TEMPLATE DI QUIZ
-
   /**
-   * Ottiene tutti i template di quiz
+   * Ottiene tutti i template di quiz disponibili
    * Solo admin può vedere tutti i template
    */
   public async getAllQuizTemplates(): Promise<QuizTemplate[]> {
-    const response = await this.api.get<QuizTemplate[]>('/templates');
-    return response.data;
+    return ApiService.get<QuizTemplate[]>(`${QUIZ_API_URL}/templates`);
   }
 
   /**
    * Ottiene un template di quiz specifico per ID
    */
   public async getQuizTemplate(id: string): Promise<QuizTemplate> {
-    const response = await this.api.get<QuizTemplate>(`/templates/${id}`);
-    return response.data;
+    return ApiService.get<QuizTemplate>(`${QUIZ_API_URL}/templates/${id}`);
   }
 
   /**
@@ -121,8 +107,17 @@ class QuizService {
    * Solo admin può creare template
    */
   public async createQuizTemplate(template: Omit<QuizTemplate, 'id'>): Promise<QuizTemplate> {
-    const response = await this.api.post<QuizTemplate>('/templates', template);
-    return response.data;
+    try {
+      const result = await ApiService.post<QuizTemplate>(`${QUIZ_API_URL}/templates`, template);
+      NotificationsService.success(
+        `Il quiz "${template.title}" è stato creato con successo.`,
+        'Quiz creato'
+      );
+      return result;
+    } catch (error) {
+      // ApiService già gestisce la visualizzazione degli errori
+      throw error;
+    }
   }
 
   /**
@@ -130,8 +125,16 @@ class QuizService {
    * Solo admin può modificare template
    */
   public async updateQuizTemplate(id: string, template: Partial<QuizTemplate>): Promise<QuizTemplate> {
-    const response = await this.api.put<QuizTemplate>(`/templates/${id}`, template);
-    return response.data;
+    try {
+      const result = await ApiService.put<QuizTemplate>(`${QUIZ_API_URL}/templates/${id}`, template);
+      NotificationsService.success(
+        `Il quiz "${template.title || 'selezionato'}" è stato aggiornato.`,
+        'Quiz aggiornato'
+      );
+      return result;
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**
@@ -139,25 +142,30 @@ class QuizService {
    * Solo admin può eliminare template
    */
   public async deleteQuizTemplate(id: string): Promise<void> {
-    await this.api.delete(`/templates/${id}`);
+    try {
+      await ApiService.delete(`${QUIZ_API_URL}/templates/${id}`);
+      NotificationsService.success(
+        'Il quiz è stato eliminato con successo.',
+        'Quiz eliminato'
+      );
+    } catch (error) {
+      throw error;
+    }
   }
 
   // OPERAZIONI SUI QUIZ ASSEGNATI
-
   /**
    * Ottiene tutti i quiz assegnati allo studente corrente
    */
   public async getAssignedQuizzes(): Promise<Quiz[]> {
-    const response = await this.api.get<Quiz[]>('/assigned');
-    return response.data;
+    return ApiService.get<Quiz[]>(`${QUIZ_API_URL}/assigned`);
   }
 
   /**
    * Ottiene un quiz specifico per ID
    */
   public async getQuiz(id: string): Promise<Quiz> {
-    const response = await this.api.get<Quiz>(`/${id}`);
-    return response.data;
+    return ApiService.get<Quiz>(`${QUIZ_API_URL}/${id}`);
   }
 
   /**
@@ -165,43 +173,84 @@ class QuizService {
    * Solo parent può assegnare quiz
    */
   public async assignQuiz(templateId: string, studentId: string): Promise<Quiz> {
-    const response = await this.api.post<Quiz>('/assign', { templateId, studentId });
-    return response.data;
+    try {
+      const result = await ApiService.post<Quiz>(`${QUIZ_API_URL}/assign`, { templateId, studentId });
+      NotificationsService.success(
+        'Quiz assegnato con successo allo studente.',
+        'Quiz assegnato'
+      );
+      return result;
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**
-   * Avvia un quiz
+   * Inizia un quiz
    * Segna l'ora di inizio e prepara le domande
    */
   public async startQuiz(quizId: string): Promise<Quiz> {
-    const response = await this.api.post<Quiz>(`/${quizId}/start`);
-    return response.data;
+    try {
+      const result = await ApiService.post<Quiz>(`${QUIZ_API_URL}/${quizId}/start`);
+      NotificationsService.info(
+        'Il quiz è iniziato. Buona fortuna!',
+        'Quiz avviato',
+        { autoClose: true, duration: 3000 }
+      );
+      return result;
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**
-   * Invia le risposte a un quiz
+   * Invia le risposte di un quiz completato
    * Calcola il punteggio e finalizza il quiz
    */
   public async submitQuiz(submission: QuizSubmission): Promise<QuizResult> {
-    const response = await this.api.post<QuizResult>(`/${submission.quizId}/submit`, submission);
-    return response.data;
+    try {
+      const result = await ApiService.post<QuizResult>(`${QUIZ_API_URL}/${submission.quizId}/submit`, submission);
+      
+      // Notifica con feedback sul punteggio
+      const percentScore = Math.round((result.score / result.maxScore) * 100);
+      
+      if (percentScore >= 80) {
+        NotificationsService.success(
+          `Ottimo lavoro! Hai completato il quiz con un punteggio di ${result.score}/${result.maxScore} (${percentScore}%).`,
+          'Quiz completato'
+        );
+      } else if (percentScore >= 60) {
+        NotificationsService.success(
+          `Hai completato il quiz con un punteggio di ${result.score}/${result.maxScore} (${percentScore}%).`,
+          'Quiz completato'
+        );
+      } else {
+        NotificationsService.warning(
+          `Hai completato il quiz con un punteggio di ${result.score}/${result.maxScore} (${percentScore}%). Puoi fare di meglio!`,
+          'Quiz completato',
+          { autoClose: true, duration: 7000 }
+        );
+      }
+      
+      return result;
+    } catch (error) {
+      throw error;
+    }
   }
 
   /**
    * Ottiene i risultati di un quiz specifico
    */
   public async getQuizResults(quizId: string): Promise<QuizResult> {
-    const response = await this.api.get<QuizResult>(`/${quizId}/results`);
-    return response.data;
+    return ApiService.get<QuizResult>(`${QUIZ_API_URL}/${quizId}/results`);
   }
 
   /**
-   * Ottiene tutti i risultati dei quiz per uno studente specifico
+   * Ottiene tutti i risultati dei quiz di uno studente
    * Parent può vedere i risultati dei propri figli
    */
   public async getStudentQuizResults(studentId: string): Promise<QuizResult[]> {
-    const response = await this.api.get<QuizResult[]>(`/results/student/${studentId}`);
-    return response.data;
+    return ApiService.get<QuizResult[]>(`${QUIZ_API_URL}/results/student/${studentId}`);
   }
 }
 

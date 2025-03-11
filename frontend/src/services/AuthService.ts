@@ -1,4 +1,12 @@
 import axios, { AxiosInstance } from 'axios';
+import NotificationsService from './NotificationsService';
+
+// Fix per errore lint: "Cannot find name 'process'"
+declare const process: {
+  env: {
+    REACT_APP_API_URL?: string;
+  };
+};
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 const AUTH_API_URL = `${API_URL}/auth`;
@@ -52,9 +60,22 @@ export interface TokenResponse {
   refreshToken: string;
 }
 
+export interface TokenRefreshOptions {
+  /**
+   * Se true, refresha il token anche se non è ancora scaduto
+   */
+  forceRefresh?: boolean;
+  
+  /**
+   * Callback da eseguire se il refresh fallisce e l'utente viene disconnesso
+   */
+  onLogout?: () => void;
+}
+
 class AuthService {
   private api: AxiosInstance;
-  private refreshTokenTimeout?: NodeJS.Timeout;
+  // Fix per errore lint: "Cannot find namespace 'NodeJS'"
+  private refreshTokenTimeout?: ReturnType<typeof setTimeout>;
 
   constructor() {
     this.api = axios.create({
@@ -160,19 +181,44 @@ class AuthService {
 
   // Metodi pubblici per operazioni di autenticazione
   public async login(credentials: LoginRequest): Promise<AuthResponse> {
-    const response = await this.api.post<AuthResponse>('/login', credentials);
-    const { accessToken, refreshToken, user } = response.data;
-    this.setTokens(accessToken, refreshToken);
-    localStorage.setItem('user', JSON.stringify(user));
-    return response.data;
+    try {
+      const response = await this.api.post<AuthResponse>('/login', credentials);
+      const { accessToken, refreshToken, user } = response.data;
+      this.setTokens(accessToken, refreshToken);
+      localStorage.setItem('user', JSON.stringify(user));
+      
+      // Mostra notifica di benvenuto con il nome utente
+      NotificationsService.success(
+        `Benvenuto ${user.firstName}! Accesso effettuato con successo.`,
+        'Login completato',
+        { autoClose: true, duration: 3000 }
+      );
+      
+      return response.data;
+    } catch (error) {
+      // Gli errori sono già gestiti dall'ApiErrorHandler
+      throw error;
+    }
   }
 
   public async register(userData: RegisterRequest): Promise<AuthResponse> {
-    const response = await this.api.post<AuthResponse>('/register', userData);
-    const { accessToken, refreshToken, user } = response.data;
-    this.setTokens(accessToken, refreshToken);
-    localStorage.setItem('user', JSON.stringify(user));
-    return response.data;
+    try {
+      const response = await this.api.post<AuthResponse>('/register', userData);
+      const { accessToken, refreshToken, user } = response.data;
+      this.setTokens(accessToken, refreshToken);
+      localStorage.setItem('user', JSON.stringify(user));
+      
+      // Mostra notifica di registrazione completata
+      NotificationsService.success(
+        `Benvenuto ${user.firstName}! La tua registrazione è stata completata con successo.`,
+        'Registrazione completata',
+        { autoClose: true, duration: 5000 }
+      );
+      
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 
   public async refreshTokens(refreshToken: string): Promise<TokenResponse> {
@@ -185,22 +231,41 @@ class AuthService {
     return response.data;
   }
 
-  public logout(): void {
-    // Pulisci timeout refresh
-    if (this.refreshTokenTimeout) {
-      clearTimeout(this.refreshTokenTimeout);
-      this.refreshTokenTimeout = undefined;
-    }
-    
-    // Rimuovi token e dati utente
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
-    
-    // Chiamata al server per invalidare refresh token
-    const refreshToken = this.getRefreshToken();
-    if (refreshToken) {
-      this.api.post('/logout', { refreshToken }).catch(console.error);
+  public async logout(logoutAllDevices: boolean = false): Promise<void> {
+    try {
+      // Pulisci timeout refresh token se presente
+      if (this.refreshTokenTimeout) {
+        clearTimeout(this.refreshTokenTimeout);
+      }
+      
+      const refreshToken = this.getRefreshToken();
+      // Se l'utente è autenticato, tenta logout sul server (revoca token)
+      if (refreshToken) {
+        if (logoutAllDevices) {
+          // Logout da tutti i dispositivi
+          await this.api.post('/logout-all', { refreshToken });
+          NotificationsService.info(
+            'Sei stato disconnesso da tutti i dispositivi.',
+            'Logout completato',
+            { autoClose: true, duration: 4000 }
+          );
+        } else {
+          // Logout solo dal dispositivo corrente
+          await this.api.post('/logout', { refreshToken });
+          NotificationsService.info(
+            'Disconnessione effettuata con successo.',
+            'Logout completato',
+            { autoClose: true, duration: 3000 }
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Errore durante il logout:', error);
+    } finally {
+      // Rimuovi dati locali indipendentemente da errori di rete
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
     }
   }
 
@@ -212,6 +277,78 @@ class AuthService {
     const userStr = localStorage.getItem('user');
     if (!userStr) return null;
     return JSON.parse(userStr);
+  }
+
+  /**
+   * Forza il refresh del token di accesso, indipendentemente dalla sua scadenza.
+   * Utile quando si sospetta che il token corrente non sia più valido.
+   */
+  public async forceTokenRefresh(): Promise<boolean> {
+    try {
+      const refreshToken = this.getRefreshToken();
+      if (!refreshToken) return false;
+      
+      const tokens = await this.refreshTokens(refreshToken);
+      this.setTokens(tokens.accessToken, tokens.refreshToken);
+      
+      NotificationsService.info(
+        'La tua sessione è stata aggiornata.',
+        'Sessione aggiornata',
+        { autoClose: true, duration: 3000 }
+      );
+      
+      return true;
+    } catch (error) {
+      console.error('Force refresh fallito:', error);
+      this.logout();
+      
+      NotificationsService.error(
+        'La tua sessione è scaduta. Effettua nuovamente il login.',
+        'Sessione scaduta',
+        { autoClose: true, duration: 5000 }
+      );
+      
+      return false;
+    }
+  }
+
+  /**
+   * Verifica lo stato di autenticazione e refresha il token se necessario.
+   * Ritorna true se l'utente è autenticato dopo l'operazione, false altrimenti.
+   */
+  public async validateSession(options: TokenRefreshOptions = {}): Promise<boolean> {
+    const token = this.getAccessToken();
+    if (!token) {
+      return false;
+    }
+    
+    // Se forceRefresh è true, refresha il token indipendentemente dalla scadenza
+    if (options.forceRefresh) {
+      return this.forceTokenRefresh();
+    }
+    
+    // Verifica se il token è scaduto
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const expires = new Date(payload.exp * 1000);
+      const now = new Date();
+      
+      // Se il token scade entro 5 minuti, refreshalo
+      const tokenNeedsRefresh = expires.getTime() - now.getTime() < 5 * 60 * 1000;
+      
+      if (tokenNeedsRefresh) {
+        return this.forceTokenRefresh();
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Errore nella validazione del token:', error);
+      this.logout();
+      if (options.onLogout) {
+        options.onLogout();
+      }
+      return false;
+    }
   }
 }
 

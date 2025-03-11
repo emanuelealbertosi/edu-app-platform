@@ -21,6 +21,22 @@ import {
 } from '@mui/material';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import StarsIcon from '@mui/icons-material/Stars';
+import FilterListIcon from '@mui/icons-material/FilterList';
+
+// Importazione componenti di animazione
+import { 
+  FadeIn, 
+  SlideInUp, 
+  SlideInLeft, 
+  SlideInRight,
+  HoverAnimation
+} from '../../components/animations/Transitions';
+import { 
+  LoadingIndicator, 
+  ProgressBar,
+  CardSkeleton
+} from '../../components/animations/LoadingAnimations';
+import { AnimatedPage, AnimatedList } from '../../components/animations/PageTransitions';
 
 // Interfacce TypeScript
 interface Reward {
@@ -142,119 +158,151 @@ const RewardShop: React.FC = () => {
   }, {} as Record<string, Reward[]>);
 
   return (
-    <MainLayout title="Shop Ricompense">
-      <Box sx={{ pb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          Shop Ricompense
-        </Typography>
-        <Typography variant="subtitle1" color="text.secondary">
-          Usa i tuoi punti per riscattare ricompense speciali
-        </Typography>
-      </Box>
-
-      {/* Punti utente */}
-      <Card sx={{ mb: 4, p: 2, bgcolor: 'primary.main', color: 'white' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <StarsIcon sx={{ fontSize: 40, mr: 2 }} />
-          <Box>
-            <Typography variant="h6">I tuoi punti disponibili:</Typography>
-            <Typography variant="h3" sx={{ fontWeight: 'bold' }}>
-              {loading ? <LinearProgress color="inherit" /> : userPoints}
-            </Typography>
-          </Box>
-        </Box>
-      </Card>
-
-      {loading ? (
-        <LinearProgress />
-      ) : (
-        Object.entries(rewardsByCategory).map(([category, categoryRewards]) => (
-          <Box key={category} sx={{ mb: 4 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <ShoppingCartIcon sx={{ mr: 1 }} />
-              <Typography variant="h5">{category}</Typography>
+    <AnimatedPage transitionType="fade">
+      <MainLayout title="Negozio Premi">
+        <Box sx={{ p: { xs: 1, sm: 3 } }}>
+          <FadeIn>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Typography variant="h4" component="h1" gutterBottom>
+                Negozio Premi
+              </Typography>
+              
+              <HoverAnimation>
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  bgcolor: 'primary.main', 
+                  color: 'white', 
+                  py: 1, 
+                  px: 2, 
+                  borderRadius: 2 
+                }}>
+                  <StarsIcon sx={{ mr: 1 }} />
+                  <Typography variant="h6">{userPoints} punti</Typography>
+                </Box>
+              </HoverAnimation>
             </Box>
-            <Divider sx={{ mb: 3 }} />
-            
+          </FadeIn>
+
+          {loading ? (
             <Grid container spacing={3}>
-              {categoryRewards.map((reward) => (
-                <Grid item xs={12} sm={6} md={4} key={reward.id}>
-                  <Card 
-                    sx={{ 
-                      height: '100%', 
-                      display: 'flex', 
-                      flexDirection: 'column',
-                      transition: 'transform 0.3s',
-                      '&:hover': {
-                        transform: 'translateY(-5px)',
-                        boxShadow: 6,
-                      }
-                    }}
-                  >
-                    {reward.imageUrl && (
-                      <CardMedia
-                        component="img"
-                        height="140"
-                        image={reward.imageUrl}
-                        alt={reward.title}
-                      />
-                    )}
-                    <CardContent sx={{ flexGrow: 1 }}>
-                      <Typography variant="h6" component="div" gutterBottom>
-                        {reward.title}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {reward.description}
-                      </Typography>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
-                        <Chip 
-                          icon={<StarsIcon />} 
-                          label={`${reward.cost} punti`}
-                          color="primary"
-                          variant="outlined"
-                        />
-                      </Box>
-                    </CardContent>
-                    <CardActions>
-                      <Button 
-                        variant="contained" 
-                        fullWidth
-                        disabled={userPoints < reward.cost}
-                        onClick={() => handleRedeemClick(reward)}
-                      >
-                        {userPoints >= reward.cost ? 'Riscatta' : 'Punti insufficienti'}
-                      </Button>
-                    </CardActions>
-                  </Card>
+              {[1, 2, 3, 4, 5, 6].map((item) => (
+                <Grid item xs={12} sm={6} md={4} key={item}>
+                  <CardSkeleton height={300} />
                 </Grid>
               ))}
             </Grid>
-          </Box>
-        ))
-      )}
-
-      {/* Dialog di conferma */}
-      <Dialog
-        open={openDialog}
-        onClose={() => setOpenDialog(false)}
-      >
-        <DialogTitle>Conferma richiesta</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Sei sicuro di voler richiedere la ricompensa "{selectedReward?.title}"? 
-            Verranno detratti {selectedReward?.cost} punti dal tuo saldo.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDialog(false)} color="primary">
-            Annulla
-          </Button>
-          <Button onClick={handleConfirmRedeem} color="primary" variant="contained">
-            Conferma
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </MainLayout>
+          ) : (
+            <>
+              <SlideInUp>
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+                  <Button 
+                    startIcon={<FilterListIcon />}
+                    variant="outlined"
+                    size="small"
+                    onClick={() => alert('Funzionalità di filtro da implementare')}
+                  >
+                    Filtra per categoria
+                  </Button>
+                </Box>
+              </SlideInUp>
+            
+              <Grid container spacing={3}>
+                <AnimatedList>
+                  {rewards.map((reward, index) => (
+                    <Grid item xs={12} sm={6} md={4} key={reward.id}>
+                      <HoverAnimation delay={index * 0.1}>
+                        <Card 
+                          elevation={3} 
+                          sx={{ 
+                            height: '100%', 
+                            display: 'flex', 
+                            flexDirection: 'column',
+                            transition: 'all 0.3s ease',
+                            '&:hover': {
+                              transform: 'translateY(-5px)',
+                              boxShadow: 6
+                            }
+                          }}
+                        >
+                          <CardMedia
+                            component="img"
+                            height="140"
+                            image={reward.imageUrl}
+                            alt={reward.title}
+                          />
+                          <CardContent sx={{ flexGrow: 1 }}>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                              <Typography variant="h6" component="h2">
+                                {reward.title}
+                              </Typography>
+                              <Chip 
+                                label={`${reward.cost} pt`} 
+                                color={userPoints >= reward.cost ? "primary" : "default"} 
+                                size="small" 
+                                icon={<StarsIcon />} 
+                              />
+                            </Box>
+                            <Chip 
+                              label={reward.category} 
+                              size="small" 
+                              variant="outlined"
+                              sx={{ mb: 2 }}
+                            />
+                            <Typography variant="body2" color="text.secondary">
+                              {reward.description}
+                            </Typography>
+                          </CardContent>
+                          <CardActions>
+                            <Button 
+                              variant="contained" 
+                              fullWidth
+                              startIcon={<ShoppingCartIcon />}
+                              disabled={userPoints < reward.cost}
+                              onClick={() => handleRedeemClick(reward)}
+                              color={userPoints >= reward.cost ? "primary" : "inherit"}
+                              sx={{ mt: 'auto' }}
+                            >
+                              {userPoints >= reward.cost ? "Riscatta" : "Punti insufficienti"}
+                            </Button>
+                          </CardActions>
+                        </Card>
+                      </HoverAnimation>
+                    </Grid>
+                  ))}
+                </AnimatedList>
+              </Grid>
+            </>
+          )}
+          
+          <Dialog
+            open={openDialog}
+            onClose={() => setOpenDialog(false)}
+            aria-labelledby="alert-dialog-title"
+            aria-describedby="alert-dialog-description"
+          >
+            <SlideInUp>
+              <DialogTitle id="alert-dialog-title">
+                {`Riscatta "${selectedReward?.title}"`}
+              </DialogTitle>
+              <DialogContent>
+                <DialogContentText id="alert-dialog-description">
+                  Sei sicuro di voler riscattare questo premio? Ti verranno addebitati {selectedReward?.cost} punti.
+                </DialogContentText>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={() => setOpenDialog(false)} color="primary">
+                  Annulla
+                </Button>
+                <Button onClick={handleConfirmRedeem} color="primary" variant="contained" autoFocus>
+                  Conferma
+                </Button>
+              </DialogActions>
+            </SlideInUp>
+          </Dialog>
+        </Box>
+      </MainLayout>
+    </AnimatedPage>
   );
 };
 

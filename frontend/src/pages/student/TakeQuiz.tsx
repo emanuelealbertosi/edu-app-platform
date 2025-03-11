@@ -35,6 +35,22 @@ import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import StarsIcon from '@mui/icons-material/Stars';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import QuizService, { Quiz as ServiceQuiz, QuizResult, QuizAnswer } from '../../services/QuizService';
+import NotificationsService from '../../services/NotificationsService';
+
+// Importazione componenti di animazione
+import { 
+  FadeIn, 
+  SlideInUp, 
+  SlideInLeft, 
+  SlideInRight,
+  HoverAnimation
+} from '../../components/animations/Transitions';
+import { 
+  LoadingIndicator, 
+  ProgressBar,
+  CardSkeleton
+} from '../../components/animations/LoadingAnimations';
+import { AnimatedPage, AnimatedList } from '../../components/animations/PageTransitions';
 
 // Interfacce TypeScript
 interface Question {
@@ -260,251 +276,316 @@ const TakeQuiz: React.FC = () => {
     }
   };
 
+  // Gestisce il cambio di opzione nelle domande a scelta multipla
+  const handleOptionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleAnswerChange(quiz!.questions[activeStep].id, e.target.value);
+  };
+
+  // Gestisce il cambio del testo nelle domande aperte
+  const handleTextChange = (questionId: string, value: string) => {
+    handleTextAnswerChange(questionId, value);
+  };
+
+  // Calcola il numero di domande senza risposta
+  const getUnansweredQuestionsCount = (): number => {
+    if (!quiz) return 0;
+    
+    return quiz.questions.reduce((count, question) => {
+      if (question.type === 'multiple_choice' && !answers[question.id]) {
+        return count + 1;
+      } else if (question.type === 'text' && (!textAnswers[question.id] || textAnswers[question.id].trim() === '')) {
+        return count + 1;
+      }
+      return count;
+    }, 0);
+  };
+
   if (loading && !quiz) {
     return (
-      <MainLayout title="Svolgimento Quiz">
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
-          <CircularProgress />
-        </Box>
-      </MainLayout>
+      <AnimatedPage transitionType="fade">
+        <MainLayout title="Svolgimento Quiz">
+          <Box sx={{ p: 3, maxWidth: 1000, mx: 'auto' }}>
+            <FadeIn>
+              <Box display="flex" justifyContent="center" alignItems="center" height="50vh" flexDirection="column">
+                <LoadingIndicator text="Caricamento quiz..." />
+                <Typography variant="body1" sx={{ mt: 2 }}>
+                  Preparazione delle domande in corso...
+                </Typography>
+              </Box>
+            </FadeIn>
+          </Box>
+        </MainLayout>
+      </AnimatedPage>
     );
   }
 
   if (error) {
     return (
-      <MainLayout title="Svolgimento Quiz">
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
-          <Alert severity="error">{error}</Alert>
-        </Box>
-      </MainLayout>
-    );
-  }
-
-  if (!quiz) {
-    return (
-      <MainLayout title="Svolgimento Quiz">
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
-          <Alert severity="error">Quiz non trovato</Alert>
-        </Box>
-      </MainLayout>
+      <AnimatedPage transitionType="fade">
+        <MainLayout title="Svolgimento Quiz">
+          <Box sx={{ p: 3, maxWidth: 1000, mx: 'auto' }}>
+            <SlideInUp>
+              <Alert severity="error" sx={{ mb: 3 }}>
+                {error}
+              </Alert>
+              <Button variant="contained" onClick={() => navigate(-1)}>
+                Torna indietro
+              </Button>
+            </SlideInUp>
+          </Box>
+        </MainLayout>
+      </AnimatedPage>
     );
   }
 
   if (quizCompleted) {
     return (
-      <MainLayout title="Quiz Completato">
-        <Paper elevation={3} sx={{ p: 4, maxWidth: 800, mx: 'auto', my: 4, borderRadius: 2 }}>
-          <Box sx={{ textAlign: 'center', mb: 4 }}>
-            <CheckCircleIcon color="success" sx={{ fontSize: 60 }} />
-            <Typography variant="h4" sx={{ mt: 2 }}>
-              Quiz Completato!
-            </Typography>
-            <Typography variant="subtitle1" color="text.secondary">
-              Hai completato con successo il quiz "{quiz.title}"
-            </Typography>
-          </Box>
-
-          <Box sx={{ mb: 4, p: 3, bgcolor: 'primary.light', color: 'white', borderRadius: 2 }}>
-            <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} md={6} sx={{ textAlign: 'center' }}>
-                <Typography variant="h6">Il tuo punteggio</Typography>
-                <Typography variant="h3" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <StarsIcon sx={{ mr: 1 }} />
-                  {score}/{quiz.maxScore}
+      <AnimatedPage transitionType="fade">
+        <MainLayout title="Quiz Completato">
+          <Box sx={{ p: 3, maxWidth: 1000, mx: 'auto' }}>
+            <FadeIn>
+              <Box textAlign="center" py={4}>
+                <CheckCircleIcon color="success" sx={{ fontSize: 80, mb: 2 }} />
+                <Typography variant="h4" gutterBottom>
+                  Quiz completato!
                 </Typography>
-              </Grid>
-              <Grid item xs={12} md={6} sx={{ textAlign: 'center' }}>
-                <Typography variant="h6">Punti guadagnati</Typography>
-                <Typography variant="h3" sx={{ fontWeight: 'bold' }}>
-                  +{earnedPoints}
+                <Typography variant="h5" color="primary" gutterBottom>
+                  Hai ottenuto: {score} / {quiz?.maxScore} punti
                 </Typography>
-              </Grid>
-            </Grid>
+                <Typography variant="body1" paragraph>
+                  {earnedPoints !== null && (
+                    <>Hai guadagnato <strong>{earnedPoints}</strong> punti premio!</>
+                  )}
+                </Typography>
+                
+                <SlideInUp delay={0.4}>
+                  <Box display="flex" justifyContent="center" mt={4} gap={2}>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      onClick={() => navigate('/student')}
+                    >
+                      Torna alla Dashboard
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      onClick={() => navigate('/student/paths')}
+                    >
+                      Visualizza Percorsi
+                    </Button>
+                  </Box>
+                </SlideInUp>
+              </Box>
+            </FadeIn>
           </Box>
-
-          <Box sx={{ display: 'flex', justifyContent: 'space-around', mt: 4 }}>
-            <Button 
-              variant="outlined" 
-              size="large"
-              onClick={() => navigate('/student/dashboard')}
-            >
-              Dashboard
-            </Button>
-            <Button 
-              variant="contained" 
-              size="large"
-              onClick={() => navigate('/student/quizzes')}
-            >
-              Torna ai Quiz
-            </Button>
-          </Box>
-        </Paper>
-      </MainLayout>
+        </MainLayout>
+      </AnimatedPage>
     );
   }
 
   return (
-    <MainLayout title="Svolgimento Quiz">
-      <Paper elevation={3} sx={{ p: 3, maxWidth: 800, mx: 'auto', my: 4 }}>
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" gutterBottom>
-            {quiz.title}
-          </Typography>
-          <Typography variant="subtitle1" color="text.secondary" gutterBottom>
-            {quiz.description}
-          </Typography>
-          
-          {remainingTime !== null && (
-            <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
-              <AccessTimeIcon color="action" sx={{ mr: 1 }} />
-              <Typography variant="body2" color={remainingTime < 300 ? 'error' : 'text.secondary'}>
-                Tempo rimanente: {formatTime(remainingTime)}
-              </Typography>
-            </Box>
-          )}
-          
-          <LinearProgress 
-            variant="determinate" 
-            value={(activeStep / quiz.questions.length) * 100} 
-            sx={{ mt: 2, height: 8, borderRadius: 4 }}
-          />
-        </Box>
-
-        <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 4 }}>
-          {quiz.questions.map((question, index) => (
-            <Step key={question.id}>
-              <StepLabel>{`Domanda ${index + 1}`}</StepLabel>
-            </Step>
-          ))}
-        </Stepper>
-
-        <Box sx={{ mb: 4 }}>
-          {activeStep < quiz.questions.length ? (
-            <Box>
-              <FormControl component="fieldset" sx={{ width: '100%' }}>
-                <FormLabel component="legend" sx={{ mb: 2 }}>
-                  <Typography variant="h6">
-                    {quiz.questions[activeStep].text}
-                  </Typography>
-                </FormLabel>
-                
-                {quiz.questions[activeStep].type === 'multiple_choice' && quiz.questions[activeStep].options ? (
-                  <RadioGroup
-                    value={answers[quiz.questions[activeStep].id] || ''}
-                    onChange={(e) => handleAnswerChange(quiz.questions[activeStep].id, e.target.value)}
-                  >
-                    {quiz.questions[activeStep].options.map((option) => (
-                      <FormControlLabel
-                        key={option.id}
-                        value={option.id}
-                        control={<Radio />}
-                        label={option.text}
-                        sx={{ mb: 1 }}
-                      />
+    <AnimatedPage transitionType="fade">
+      <MainLayout title={quiz?.title || 'Quiz'}>
+        <Box sx={{ p: 3, maxWidth: 1000, mx: 'auto' }}>
+          {loading ? (
+            <FadeIn>
+              <Box display="flex" justifyContent="center" alignItems="center" height="50vh" flexDirection="column">
+                <LoadingIndicator text="Caricamento quiz..." />
+                <Typography variant="body1" sx={{ mt: 2 }}>
+                  Preparazione delle domande in corso...
+                </Typography>
+              </Box>
+            </FadeIn>
+          ) : error ? (
+            <SlideInUp>
+              <Alert severity="error" sx={{ mb: 3 }}>
+                {error}
+              </Alert>
+              <Button variant="contained" onClick={() => navigate(-1)}>
+                Torna indietro
+              </Button>
+            </SlideInUp>
+          ) : quiz ? (
+            <>
+              <FadeIn>
+                <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
+                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                    <Box>
+                      <Typography variant="h5" component="h1" gutterBottom>
+                        {quiz.title}
+                      </Typography>
+                      <Typography variant="body1" color="text.secondary">
+                        {quiz.description}
+                      </Typography>
+                    </Box>
+                    
+                    {remainingTime !== null && (
+                      <Box display="flex" alignItems="center" sx={{ 
+                        p: 1, 
+                        borderRadius: 2,
+                        bgcolor: timeWarning ? 'error.light' : 'primary.light',
+                        color: timeWarning ? 'error.contrastText' : 'primary.contrastText'
+                      }}>
+                        <AccessTimeIcon sx={{ mr: 1 }} />
+                        <Typography>
+                          {Math.floor(remainingTime / 60)}:{(remainingTime % 60).toString().padStart(2, '0')}
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+                  
+                  <Stepper activeStep={activeStep} alternativeLabel sx={{ mt: 3, mb: 3 }}>
+                    {quiz.questions.map((_, index) => (
+                      <Step key={index}>
+                        <StepLabel>{`Domanda ${index + 1}`}</StepLabel>
+                      </Step>
                     ))}
-                  </RadioGroup>
-                ) : (
-                  <TextField
-                    multiline
-                    rows={4}
-                    fullWidth
-                    placeholder="Scrivi la tua risposta qui..."
-                    value={textAnswers[quiz.questions[activeStep].id] || ''}
-                    onChange={(e) => handleTextAnswerChange(quiz.questions[activeStep].id, e.target.value)}
-                  />
-                )}
-              </FormControl>
-            </Box>
-          ) : (
-            <Box sx={{ textAlign: 'center' }}>
-              <Typography variant="h6" gutterBottom>
-                Hai risposto a tutte le domande!
-              </Typography>
-              <Typography variant="body1">
-                Puoi rivedere le tue risposte utilizzando i pulsanti di navigazione o inviare il quiz.
-              </Typography>
-            </Box>
-          )}
-        </Box>
-
-        <Divider sx={{ my: 2 }} />
-
-        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-          <Button
-            variant="outlined"
-            disabled={activeStep === 0}
-            onClick={handleBack}
-            startIcon={<NavigateBeforeIcon />}
-          >
-            Precedente
-          </Button>
+                  </Stepper>
+                </Paper>
+              </FadeIn>
+              
+              {quiz.questions.length > 0 && (
+                <SlideInRight key={activeStep}>
+                  <Paper elevation={3} sx={{ p: 3 }}>
+                    <Box mb={3}>
+                      <Typography variant="h6" gutterBottom>
+                        Domanda {activeStep + 1} di {quiz.questions.length}
+                      </Typography>
+                      <Typography variant="body1" sx={{ mb: 2 }}>
+                        {quiz.questions[activeStep].text}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Valore: {quiz.questions[activeStep].points} {quiz.questions[activeStep].points === 1 ? 'punto' : 'punti'}
+                      </Typography>
+                    </Box>
+                    
+                    <Divider sx={{ mb: 3 }} />
+                    
+                    <Box mb={4}>
+                      {quiz.questions[activeStep].type === 'multiple_choice' ? (
+                        <FormControl component="fieldset" fullWidth>
+                          <RadioGroup
+                            name={`question-${quiz.questions[activeStep].id}`}
+                            value={answers[quiz.questions[activeStep].id] || ''}
+                            onChange={handleOptionChange}
+                          >
+                            <AnimatedList>
+                              {quiz.questions[activeStep].options?.map((option) => (
+                                <HoverAnimation key={option.id}>
+                                  <FormControlLabel
+                                    value={option.id}
+                                    control={<Radio />}
+                                    label={option.text}
+                                    sx={{ 
+                                      mb: 1,
+                                      p: 1,
+                                      borderRadius: 1,
+                                      width: '100%',
+                                      '&:hover': {
+                                        bgcolor: 'action.hover',
+                                      }
+                                    }}
+                                  />
+                                </HoverAnimation>
+                              ))}
+                            </AnimatedList>
+                          </RadioGroup>
+                        </FormControl>
+                      ) : (
+                        <TextField
+                          fullWidth
+                          multiline
+                          rows={4}
+                          label="La tua risposta"
+                          value={textAnswers[quiz.questions[activeStep].id] || ''}
+                          onChange={(e) => handleTextChange(quiz.questions[activeStep].id, e.target.value)}
+                          variant="outlined"
+                        />
+                      )}
+                    </Box>
+                    
+                    <Box display="flex" justifyContent="space-between">
+                      <Button
+                        variant="outlined"
+                        startIcon={<NavigateBeforeIcon />}
+                        onClick={handleBack}
+                        disabled={activeStep === 0}
+                      >
+                        Indietro
+                      </Button>
+                      
+                      {activeStep === quiz.questions.length - 1 ? (
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          onClick={() => setConfirmSubmit(true)}
+                        >
+                          Completa Quiz
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="contained"
+                          endIcon={<NavigateNextIcon />}
+                          onClick={handleNext}
+                        >
+                          Avanti
+                        </Button>
+                      )}
+                    </Box>
+                  </Paper>
+                </SlideInRight>
+              )}
+            </>
+          ) : null}
           
-          <Box>
-            {activeStep === quiz.questions.length - 1 || activeStep === quiz.questions.length ? (
-              <Button
-                variant="contained"
-                color="primary"
-                onClick={handleOpenConfirmSubmit}
-                disabled={loading}
-              >
-                Invia quiz
+          {/* Dialogo di conferma invio */}
+          <Dialog
+            open={confirmSubmit}
+            onClose={() => setConfirmSubmit(false)}
+          >
+            <DialogTitle>Conferma Invio</DialogTitle>
+            <DialogContent>
+              <DialogContentText>
+                Sei sicuro di voler inviare le risposte e terminare il quiz?
+                {getUnansweredQuestionsCount() > 0 && (
+                  <Box mt={2}>
+                    <Alert severity="warning">
+                      Hai {getUnansweredQuestionsCount()} domande a cui non hai risposto.
+                    </Alert>
+                  </Box>
+                )}
+              </DialogContentText>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setConfirmSubmit(false)} color="primary">
+                Annulla
               </Button>
-            ) : (
-              <Button
-                variant="contained"
-                onClick={handleNext}
-                endIcon={<NavigateNextIcon />}
-                disabled={
-                  quiz.questions[activeStep].type === 'multiple_choice' && 
-                  !answers[quiz.questions[activeStep].id]
-                }
-              >
-                Successiva
+              <Button onClick={handleSubmitQuiz} color="primary" variant="contained" autoFocus>
+                Conferma Invio
               </Button>
-            )}
-          </Box>
+            </DialogActions>
+          </Dialog>
+          
+          {/* Dialogo di avviso tempo */}
+          <Dialog
+            open={timeWarning}
+            onClose={() => setTimeWarning(false)}
+          >
+            <DialogTitle>Tempo Quasi Scaduto!</DialogTitle>
+            <DialogContent>
+              <DialogContentText>
+                Hai meno di 2 minuti per completare il quiz!
+              </DialogContentText>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setTimeWarning(false)} color="primary">
+                Continua
+              </Button>
+            </DialogActions>
+          </Dialog>
         </Box>
-      </Paper>
-
-      {/* Dialog conferma invio */}
-      <Dialog
-        open={confirmSubmit}
-        onClose={handleCloseConfirmSubmit}
-      >
-        <DialogTitle>Conferma invio</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Sei sicuro di voler inviare il quiz? Questa azione non può essere annullata.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseConfirmSubmit} color="primary">
-            Annulla
-          </Button>
-          <Button onClick={handleSubmitQuiz} color="primary" variant="contained" autoFocus>
-            Invia
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Dialog avviso tempo */}
-      <Dialog
-        open={timeWarning}
-        onClose={handleCloseTimeWarning}
-      >
-        <DialogTitle>Tempo quasi scaduto!</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Hai ancora 2 minuti per completare il quiz. Dopo questo tempo, il quiz verrà inviato automaticamente.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseTimeWarning} color="primary" autoFocus>
-            Ho capito
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </MainLayout>
+      </MainLayout>
+    </AnimatedPage>
   );
 };
 

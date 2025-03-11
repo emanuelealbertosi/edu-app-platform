@@ -1,9 +1,13 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { AuthProvider } from './contexts/AuthContext';
+import { NotificationsProvider } from './contexts/NotificationsContext';
+import NotificationsList from './components/Notifications/NotificationsList';
+import NotificationsService from './services/NotificationsService';
 import ProtectedRoute from './components/common/ProtectedRoute';
+import { useNotifications } from './contexts/NotificationsContext';
 
 // Pagine pubbliche
 import LoginPage from './pages/public/LoginPage';
@@ -27,6 +31,10 @@ import StudentDashboard from './pages/student/StudentDashboard';
 import AssignedPaths from './pages/student/AssignedPaths';
 import RewardShop from './pages/student/RewardShop';
 import TakeQuiz from './pages/student/TakeQuiz';
+
+// Componenti di test e debug
+import NotificationTest from './components/Notifications/NotificationTest';
+import AnimationTestPage from './pages/test/AnimationTestPage';
 
 const theme = createTheme({
   palette: {
@@ -76,213 +84,256 @@ const theme = createTheme({
 });
 
 function App() {
+  // Inizializza il servizio notifiche collegandolo al provider
+  useEffect(() => {
+    const initializeServices = async () => {
+      // Recupera l'handler dal contesto quando disponibile
+      const initNotifications = () => {
+        try {
+          // Fix: Utilizziamo l'import diretto invece di require
+          const addNotification = useNotifications().addNotification;
+          NotificationsService.setNotificationHandler(addNotification);
+        } catch (error) {
+          console.error('Errore nell\'inizializzazione del NotificationsService:', error);
+        }
+      };
+      
+      // Inizializzazione asincrona
+      setTimeout(initNotifications, 0);
+    };
+    
+    initializeServices();
+  }, []);
+  
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <AuthProvider>
-        <Router>
-          <Routes>
-            {/* Percorsi pubblici */}
-            <Route path="/" element={<LandingPage />} />
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            
-            {/* Percorsi Admin */}
-            <Route 
-              path="/admin" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <AdminDashboard />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/admin/quiz-templates" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <ManageQuizTemplates />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/admin/quiz-templates/:id" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <ManageQuizTemplates />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/admin/users" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <ManageUsers />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/admin/users/:id" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <ManageUsers />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/admin/settings" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <div>Impostazioni Admin</div>
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/admin/logs" 
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <div>Log di Sistema</div>
-                </ProtectedRoute>
-              } 
-            />
-            
-            {/* Percorsi Genitore */}
-            <Route 
-              path="/parent" 
-              element={
-                <ProtectedRoute requiredRole="parent">
-                  <ParentDashboard />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/parent/students" 
-              element={
-                <ProtectedRoute requiredRole="parent">
-                  <ManageStudents />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/parent/students/:id" 
-              element={
-                <ProtectedRoute requiredRole="parent">
-                  <ManageStudents />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/parent/path-templates" 
-              element={
-                <ProtectedRoute requiredRole="parent">
-                  <ManagePathTemplates />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/parent/path-templates/:id" 
-              element={
-                <ProtectedRoute requiredRole="parent">
-                  <ManagePathTemplates />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/parent/reward-templates" 
-              element={
-                <ProtectedRoute requiredRole="parent">
-                  <ManageRewardTemplates />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/parent/reward-templates/:id" 
-              element={
-                <ProtectedRoute requiredRole="parent">
-                  <ManageRewardTemplates />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/parent/assign-paths" 
-              element={
-                <ProtectedRoute requiredRole="parent">
-                  <AssignPaths />
-                </ProtectedRoute>
-              } 
-            />
-            
-            {/* Percorsi Studente */}
-            <Route 
-              path="/student" 
-              element={
-                <ProtectedRoute requiredRole="student">
-                  <StudentDashboard />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/student/paths" 
-              element={
-                <ProtectedRoute requiredRole="student">
-                  <AssignedPaths />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/student/paths/:id" 
-              element={
-                <ProtectedRoute requiredRole="student">
-                  <AssignedPaths />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/student/rewards" 
-              element={
-                <ProtectedRoute requiredRole="student">
-                  <RewardShop />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/student/quiz/:quizId" 
-              element={
-                <ProtectedRoute requiredRole="student">
-                  <TakeQuiz />
-                </ProtectedRoute>
-              } 
-            />
+      <NotificationsProvider>
+        <AuthProvider>
+          <Router>
+            <NotificationsList />
+            <Routes>
+              {/* Percorsi pubblici */}
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              
+              {/* Percorsi Admin */}
+              <Route 
+                path="/admin" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/quiz-templates" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <ManageQuizTemplates />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/quiz-templates/:id" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <ManageQuizTemplates />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/users" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <ManageUsers />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/users/:id" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <ManageUsers />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/settings" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <div>Impostazioni Admin</div>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/logs" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <div>Log di Sistema</div>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              {/* Percorsi Genitore */}
+              <Route 
+                path="/parent" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <ParentDashboard />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/parent/students" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <ManageStudents />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/parent/students/:id" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <ManageStudents />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/parent/path-templates" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <ManagePathTemplates />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/parent/path-templates/:id" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <ManagePathTemplates />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/parent/reward-templates" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <ManageRewardTemplates />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/parent/reward-templates/:id" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <ManageRewardTemplates />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/parent/assign-paths" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <AssignPaths />
+                  </ProtectedRoute>
+                } 
+              />
+              
+              {/* Percorsi Studente */}
+              <Route 
+                path="/student" 
+                element={
+                  <ProtectedRoute requiredRole="student">
+                    <StudentDashboard />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/student/paths" 
+                element={
+                  <ProtectedRoute requiredRole="student">
+                    <AssignedPaths />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/student/paths/:id" 
+                element={
+                  <ProtectedRoute requiredRole="student">
+                    <AssignedPaths />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/student/rewards" 
+                element={
+                  <ProtectedRoute requiredRole="student">
+                    <RewardShop />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/student/quiz/:quizId" 
+                element={
+                  <ProtectedRoute requiredRole="student">
+                    <TakeQuiz />
+                  </ProtectedRoute>
+                } 
+              />
 
-            {/* Pagina Profilo (accessibile a tutti gli utenti autenticati) */}
-            <Route 
-              path="/profile" 
-              element={
-                <ProtectedRoute requiredRole="any">
-                  <div>Pagina Profilo</div>
-                </ProtectedRoute>
-              } 
-            />
+              {/* Pagina Profilo (accessibile a tutti gli utenti autenticati) */}
+              <Route 
+                path="/profile" 
+                element={
+                  <ProtectedRoute requiredRole="any">
+                    <div>Pagina Profilo</div>
+                  </ProtectedRoute>
+                } 
+              />
 
-            {/* Redirect a percorsi specifici in base al ruolo dopo il login */}
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute requiredRole="any">
-                  {({ user }) => {
-                    if (user?.role === 'admin') return <Navigate to="/admin" />;
-                    if (user?.role === 'parent') return <Navigate to="/parent" />;
-                    if (user?.role === 'student') return <Navigate to="/student" />;
-                    return <Navigate to="/" />;
-                  }}
-                </ProtectedRoute>
-              }
-            />
+              {/* Pagine di test e debug */}
+              <Route 
+                path="/test/notifications" 
+                element={
+                  <ProtectedRoute requiredRole="any">
+                    <NotificationTest />
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/test/animations" 
+                element={
+                  <ProtectedRoute requiredRole="any">
+                    <AnimationTestPage />
+                  </ProtectedRoute>
+                } 
+              />
 
-            {/* Fallback per rotte non trovate */}
-            <Route path="*" element={<Navigate to="/" />} />
-          </Routes>
-        </Router>
-      </AuthProvider>
+              {/* Redirect a percorsi specifici in base al ruolo dopo il login */}
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute requiredRole="any">
+                    {({ user }) => {
+                      if (user?.role === 'admin') return <Navigate to="/admin" />;
+                      if (user?.role === 'parent') return <Navigate to="/parent" />;
+                      if (user?.role === 'student') return <Navigate to="/student" />;
+                      return <Navigate to="/" />;
+                    }}
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Fallback per rotte non trovate */}
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+          </Router>
+        </AuthProvider>
+      </NotificationsProvider>
     </ThemeProvider>
   );
 }
