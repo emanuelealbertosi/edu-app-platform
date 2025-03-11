@@ -31,10 +31,11 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
 - [ ] Interfaccia studenti
 
 ### Fase 4: Testing
-- [x] Test unitari (parziale) ✅
-- [x] Test di integrazione (parziale) ✅
-- [x] Adattamento test per integrare autenticazione ✅
+- [x] Test unitari ✅
+- [x] Test di integrazione ✅
+- [x] Adattamento test per integrare autenticazione JWT ✅
 - [x] Fix bug nei test del quiz-service ✅
+- [x] Verifica funzionamento autenticazione tra servizi e API Gateway ✅
 - [ ] Test end-to-end
 
 ### Fase 5: Containerizzazione

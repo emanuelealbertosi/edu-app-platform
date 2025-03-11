@@ -33,7 +33,7 @@ def setup_test_env():
 
     # Verifica che il servizio di autenticazione sia in esecuzione
     try:
-        response = requests.get("http://localhost:8001/api/auth/health")
+        response = requests.get("http://localhost:8001/")
         if response.status_code != 200:
             pytest.skip("Auth Service non è in esecuzione. Avvia i servizi con docker-compose up prima di eseguire i test di integrazione.")
     except requests.ConnectionError:

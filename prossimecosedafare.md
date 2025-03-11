@@ -10,8 +10,8 @@
 
 ## 2. Completamento e Testing dei Servizi Backend
 - ✅ Risolvere i test falliti nel **quiz-service**:
-  - Sistemare il caricamento delle opzioni di risposta in `get_question_template`
-  - Assicurarsi che il flag `is_completed` sia impostato correttamente in `submit_answers`
+  - ✅ Sistemare il caricamento delle opzioni di risposta in `get_question_template`
+  - ✅ Assicurarsi che il flag `is_completed` sia impostato correttamente in `submit_answers`
 - ✅ Completare i test per tutti i servizi:
   - ✅ Implementare test per il **path-service** con autenticazione
   - ✅ Implementare test per il **reward-service** con autenticazione
