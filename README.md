@@ -52,7 +52,7 @@ L'applicazione è basata su un'architettura a microservizi:
 - **Backend**: FastAPI/Python
 - **Database**: PostgreSQL con SQLAlchemy
 - **Frontend**: React con Material-UI
-- **Autenticazione**: JWT
+- **Autenticazione**: OAuth2 con JWT
 - **Containerizzazione**: Docker e Docker Compose (pianificata)
 
 ## Servizi Implementati
@@ -107,7 +107,7 @@ Il servizio gestisce l'autenticazione e l'autorizzazione degli utenti dell'appli
 
 **Funzionalità principali:**
 - Registrazione e gestione degli utenti
-- Autenticazione con JWT (token di accesso e di refresh)
+- Autenticazione OAuth2 con JWT (token di accesso e di refresh)
 - Gestione dei ruoli utente (admin, parent, student)
 - Profili specifici per genitori e studenti
 - Protezione degli endpoint in base ai ruoli
@@ -342,7 +342,7 @@ Lo script `lancia-locale.sh` è disponibile per gestire i servizi dell'applicazi
 I seguenti servizi sono stati specificamente testati e verificati:
 
 - **Auth Service** (auth-service):
-  - Registrazione utenti e login/logout con JWT
+  - Registrazione utenti e login/logout con OAuth2 e JWT
   - Verifica dei ruoli utente (admin, parent, student)
   - Gestione token refresh
   - Integrazione con PostgreSQL locale
@@ -350,8 +350,8 @@ I seguenti servizi sono stati specificamente testati e verificati:
 - **Reward Service** (reward-service):
   - Integrazione con PostgreSQL in Docker
   - Inizializzazione database con categorie e ricompense
-  - Verifica delle API per categorie e ricompense
-  - Autenticazione con auth-service
+  - Test completi per tutte le API di categorie, ricompense e progressi
+  - Autenticazione con auth-service e gestione ruoli utente
 
 I seguenti servizi sono implementati ma richiedono ulteriori test:
 
