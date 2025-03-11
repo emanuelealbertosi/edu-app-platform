@@ -27,12 +27,14 @@ import {
   Grid,
   Card,
   CardContent,
+  CircularProgress,
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import StarsIcon from '@mui/icons-material/Stars';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import QuizService, { Quiz as ServiceQuiz, QuizResult, QuizAnswer } from '../../services/QuizService';
 
 // Interfacce TypeScript
 interface Question {
@@ -43,16 +45,18 @@ interface Question {
     id: string;
     text: string;
   }[];
+  points: number;
 }
 
 interface Quiz {
   id: string;
   title: string;
   description: string;
-  pathId: string;
-  pathTitle: string;
+  pathId?: string;
+  pathTitle?: string;
   timeLimit?: number; // in minuti
   questions: Question[];
+  maxScore: number;
 }
 
 const TakeQuiz: React.FC = () => {
@@ -62,92 +66,69 @@ const TakeQuiz: React.FC = () => {
   
   const [quiz, setQuiz] = useState<Quiz | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [textAnswers, setTextAnswers] = useState<Record<string, string>>({});
   const [remainingTime, setRemainingTime] = useState<number | null>(null);
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [score, setScore] = useState<number | null>(null);
   const [earnedPoints, setEarnedPoints] = useState<number | null>(null);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [timeWarning, setTimeWarning] = useState(false);
+  const [startTime, setStartTime] = useState<Date | null>(null);
+  const [questionStartTime, setQuestionStartTime] = useState<Date>(new Date());
 
   useEffect(() => {
     const fetchQuiz = async () => {
+      if (!quizId) {
+        setError("ID quiz non valido");
+        setLoading(false);
+        return;
+      }
+
       try {
-        // In un'implementazione reale, questa sarebbe una chiamata API
-        // Per ora utilizziamo dati di esempio
-        setTimeout(() => {
-          const mockQuiz: Quiz = {
-            id: quizId || '1',
-            title: 'Addizione e Sottrazione',
-            description: 'Quiz sulle operazioni base di addizione e sottrazione',
-            pathId: '1',
-            pathTitle: 'Matematica Base',
-            timeLimit: 10, // 10 minuti
-            questions: [
-              {
-                id: '1',
-                text: 'Quanto fa 5 + 3?',
-                type: 'multiple_choice',
-                options: [
-                  { id: 'a', text: '7' },
-                  { id: 'b', text: '8' },
-                  { id: 'c', text: '9' },
-                  { id: 'd', text: '10' },
-                ],
-              },
-              {
-                id: '2',
-                text: 'Quanto fa 10 - 4?',
-                type: 'multiple_choice',
-                options: [
-                  { id: 'a', text: '4' },
-                  { id: 'b', text: '5' },
-                  { id: 'c', text: '6' },
-                  { id: 'd', text: '7' },
-                ],
-              },
-              {
-                id: '3',
-                text: 'Quanto fa 7 + 5?',
-                type: 'multiple_choice',
-                options: [
-                  { id: 'a', text: '10' },
-                  { id: 'b', text: '11' },
-                  { id: 'c', text: '12' },
-                  { id: 'd', text: '13' },
-                ],
-              },
-              {
-                id: '4',
-                text: 'Quanto fa 15 - 7?',
-                type: 'multiple_choice',
-                options: [
-                  { id: 'a', text: '6' },
-                  { id: 'b', text: '7' },
-                  { id: 'c', text: '8' },
-                  { id: 'd', text: '9' },
-                ],
-              },
-              {
-                id: '5',
-                text: 'Spiega con parole tue come si esegue una sottrazione.',
-                type: 'text',
-              },
-            ],
-          };
-          
-          setQuiz(mockQuiz);
-          
-          // Imposta il timer se esiste un time limit
-          if (mockQuiz.timeLimit) {
-            setRemainingTime(mockQuiz.timeLimit * 60); // converti in secondi
-          }
-          
-          setLoading(false);
-        }, 800);
-      } catch (error) {
-        console.error('Errore nel caricamento del quiz:', error);
+        setLoading(true);
+        setError(null);
+
+        // Recupero dei dati del quiz dal servizio
+        const quizData = await QuizService.getQuiz(quizId);
+        
+        // Trasformazione del formato dati dal servizio al formato usato dal componente
+        const formattedQuiz: Quiz = {
+          id: quizData.id,
+          title: quizData.title,
+          description: quizData.description,
+          questions: quizData.questions.map(q => ({
+            id: q.id,
+            text: q.text,
+            type: q.options ? 'multiple_choice' : 'text',
+            options: q.options?.map(opt => ({
+              id: opt.id,
+              text: opt.text
+            })),
+            points: q.points
+          })),
+          maxScore: quizData.maxScore,
+          timeLimit: quizData.questions.reduce((total, q) => total + (q.timeLimit || 0), 0) / 60 || 10, // Convertito in minuti
+        };
+        
+        setQuiz(formattedQuiz);
+        
+        // Imposta il timer
+        if (formattedQuiz.timeLimit) {
+          setRemainingTime(formattedQuiz.timeLimit * 60); // converti in secondi
+        }
+        
+        // Avvia il quiz sul server
+        await QuizService.startQuiz(quizId);
+        setStartTime(new Date());
+        setQuestionStartTime(new Date());
+        
+      } catch (err) {
+        console.error('Errore nel caricamento del quiz:', err);
+        setError('Impossibile caricare il quiz. Riprova più tardi.');
+      } finally {
         setLoading(false);
       }
     };
@@ -188,11 +169,21 @@ const TakeQuiz: React.FC = () => {
   };
 
   const handleNext = () => {
+    // Calcola il tempo trascorso sulla domanda corrente
+    const currentQuestion = quiz?.questions[activeStep];
+    if (currentQuestion) {
+      const endTime = new Date();
+      const timeSpent = Math.floor((endTime.getTime() - questionStartTime.getTime()) / 1000);
+    }
+    
+    // Passa alla prossima domanda
     setActiveStep((prevActiveStep) => prevActiveStep + 1);
+    setQuestionStartTime(new Date()); // Resetta il timer per la nuova domanda
   };
 
   const handleBack = () => {
     setActiveStep((prevActiveStep) => prevActiveStep - 1);
+    setQuestionStartTime(new Date()); // Resetta il timer per la nuova domanda
   };
 
   const handleAnswerChange = (questionId: string, value: string) => {
@@ -201,31 +192,89 @@ const TakeQuiz: React.FC = () => {
       [questionId]: value,
     }));
   };
+  
+  const handleTextAnswerChange = (questionId: string, value: string) => {
+    setTextAnswers(prev => ({
+      ...prev,
+      [questionId]: value,
+    }));
+  };
 
-  const handleSubmitQuiz = () => {
-    // In un'implementazione reale, qui ci sarebbe una chiamata API
-    // per inviare le risposte e ricevere il punteggio
-    
-    // Simuliamo un risultato
-    const totalQuestions = quiz?.questions.length || 0;
-    const correctAnswers = 4; // Simulato
-    const percentage = Math.round((correctAnswers / totalQuestions) * 100);
-    const points = Math.round((percentage / 100) * 50); // 50 punti massimi per quiz
-    
-    setScore(percentage);
-    setEarnedPoints(points);
-    setQuizCompleted(true);
-    
-    // Chiudi il dialog di conferma se aperto
-    setConfirmSubmit(false);
+  const handleCloseTimeWarning = () => {
     setTimeWarning(false);
   };
 
-  if (loading) {
+  const handleOpenConfirmSubmit = () => {
+    setConfirmSubmit(true);
+  };
+
+  const handleCloseConfirmSubmit = () => {
+    setConfirmSubmit(false);
+  };
+
+  const handleSubmitQuiz = async () => {
+    setConfirmSubmit(false);
+    
+    if (!quiz || !quizId) return;
+    
+    try {
+      setLoading(true);
+
+      // Calcola il tempo trascorso sull'ultima domanda
+      const currentQuestion = quiz.questions[activeStep];
+      const endTime = new Date();
+      const finalTimeSpent = Math.floor((endTime.getTime() - questionStartTime.getTime()) / 1000);
+      
+      // Prepara le risposte da inviare
+      const quizAnswers: QuizAnswer[] = Object.entries(answers).map(([questionId, optionId]) => ({
+        questionId,
+        selectedOptionId: optionId,
+        timeSpent: finalTimeSpent // Idealmente dovremmo tracciare il tempo per ogni domanda
+      }));
+      
+      // Aggiungiamo le risposte testuali (il backend dovrà gestirle in modo diverso)
+      Object.entries(textAnswers).forEach(([questionId, textAnswer]) => {
+        quizAnswers.push({
+          questionId,
+          selectedOptionId: textAnswer, // Nel caso di risposta testuale, usiamo il testo come ID
+          timeSpent: finalTimeSpent
+        });
+      });
+      
+      // Invia le risposte al server
+      const result = await QuizService.submitQuiz({
+        quizId,
+        answers: quizAnswers
+      });
+      
+      // Aggiorna lo stato con i risultati
+      setScore(result.score);
+      setEarnedPoints(result.score);
+      setQuizCompleted(true);
+      
+    } catch (err) {
+      console.error('Errore durante l\'invio del quiz:', err);
+      setError('Impossibile inviare il quiz. Riprova più tardi.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading && !quiz) {
     return (
-      <MainLayout title="Caricamento Quiz...">
-        <Box sx={{ width: '100%', mt: 4 }}>
-          <LinearProgress />
+      <MainLayout title="Svolgimento Quiz">
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+          <CircularProgress />
+        </Box>
+      </MainLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <MainLayout title="Svolgimento Quiz">
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+          <Alert severity="error">{error}</Alert>
         </Box>
       </MainLayout>
     );
@@ -233,260 +282,224 @@ const TakeQuiz: React.FC = () => {
 
   if (!quiz) {
     return (
-      <MainLayout title="Quiz non trovato">
-        <Alert severity="error" sx={{ mt: 4 }}>
-          Il quiz richiesto non è stato trovato o non è disponibile.
-        </Alert>
-        <Button 
-          variant="contained" 
-          sx={{ mt: 2 }}
-          onClick={() => navigate('/student/paths')}
-        >
-          Torna ai percorsi
-        </Button>
+      <MainLayout title="Svolgimento Quiz">
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+          <Alert severity="error">Quiz non trovato</Alert>
+        </Box>
       </MainLayout>
     );
   }
 
-  // Se il quiz è completato mostra il risultato
-  if (quizCompleted && score !== null && earnedPoints !== null) {
+  if (quizCompleted) {
     return (
       <MainLayout title="Quiz Completato">
-        <Box sx={{ 
-          display: 'flex', 
-          flexDirection: 'column', 
-          alignItems: 'center',
-          textAlign: 'center',
-          py: 4 
-        }}>
-          <CheckCircleIcon sx={{ fontSize: 80, color: 'success.main', mb: 2 }} />
-          <Typography variant="h4" gutterBottom>
-            Quiz Completato!
-          </Typography>
-          <Typography variant="h5" color="text.secondary" gutterBottom>
-            {quiz.title}
-          </Typography>
-          
-          <Box sx={{ width: '100%', maxWidth: 600, mt: 4 }}>
-            <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6" color="text.secondary">
-                      Punteggio
-                    </Typography>
-                    <Typography variant="h3" color="primary" sx={{ fontWeight: 'bold' }}>
-                      {score}%
-                    </Typography>
-                  </CardContent>
-                </Card>
+        <Paper elevation={3} sx={{ p: 4, maxWidth: 800, mx: 'auto', my: 4, borderRadius: 2 }}>
+          <Box sx={{ textAlign: 'center', mb: 4 }}>
+            <CheckCircleIcon color="success" sx={{ fontSize: 60 }} />
+            <Typography variant="h4" sx={{ mt: 2 }}>
+              Quiz Completato!
+            </Typography>
+            <Typography variant="subtitle1" color="text.secondary">
+              Hai completato con successo il quiz "{quiz.title}"
+            </Typography>
+          </Box>
+
+          <Box sx={{ mb: 4, p: 3, bgcolor: 'primary.light', color: 'white', borderRadius: 2 }}>
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} md={6} sx={{ textAlign: 'center' }}>
+                <Typography variant="h6">Il tuo punteggio</Typography>
+                <Typography variant="h3" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <StarsIcon sx={{ mr: 1 }} />
+                  {score}/{quiz.maxScore}
+                </Typography>
               </Grid>
-              <Grid item xs={12} md={6}>
-                <Card sx={{ bgcolor: 'primary.main', color: 'white' }}>
-                  <CardContent>
-                    <Typography variant="h6">
-                      Punti Guadagnati
-                    </Typography>
-                    <Typography variant="h3" sx={{ fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <StarsIcon sx={{ mr: 1 }} /> {earnedPoints}
-                    </Typography>
-                  </CardContent>
-                </Card>
+              <Grid item xs={12} md={6} sx={{ textAlign: 'center' }}>
+                <Typography variant="h6">Punti guadagnati</Typography>
+                <Typography variant="h3" sx={{ fontWeight: 'bold' }}>
+                  +{earnedPoints}
+                </Typography>
               </Grid>
             </Grid>
-            
-            <Box sx={{ mt: 4 }}>
-              <Typography variant="body1" paragraph>
-                Grazie per aver completato questo quiz! I punti sono stati aggiunti al tuo profilo.
-              </Typography>
-              
-              <Button 
-                variant="contained" 
-                color="primary"
-                size="large"
-                onClick={() => navigate(`/student/paths/${quiz.pathId}`)}
-                sx={{ mr: 2 }}
-              >
-                Torna al percorso
-              </Button>
-              
-              <Button 
-                variant="outlined" 
-                onClick={() => navigate('/student')}
-              >
-                Dashboard
-              </Button>
-            </Box>
           </Box>
-        </Box>
+
+          <Box sx={{ display: 'flex', justifyContent: 'space-around', mt: 4 }}>
+            <Button 
+              variant="outlined" 
+              size="large"
+              onClick={() => navigate('/student/dashboard')}
+            >
+              Dashboard
+            </Button>
+            <Button 
+              variant="contained" 
+              size="large"
+              onClick={() => navigate('/student/quizzes')}
+            >
+              Torna ai Quiz
+            </Button>
+          </Box>
+        </Paper>
       </MainLayout>
     );
   }
 
   return (
-    <MainLayout title={`Quiz: ${quiz.title}`}>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" gutterBottom>
-          {quiz.title}
-        </Typography>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="subtitle1" color="text.secondary">
-            Da: {quiz.pathTitle}
+    <MainLayout title="Svolgimento Quiz">
+      <Paper elevation={3} sx={{ p: 3, maxWidth: 800, mx: 'auto', my: 4 }}>
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h4" gutterBottom>
+            {quiz.title}
           </Typography>
+          <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+            {quiz.description}
+          </Typography>
+          
           {remainingTime !== null && (
-            <Box sx={{ 
-              display: 'flex', 
-              alignItems: 'center',
-              color: remainingTime < 120 ? 'error.main' : 'text.secondary'
-            }}>
-              <AccessTimeIcon sx={{ mr: 1 }} />
-              <Typography variant="subtitle1" fontWeight="bold">
-                Tempo: {formatTime(remainingTime)}
+            <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
+              <AccessTimeIcon color="action" sx={{ mr: 1 }} />
+              <Typography variant="body2" color={remainingTime < 300 ? 'error' : 'text.secondary'}>
+                Tempo rimanente: {formatTime(remainingTime)}
               </Typography>
             </Box>
           )}
+          
+          <LinearProgress 
+            variant="determinate" 
+            value={(activeStep / quiz.questions.length) * 100} 
+            sx={{ mt: 2, height: 8, borderRadius: 4 }}
+          />
         </Box>
-      </Box>
 
-      <Paper sx={{ p: 3, mb: 4 }}>
-        <Stepper activeStep={activeStep} alternativeLabel>
+        <Stepper activeStep={activeStep} alternativeLabel sx={{ mb: 4 }}>
           {quiz.questions.map((question, index) => (
             <Step key={question.id}>
-              <StepLabel>Domanda {index + 1}</StepLabel>
+              <StepLabel>{`Domanda ${index + 1}`}</StepLabel>
             </Step>
           ))}
         </Stepper>
-      </Paper>
 
-      <Paper sx={{ p: 4, borderRadius: 2 }}>
-        {activeStep < quiz.questions.length && (
-          <>
-            <Box sx={{ mb: 4 }}>
-              <Typography variant="h6" gutterBottom>
-                Domanda {activeStep + 1} di {quiz.questions.length}
-              </Typography>
-              <Divider />
-            </Box>
-            
-            <Box sx={{ mb: 4 }}>
-              <Typography variant="h5" gutterBottom>
-                {quiz.questions[activeStep].text}
-              </Typography>
-              
-              {quiz.questions[activeStep].type === 'multiple_choice' && (
-                <FormControl component="fieldset" sx={{ width: '100%', mt: 2 }}>
+        <Box sx={{ mb: 4 }}>
+          {activeStep < quiz.questions.length ? (
+            <Box>
+              <FormControl component="fieldset" sx={{ width: '100%' }}>
+                <FormLabel component="legend" sx={{ mb: 2 }}>
+                  <Typography variant="h6">
+                    {quiz.questions[activeStep].text}
+                  </Typography>
+                </FormLabel>
+                
+                {quiz.questions[activeStep].type === 'multiple_choice' && quiz.questions[activeStep].options ? (
                   <RadioGroup
                     value={answers[quiz.questions[activeStep].id] || ''}
                     onChange={(e) => handleAnswerChange(quiz.questions[activeStep].id, e.target.value)}
                   >
-                    {quiz.questions[activeStep].options?.map((option) => (
+                    {quiz.questions[activeStep].options.map((option) => (
                       <FormControlLabel
                         key={option.id}
                         value={option.id}
                         control={<Radio />}
                         label={option.text}
-                        sx={{ 
-                          mb: 1,
-                          p: 1,
-                          border: '1px solid',
-                          borderColor: 'divider',
-                          borderRadius: 1,
-                          width: '100%',
-                          '&:hover': {
-                            bgcolor: 'action.hover',
-                          }
-                        }}
+                        sx={{ mb: 1 }}
                       />
                     ))}
                   </RadioGroup>
-                </FormControl>
-              )}
-              
-              {quiz.questions[activeStep].type === 'text' && (
-                <TextField
-                  multiline
-                  rows={4}
-                  fullWidth
-                  placeholder="Scrivi la tua risposta qui..."
-                  value={answers[quiz.questions[activeStep].id] || ''}
-                  onChange={(e) => handleAnswerChange(quiz.questions[activeStep].id, e.target.value)}
-                  variant="outlined"
-                  sx={{ mt: 2 }}
-                />
-              )}
+                ) : (
+                  <TextField
+                    multiline
+                    rows={4}
+                    fullWidth
+                    placeholder="Scrivi la tua risposta qui..."
+                    value={textAnswers[quiz.questions[activeStep].id] || ''}
+                    onChange={(e) => handleTextAnswerChange(quiz.questions[activeStep].id, e.target.value)}
+                  />
+                )}
+              </FormControl>
             </Box>
-            
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 2 }}>
+          ) : (
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="h6" gutterBottom>
+                Hai risposto a tutte le domande!
+              </Typography>
+              <Typography variant="body1">
+                Puoi rivedere le tue risposte utilizzando i pulsanti di navigazione o inviare il quiz.
+              </Typography>
+            </Box>
+          )}
+        </Box>
+
+        <Divider sx={{ my: 2 }} />
+
+        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+          <Button
+            variant="outlined"
+            disabled={activeStep === 0}
+            onClick={handleBack}
+            startIcon={<NavigateBeforeIcon />}
+          >
+            Precedente
+          </Button>
+          
+          <Box>
+            {activeStep === quiz.questions.length - 1 || activeStep === quiz.questions.length ? (
               <Button
-                variant="outlined"
-                onClick={handleBack}
-                startIcon={<NavigateBeforeIcon />}
-                disabled={activeStep === 0}
+                variant="contained"
+                color="primary"
+                onClick={handleOpenConfirmSubmit}
+                disabled={loading}
               >
-                Indietro
+                Invia quiz
               </Button>
-              
-              {activeStep === quiz.questions.length - 1 ? (
-                <Button 
-                  variant="contained" 
-                  color="primary"
-                  onClick={() => setConfirmSubmit(true)}
-                >
-                  Termina il quiz
-                </Button>
-              ) : (
-                <Button
-                  variant="contained"
-                  onClick={handleNext}
-                  endIcon={<NavigateNextIcon />}
-                  disabled={!answers[quiz.questions[activeStep].id]}
-                >
-                  Avanti
-                </Button>
-              )}
-            </Box>
-          </>
-        )}
+            ) : (
+              <Button
+                variant="contained"
+                onClick={handleNext}
+                endIcon={<NavigateNextIcon />}
+                disabled={
+                  quiz.questions[activeStep].type === 'multiple_choice' && 
+                  !answers[quiz.questions[activeStep].id]
+                }
+              >
+                Successiva
+              </Button>
+            )}
+          </Box>
+        </Box>
       </Paper>
 
-      {/* Dialog di conferma per l'invio del quiz */}
+      {/* Dialog conferma invio */}
       <Dialog
         open={confirmSubmit}
-        onClose={() => setConfirmSubmit(false)}
+        onClose={handleCloseConfirmSubmit}
       >
         <DialogTitle>Conferma invio</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Sei sicuro di voler terminare e inviare il quiz? 
-            {
-              Object.keys(answers).length < quiz.questions.length && 
-              ` Nota: hai risposto a ${Object.keys(answers).length} domande su ${quiz.questions.length}.`
-            }
+            Sei sicuro di voler inviare il quiz? Questa azione non può essere annullata.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setConfirmSubmit(false)} color="primary">
+          <Button onClick={handleCloseConfirmSubmit} color="primary">
             Annulla
           </Button>
-          <Button onClick={handleSubmitQuiz} color="primary" variant="contained">
-            Conferma invio
+          <Button onClick={handleSubmitQuiz} color="primary" variant="contained" autoFocus>
+            Invia
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Dialog di avviso per il tempo che sta scadendo */}
+      {/* Dialog avviso tempo */}
       <Dialog
         open={timeWarning}
-        onClose={() => setTimeWarning(false)}
+        onClose={handleCloseTimeWarning}
       >
-        <DialogTitle sx={{ color: 'warning.main' }}>Attenzione: tempo quasi scaduto!</DialogTitle>
+        <DialogTitle>Tempo quasi scaduto!</DialogTitle>
         <DialogContent>
           <DialogContentText>
-            Hai meno di 2 minuti per completare il quiz. Assicurati di inviare le tue risposte prima della scadenza del tempo.
+            Hai ancora 2 minuti per completare il quiz. Dopo questo tempo, il quiz verrà inviato automaticamente.
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setTimeWarning(false)} color="primary" variant="contained">
+          <Button onClick={handleCloseTimeWarning} color="primary" autoFocus>
             Ho capito
           </Button>
         </DialogActions>
