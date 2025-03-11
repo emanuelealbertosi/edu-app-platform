@@ -42,19 +42,30 @@ def client(db):
     # Override database dependency
     app.dependency_overrides[get_db] = override_get_db
     
-    # Override auth dependencies with mock users
+    # Creiamo un mock utilizzando i dati attesi dal servizio di autenticazione
+    # Riflettendo lo schema del token JWT utilizzato dal auth-service sulla porta 8001
+    # NOTA: In reward-service, viene utilizzato 'id' invece di 'user_id'
+    mock_user = {
+        "id": "admin-uuid-1",  # ID univoco dell'utente come usato in reward-service
+        "user_id": "admin-uuid-1",  # ID univoco dell'utente per compatibilità con altri servizi
+        "email": "admin@example.com",
+        "role": "admin",  # Ruolo amministratore per avere accesso completo
+        "is_active": True,  # Utente attivo
+        "exp": 9999999999  # Data di scadenza del token molto lontana
+    }
+    
     async def mock_current_user():
-        return {"id": "admin-uuid-1", "role": "admin"}
+        return mock_user
     
     async def mock_current_active_user():
-        return {"id": "admin-uuid-1", "role": "admin", "is_active": True}
+        return mock_user
         
     async def mock_current_admin_user():
-        return {"id": "admin-uuid-1", "role": "admin", "is_active": True}
+        return mock_user
         
     # Add parent_or_admin dependency
     async def mock_current_parent_or_admin_user():
-        return {"id": "admin-uuid-1", "role": "admin", "is_active": True}
+        return mock_user
     
     app.dependency_overrides[get_current_user] = mock_current_user
     app.dependency_overrides[get_current_active_user] = mock_current_active_user

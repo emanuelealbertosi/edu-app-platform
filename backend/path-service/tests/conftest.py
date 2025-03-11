@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from app.db.base import Base, get_db
 from app.main import app
+from app.api.dependencies.auth import get_current_user, get_admin_user, get_parent_user, get_student_user, TokenData
 from app.db.models.path import (
     PathCategory, PathTemplate, PathNodeTemplate, 
     Path, PathNode, PathNodeType, CompletionStatus
@@ -38,23 +39,34 @@ def client(db):
         finally:
             pass
     
-    # Override delle dipendenze di autenticazione
-    from app.api.dependencies.auth import get_current_user, get_admin_user, get_parent_user
+    # Override delle dipendenze di autenticazione per i test
+    mock_user_data = TokenData(
+        user_id="test-user-123",
+        email="test@example.com",
+        role="admin",  # Questo permette di avere tutti i permessi nei test
+        exp=9999999999  # Token con scadenza molto lontana
+    )
     
-    # Mock dell'utente autenticato
-    def mock_current_user():
-        return {
-            "id": "user-id-123",  # Cambia id in user_id per match con TokenData
-            "user_id": "user-id-123",
-            "email": "test@example.com",
-            "role": "admin",  # Questo permette di avere tutti i permessi nei test
-            "exp": 9999999999  # Token con scadenza molto lontana
-        }
+    # Convertire in dizionario come fa la funzione get_current_user reale
+    mock_user = mock_user_data.model_dump()  # Usando model_dump() di Pydantic v2 invece di dict()
+    
+    async def override_get_current_user():
+        return mock_user
+        
+    async def override_get_admin_user():
+        return mock_user
+        
+    async def override_get_parent_user():
+        return mock_user
+        
+    async def override_get_student_user():
+        return mock_user
     
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_current_user] = mock_current_user
-    app.dependency_overrides[get_admin_user] = mock_current_user
-    app.dependency_overrides[get_parent_user] = mock_current_user
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_admin_user] = override_get_admin_user
+    app.dependency_overrides[get_parent_user] = override_get_parent_user
+    app.dependency_overrides[get_student_user] = override_get_student_user
     
     with TestClient(app) as c:
         yield c

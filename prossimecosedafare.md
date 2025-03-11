@@ -12,9 +12,9 @@
 - ✅ Risolvere i test falliti nel **quiz-service**:
   - Sistemare il caricamento delle opzioni di risposta in `get_question_template`
   - Assicurarsi che il flag `is_completed` sia impostato correttamente in `submit_answers`
-- Completare i test per tutti i servizi:
-  - Implementare test per il **path-service** con autenticazione
-  - Implementare test per il **reward-service** con autenticazione
+- ✅ Completare i test per tutti i servizi:
+  - ✅ Implementare test per il **path-service** con autenticazione
+  - ✅ Implementare test per il **reward-service** con autenticazione
 - Verificare l'integrazione tra servizi tramite l'API Gateway
 
 ## 3. Sviluppo Frontend
