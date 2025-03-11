@@ -38,7 +38,24 @@ def client(db):
         finally:
             pass
     
+    # Override delle dipendenze di autenticazione
+    from app.api.dependencies.auth import get_current_user, get_admin_user, get_parent_user
+    
+    # Mock dell'utente autenticato
+    def mock_current_user():
+        return {
+            "id": "user-id-123",  # Cambia id in user_id per match con TokenData
+            "user_id": "user-id-123",
+            "email": "test@example.com",
+            "role": "admin",  # Questo permette di avere tutti i permessi nei test
+            "exp": 9999999999  # Token con scadenza molto lontana
+        }
+    
     app.dependency_overrides[get_db] = override_get_db
+    app.dependency_overrides[get_current_user] = mock_current_user
+    app.dependency_overrides[get_admin_user] = mock_current_user
+    app.dependency_overrides[get_parent_user] = mock_current_user
+    
     with TestClient(app) as c:
         yield c
 
@@ -139,7 +156,7 @@ def test_path_node_templates(db, test_path_templates):
             "reward_type": "badge"
         },
         estimated_time=5,
-        dependencies={"dependencies": ["#node2"]}
+        dependencies={"dependencies": ["#node2", "required"]}
     )
     
     # Create test node templates for language path

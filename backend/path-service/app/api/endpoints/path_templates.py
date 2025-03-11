@@ -156,7 +156,7 @@ async def get_path_templates(
     # Aggiungi il conteggio dei nodi per ciascun template
     result = []
     for template in templates:
-        template_dict = PathTemplateSummary.from_orm(template).dict()
+        template_dict = PathTemplateSummary.model_validate(template).model_dump()
         template_dict["node_count"] = PathTemplateRepository.count_nodes(db, template.id)
         result.append(PathTemplateSummary(**template_dict))
     

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict, Any, Union, Set
 from datetime import datetime
 from enum import Enum
@@ -32,8 +32,9 @@ class PathCategoryUpdate(PathCategoryBase):
 class PathCategoryInDBBase(PathCategoryBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True
+    }
 
 class PathCategory(PathCategoryInDBBase):
     pass
@@ -51,9 +52,9 @@ class PathNodeTemplateBase(BaseModel):
     additional_data: Optional[Dict[str, Any]] = None
 
 class PathNodeTemplateCreate(PathNodeTemplateBase):
-    @validator('content')
-    def validate_content(cls, v, values):
-        node_type = values.get('node_type')
+    @field_validator('content')
+    def validate_content(cls, v, info):
+        node_type = info.data.get('node_type')
         if not v:
             raise ValueError(f"Il contenuto è obbligatorio per il nodo di tipo {node_type}")
         
@@ -107,8 +108,9 @@ class PathNodeTemplateInDBBase(PathNodeTemplateBase):
     uuid: str
     path_template_id: int
 
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True
+    }
 
 class PathNodeTemplate(PathNodeTemplateInDBBase):
     pass
@@ -131,7 +133,7 @@ class PathTemplateCreate(PathTemplateBase):
     created_by: str  # UUID del creatore
     created_by_role: str  # Ruolo del creatore (admin o parent)
 
-    @validator('created_by_role')
+    @field_validator('created_by_role')
     def validate_created_by_role(cls, v):
         if v not in ['admin', 'parent']:
             raise ValueError("created_by_role deve essere 'admin' o 'parent'")
@@ -157,8 +159,9 @@ class PathTemplateInDBBase(PathTemplateBase):
     created_by: str
     created_by_role: str
 
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True
+    }
 
 class PathTemplateSummary(PathTemplateInDBBase):
     category: Optional[PathCategory] = None
@@ -204,8 +207,9 @@ class PathNodeInDBBase(PathNodeBase):
     score: int = 0
     feedback: Optional[str] = None
 
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True
+    }
 
 class PathNode(PathNodeInDBBase):
     pass
@@ -240,8 +244,9 @@ class PathInDBBase(PathBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True
+    }
 
 class PathSummary(PathInDBBase):
     template_title: str

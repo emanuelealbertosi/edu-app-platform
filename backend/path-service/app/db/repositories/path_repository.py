@@ -79,7 +79,7 @@ class PathRepository:
             raise ValueError(f"Template di percorso con ID {path_create.template_id} non trovato")
         
         # Prepara i dati del percorso
-        path_data = path_create.dict()
+        path_data = path_create.model_dump()
         
         # Crea il percorso
         db_path = Path(**path_data, max_score=template.points)
@@ -126,7 +126,7 @@ class PathRepository:
     def update(db: Session, path: Path, path_update: PathUpdate) -> Path:
         """Aggiorna un percorso esistente nel database."""
         # Aggiorna solo i campi forniti
-        update_data = path_update.dict(exclude_unset=True)
+        update_data = path_update.model_dump(exclude_unset=True)
         
         for field, value in update_data.items():
             setattr(path, field, value)

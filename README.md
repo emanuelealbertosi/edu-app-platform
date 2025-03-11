@@ -17,6 +17,11 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
 - [x] Servizio gestione ricompense ✅
 - [x] API Gateway ✅
 
+### Fase 2.5: Modernizzazione del Codice
+- [x] Aggiornamento a Pydantic V2 ✅
+  - [x] Path Service ✅
+  - [ ] Altri servizi (in attesa)
+
 ### Fase 3: Sviluppo del Frontend
 - [ ] Configurazione React
 - [ ] Componenti UI comuni
@@ -27,6 +32,7 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
 ### Fase 4: Testing
 - [x] Test unitari (parziale) ✅
 - [x] Test di integrazione (parziale) ✅
+- [x] Adattamento test per integrare autenticazione ✅
 - [ ] Test end-to-end
 
 ### Fase 5: Containerizzazione
@@ -53,6 +59,7 @@ L'applicazione è basata su un'architettura a microservizi:
 - **Database**: PostgreSQL con SQLAlchemy
 - **Frontend**: React con Material-UI
 - **Autenticazione**: OAuth2 con JWT
+- **Validation**: Pydantic V2
 - **Containerizzazione**: Docker e Docker Compose (pianificata)
 
 ## Servizi Implementati
@@ -80,12 +87,14 @@ Il servizio gestisce i percorsi educativi personalizzati per gli studenti.
 - Supporto per dipendenze tra nodi (sequenze di apprendimento)
 - Diversi tipi di nodi: contenuto, quiz, attività, traguardi, ricompense
 - Tracciamento dell'avanzamento e completamento
+- Modernizzato con Pydantic V2 per una validazione dei dati più robusta
 
 **Endpoints:**
 - `GET /api/path-templates/`: Lista di template di percorsi
 - `POST /api/path-templates/`: Creazione di un nuovo template di percorso
-- `GET /api/paths/`: Lista di percorsi assegnati
+- `GET /api/paths/`: Lista di percorsi assegnati (richiede autenticazione)
 - `POST /api/paths/`: Creazione di un nuovo percorso da un template
+- `GET /api/path-templates/public`: Lista di template pubblici disponibili
 
 ### Reward Service
 Il servizio gestisce il sistema di ricompense e badge per gli studenti.

@@ -78,7 +78,7 @@ class PathTemplateRepository:
         """Crea un nuovo template di percorso nel database."""
         # Estrai i nodi dal DTO di creazione
         nodes_data = path_template_create.nodes
-        path_template_data = path_template_create.dict(exclude={"nodes"})
+        path_template_data = path_template_create.model_dump(exclude={"nodes"})
         
         # Crea il template del percorso
         db_path_template = PathTemplate(**path_template_data)
@@ -88,7 +88,7 @@ class PathTemplateRepository:
         
         # Crea i nodi associati al template
         for node_data in nodes_data:
-            node_data_dict = node_data.dict()
+            node_data_dict = node_data.model_dump()
             
             # Crea il nodo
             db_node = PathNodeTemplate(**node_data_dict, path_template_id=db_path_template.id)
@@ -103,7 +103,7 @@ class PathTemplateRepository:
     def update(db: Session, path_template: PathTemplate, path_template_update: PathTemplateUpdate) -> PathTemplate:
         """Aggiorna un template di percorso esistente nel database."""
         # Aggiorna solo i campi forniti
-        update_data = path_template_update.dict(exclude_unset=True)
+        update_data = path_template_update.model_dump(exclude_unset=True)
         
         for field, value in update_data.items():
             setattr(path_template, field, value)

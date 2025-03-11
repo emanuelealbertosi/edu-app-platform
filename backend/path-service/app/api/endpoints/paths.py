@@ -74,7 +74,7 @@ async def get_paths(
         completed_nodes = PathRepository.count_completed_nodes(db, path.id)
         
         # Crea il DTO di risposta
-        path_dict = PathSummary.from_orm(path).dict()
+        path_dict = PathSummary.model_validate(path).model_dump()
         path_dict["template_title"] = template.title if template else "Unknown Template"
         path_dict["node_count"] = node_count
         path_dict["completed_nodes"] = completed_nodes
