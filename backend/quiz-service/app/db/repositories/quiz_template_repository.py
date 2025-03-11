@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload, joinedload
 from sqlalchemy import func
 
 from app.db.models.quiz import (
@@ -70,7 +70,7 @@ class QuizTemplateRepository:
         """Crea un nuovo template di quiz nel database."""
         # Estrai le domande dal DTO di creazione
         questions_data = quiz_template_create.questions
-        quiz_template_data = quiz_template_create.dict(exclude={"questions"})
+        quiz_template_data = quiz_template_create.model_dump(exclude={"questions"})
         
         # Crea il template del quiz
         db_quiz_template = QuizTemplate(**quiz_template_data)
@@ -82,7 +82,7 @@ class QuizTemplateRepository:
         for question_data in questions_data:
             # Estrai le opzioni di risposta dal DTO di creazione
             answer_options_data = question_data.answer_options
-            question_data_dict = question_data.dict(exclude={"answer_options"})
+            question_data_dict = question_data.model_dump(exclude={"answer_options"})
             
             # Crea la domanda
             db_question = QuestionTemplate(**question_data_dict, quiz_template_id=db_quiz_template.id)
@@ -93,7 +93,7 @@ class QuizTemplateRepository:
             # Crea le opzioni di risposta associate alla domanda
             for option_data in answer_options_data:
                 db_option = AnswerOptionTemplate(
-                    **option_data.dict(),
+                    **option_data.model_dump(),
                     question_template_id=db_question.id
                 )
                 db.add(db_option)
@@ -109,7 +109,7 @@ class QuizTemplateRepository:
     def update(db: Session, quiz_template: QuizTemplate, quiz_template_update: QuizTemplateUpdate) -> QuizTemplate:
         """Aggiorna un template di quiz esistente nel database."""
         # Aggiorna solo i campi forniti
-        update_data = quiz_template_update.dict(exclude_unset=True)
+        update_data = quiz_template_update.model_dump(exclude_unset=True)
         
         for field, value in update_data.items():
             setattr(quiz_template, field, value)
@@ -142,7 +142,7 @@ class QuizTemplateRepository:
         """Aggiunge una domanda a un template di quiz."""
         # Estrai le opzioni di risposta dal DTO di creazione
         answer_options_data = question_create.answer_options
-        question_data = question_create.dict(exclude={"answer_options"})
+        question_data = question_create.model_dump(exclude={"answer_options"})
         
         # Crea la domanda
         db_question = QuestionTemplate(**question_data, quiz_template_id=quiz_template_id)
@@ -153,7 +153,7 @@ class QuizTemplateRepository:
         # Crea le opzioni di risposta associate alla domanda
         for option_data in answer_options_data:
             db_option = AnswerOptionTemplate(
-                **option_data.dict(),
+                **option_data.model_dump(),
                 question_template_id=db_question.id
             )
             db.add(db_option)
@@ -167,7 +167,7 @@ class QuizTemplateRepository:
     def update_question(db: Session, question: QuestionTemplate, question_update: QuestionTemplateUpdate) -> QuestionTemplate:
         """Aggiorna una domanda di un template di quiz."""
         # Aggiorna solo i campi forniti
-        update_data = question_update.dict(exclude_unset=True)
+        update_data = question_update.model_dump(exclude_unset=True)
         
         for field, value in update_data.items():
             setattr(question, field, value)
@@ -190,8 +190,17 @@ class QuizTemplateRepository:
     
     @staticmethod
     def get_question(db: Session, question_id: int) -> Optional[QuestionTemplate]:
-        """Ottiene una domanda di un template di quiz."""
-        return db.query(QuestionTemplate).filter(QuestionTemplate.id == question_id).first()
+        """Ottiene una domanda di un template di quiz con le sue opzioni di risposta."""
+        # Carica esplicitamente le opzioni di risposta usando joinedload invece di selectinload
+        question = db.query(QuestionTemplate).options(
+            joinedload(QuestionTemplate.answer_options)
+        ).filter(QuestionTemplate.id == question_id).first()
+        
+        # Forza il caricamento delle opzioni di risposta
+        if question:
+            _ = question.answer_options
+            
+        return question
     
     @staticmethod
     def get_question_by_uuid(db: Session, uuid: str) -> Optional[QuestionTemplate]:

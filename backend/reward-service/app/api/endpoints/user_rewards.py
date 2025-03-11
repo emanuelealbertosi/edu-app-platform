@@ -66,7 +66,7 @@ async def assign_reward_to_user(
         pass
     
     try:
-        user_reward_data = user_reward.dict()
+        user_reward_data = user_reward.model_dump()
         new_user_reward = UserRewardRepository.create(db, user_reward_data)
         return new_user_reward
     except HTTPException as e:
@@ -136,7 +136,7 @@ async def update_user_reward(
         # Per ora, lasciamo passare e assumiamo che il controllo sia fatto dal servizio di autenticazione
         pass
     
-    update_data = user_reward_update.dict(exclude_unset=True)
+    update_data = user_reward_update.model_dump(exclude_unset=True)
     updated_user_reward = UserRewardRepository.update(db, user_reward_id, update_data)
     return updated_user_reward
 
@@ -209,7 +209,7 @@ async def create_or_update_progress(
         pass
     
     try:
-        progress_data = progress.dict()
+        progress_data = progress.model_dump()
         updated_progress = RewardProgressRepository.create_or_update(db, progress_data)
         
         # Verifica se il progresso è stato completato

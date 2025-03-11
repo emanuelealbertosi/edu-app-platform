@@ -126,10 +126,10 @@ async def create_reward(
     Richiede privilegi di amministratore.
     """
     # Assegna automaticamente l'ID dell'utente corrente come creatore
-    reward_data = reward.dict()
+    reward_data = reward.model_dump()
     reward_data["created_by"] = current_user["id"]
     
-    return RewardRepository.create(db, RewardCreate(**reward_data))
+    return RewardRepository.create(db, RewardCreate.model_validate(reward_data))
 
 
 @router.get("/{reward_id}", response_model=RewardWithCategory)

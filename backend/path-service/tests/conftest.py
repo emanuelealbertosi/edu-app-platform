@@ -257,6 +257,11 @@ def test_path_nodes(db, test_paths, test_path_node_templates):
         score=10
     )
     
+    # Commit math_node1 to get a valid UUID
+    db.add(math_node1)
+    db.commit()
+    db.refresh(math_node1)
+    
     math_node2 = PathNode(
         title=test_path_node_templates["math_node2"].title,
         description=test_path_node_templates["math_node2"].description,
@@ -300,7 +305,7 @@ def test_path_nodes(db, test_paths, test_path_node_templates):
         status=CompletionStatus.NOT_STARTED
     )
     
-    db.add_all([math_node1, math_node2, math_node3, lang_node1])
+    db.add_all([math_node2, math_node3, lang_node1])
     db.commit()
     
     db.refresh(math_node1)

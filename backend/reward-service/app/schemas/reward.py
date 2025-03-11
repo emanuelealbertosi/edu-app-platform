@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 import uuid
@@ -10,6 +10,12 @@ class RewardCategoryBase(BaseModel):
     """Schema base per categorie di ricompense"""
     name: str
     description: Optional[str] = None
+    
+    @field_validator('name')
+    def name_must_not_be_empty(cls, v):
+        if not v or not v.strip():
+            raise ValueError('Il nome della categoria non può essere vuoto')
+        return v
 
 
 class RewardCategoryCreate(RewardCategoryBase):
@@ -29,16 +35,18 @@ class RewardCategoryInDB(RewardCategoryBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class RewardCategoryWithRewards(RewardCategoryInDB):
     """Schema per categorie con le ricompense associate"""
     rewards: List["RewardInDB"] = []
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class RewardBase(BaseModel):
@@ -84,16 +92,18 @@ class RewardInDB(RewardBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class RewardWithCategory(RewardInDB):
     """Schema per ricompense con la categoria associata"""
     category: RewardCategoryInDB
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class UserRewardBase(BaseModel):
@@ -120,16 +130,18 @@ class UserRewardInDB(UserRewardBase):
     id: str
     earned_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class UserRewardWithReward(UserRewardInDB):
     """Schema per ricompense utente con i dettagli della ricompensa"""
     reward: RewardInDB
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class RewardProgressBase(BaseModel):
@@ -158,5 +170,6 @@ class RewardProgressInDB(RewardProgressBase):
     id: str
     last_updated: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {
+        "from_attributes": True
+    }

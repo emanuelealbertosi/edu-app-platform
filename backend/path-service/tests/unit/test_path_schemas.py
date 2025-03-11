@@ -384,7 +384,8 @@ class TestPathSchemas:
         path_summary = PathSummary(
             template_title="Percorso di Algebra",
             node_count=3,
-            completed_nodes=1
+            completed_nodes=1,
+            created_at=datetime.now()
         )
         assert path_summary.template_title == "Percorso di Algebra"
         assert path_summary.node_count == 3

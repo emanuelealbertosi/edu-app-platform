@@ -24,7 +24,11 @@ class PathCategoryBase(BaseModel):
     description: Optional[str] = None
 
 class PathCategoryCreate(PathCategoryBase):
-    pass
+    @field_validator('name')
+    def name_must_not_be_empty(cls, v):
+        if not v or not v.strip():
+            raise ValueError('name must not be empty')
+        return v
 
 class PathCategoryUpdate(PathCategoryBase):
     name: Optional[str] = None
@@ -248,10 +252,15 @@ class PathInDBBase(PathBase):
         "from_attributes": True
     }
 
-class PathSummary(PathInDBBase):
+class PathSummary(BaseModel):
     template_title: str
     node_count: int = 0
     completed_nodes: int = 0
+    created_at: Optional[datetime] = None
+    
+    model_config = {
+        "from_attributes": True
+    }
 
 class Path(PathInDBBase):
     nodes: List[PathNode] = []

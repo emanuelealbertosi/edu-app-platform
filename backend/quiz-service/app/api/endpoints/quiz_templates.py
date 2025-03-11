@@ -201,7 +201,7 @@ async def create_quiz_template(
             )
     
     # Imposta l'ID dell'amministratore come creatore
-    quiz_template_data = quiz_template.dict()
+    quiz_template_data = quiz_template.model_dump()
     quiz_template_data["created_by"] = current_user.user_id
     
     # Crea il template
@@ -262,6 +262,7 @@ async def get_quiz_template_by_uuid(
     return db_quiz_template
 
 @router.put("/{template_id}", response_model=QuizTemplateSchema)
+@router.patch("/{template_id}", response_model=QuizTemplateSchema)
 async def update_quiz_template(
     template_id: int,
     quiz_template: QuizTemplateUpdate,
@@ -271,6 +272,7 @@ async def update_quiz_template(
     """
     Aggiorna un template di quiz.
     Solo gli amministratori possono aggiornare template.
+    Supporta entrambi i metodi PUT e PATCH.
     """
     db_quiz_template = QuizTemplateRepository.get(db, quiz_template_id=template_id)
     if not db_quiz_template:

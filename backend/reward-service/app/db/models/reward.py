@@ -69,7 +69,8 @@ class Reward(Base):
     
     # Relazioni
     category = relationship("RewardCategory", back_populates="rewards")
-    user_rewards = relationship("UserReward", back_populates="reward")
+    user_rewards = relationship("UserReward", back_populates="reward", cascade="all, delete-orphan")
+    progress_records = relationship("RewardProgress", back_populates="reward", cascade="all, delete-orphan")
 
 
 class UserReward(Base):
@@ -100,3 +101,6 @@ class RewardProgress(Base):
     target_progress = Column(Integer, nullable=False)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     progress_metadata = Column(JSON, nullable=True)  # Dati aggiuntivi sul progresso
+    
+    # Relazioni
+    reward = relationship("Reward", back_populates="progress_records")

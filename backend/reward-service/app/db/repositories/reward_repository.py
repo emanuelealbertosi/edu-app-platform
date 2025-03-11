@@ -36,7 +36,7 @@ class RewardCategoryRepository:
             )
 
         # Crea la categoria
-        db_category = RewardCategory(**category_data.dict())
+        db_category = RewardCategory(**category_data.model_dump())
         db.add(db_category)
         db.commit()
         db.refresh(db_category)
@@ -50,7 +50,7 @@ class RewardCategoryRepository:
             return None
 
         # Aggiorna solo i campi forniti
-        update_data = category_data.dict(exclude_unset=True)
+        update_data = category_data.model_dump(exclude_unset=True)
         for key, value in update_data.items():
             setattr(db_category, key, value)
 
@@ -104,7 +104,7 @@ class RewardRepository:
             )
 
         # Crea la ricompensa
-        db_reward = Reward(**reward_data.dict())
+        db_reward = Reward(**reward_data.model_dump())
         db.add(db_reward)
         db.commit()
         db.refresh(db_reward)
@@ -118,7 +118,7 @@ class RewardRepository:
             return None
 
         # Aggiorna solo i campi forniti
-        update_data = reward_data.dict(exclude_unset=True)
+        update_data = reward_data.model_dump(exclude_unset=True)
         
         # Verifica la categoria se fornita
         if "category_id" in update_data:

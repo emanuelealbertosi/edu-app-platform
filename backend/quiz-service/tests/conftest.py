@@ -6,6 +6,7 @@ from datetime import datetime
 
 from app.db.base import Base, get_db
 from app.main import app
+from app.api.dependencies.auth import get_current_user, get_current_admin, TokenData
 from app.db.models.quiz import (
     QuizCategory, QuizTemplate, QuestionTemplate, AnswerOptionTemplate,
     Quiz, Question, AnswerOption, QuizAttempt, StudentAnswer, QuestionType
@@ -39,6 +40,18 @@ def client(db):
             pass
     
     app.dependency_overrides[get_db] = override_get_db
+    
+    # Override delle dipendenze di autenticazione per i test
+    mock_user = TokenData(user_id="test-user", role="admin", username="test_user", is_active=True)
+    
+    async def override_get_current_user():
+        return mock_user
+        
+    async def override_get_current_admin():
+        return mock_user
+    
+    app.dependency_overrides[get_current_user] = override_get_current_user
+    app.dependency_overrides[get_current_admin] = override_get_current_admin
     with TestClient(app) as c:
         yield c
 

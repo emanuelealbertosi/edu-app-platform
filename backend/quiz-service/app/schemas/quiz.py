@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 from enum import Enum
@@ -14,7 +14,7 @@ class QuestionType(str, Enum):
 
 # Schemas per le categorie dei quiz
 class QuizCategoryBase(BaseModel):
-    name: str
+    name: str = Field(..., min_length=1)
     description: Optional[str] = None
 
 class QuizCategoryCreate(QuizCategoryBase):
@@ -26,8 +26,7 @@ class QuizCategoryUpdate(QuizCategoryBase):
 class QuizCategoryInDBBase(QuizCategoryBase):
     id: int
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 class QuizCategory(QuizCategoryInDBBase):
     pass
@@ -53,8 +52,7 @@ class AnswerOptionTemplateInDBBase(AnswerOptionTemplateBase):
     uuid: str
     question_template_id: int
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 class AnswerOptionTemplate(AnswerOptionTemplateInDBBase):
     pass
@@ -70,8 +68,9 @@ class QuestionTemplateBase(BaseModel):
 class QuestionTemplateCreate(QuestionTemplateBase):
     answer_options: List[AnswerOptionTemplateCreate] = []
 
-    @validator('answer_options')
-    def validate_answer_options(cls, v, values):
+    @field_validator('answer_options')
+    def validate_answer_options(cls, v, info):
+        values = info.data
         # Se la domanda è a scelta singola, verifica che ci sia esattamente una risposta corretta
         if values.get('question_type') == QuestionType.SINGLE_CHOICE:
             correct_options = [option for option in v if option.is_correct]
@@ -103,8 +102,7 @@ class QuestionTemplateInDBBase(QuestionTemplateBase):
     uuid: str
     quiz_template_id: int
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 class QuestionTemplate(QuestionTemplateInDBBase):
     answer_options: List[AnswerOptionTemplate] = []
@@ -146,8 +144,7 @@ class QuizTemplateInDBBase(QuizTemplateBase):
     updated_at: Optional[datetime] = None
     created_by: str
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 class QuizTemplateSummary(QuizTemplateInDBBase):
     category: Optional[QuizCategory] = None
@@ -179,8 +176,7 @@ class AnswerOptionInDBBase(AnswerOptionBase):
     question_id: int
     template_id: int
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 class AnswerOption(AnswerOptionInDBBase):
     pass
@@ -210,8 +206,7 @@ class QuestionInDBBase(QuestionBase):
     quiz_id: int
     template_id: int
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 class Question(QuestionInDBBase):
     answer_options: List[AnswerOption] = []
@@ -237,12 +232,17 @@ class QuizInDBBase(QuizBase):
     assigned_at: Optional[datetime] = None
     is_completed: bool = False
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
-class QuizSummary(QuizInDBBase):
+class QuizSummary(BaseModel):
     template_title: str
     question_count: int = 0
+    id: Optional[int] = None
+    uuid: Optional[str] = None
+    template_id: Optional[int] = None
+    student_id: Optional[str] = None
+    created_at: Optional[datetime] = None
+    is_completed: Optional[bool] = False
 
 class Quiz(QuizInDBBase):
     questions: List[Question] = []
@@ -270,8 +270,7 @@ class StudentAnswerInDBBase(StudentAnswerBase):
     question_id: int
     answered_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 class StudentAnswer(StudentAnswerInDBBase):
     pass
@@ -301,8 +300,7 @@ class QuizAttemptInDBBase(QuizAttemptBase):
     uuid: str
     quiz_id: int
 
-    class Config:
-        orm_mode = True
+    model_config = {"from_attributes": True}
 
 class QuizAttempt(QuizAttemptInDBBase):
     student_answers: List[StudentAnswer] = []
@@ -311,3 +309,20 @@ class QuizAttempt(QuizAttemptInDBBase):
 class SubmitQuizAnswers(BaseModel):
     quiz_id: str  # UUID del quiz
     answers: List[Dict[str, Any]]  # Lista di risposte (question_uuid -> risposta)
+
+# Schema per i risultati di un quiz
+class QuizResult(BaseModel):
+    uuid: str
+    quiz_uuid: str
+    score: float
+    max_score: float
+    passed: bool
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    feedback: Optional[str] = None
+    correct_answers: int = 0
+    total_questions: int = 0
+    percentage: float = Field(0.0, ge=0.0, le=100.0)
+    answers: List[Dict[str, Any]] = []
+    
+    model_config = {"from_attributes": True}

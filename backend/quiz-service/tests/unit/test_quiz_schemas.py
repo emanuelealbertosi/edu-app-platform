@@ -54,7 +54,7 @@ class TestQuizCategorySchemas:
     def test_quiz_category_response(self, test_categories):
         # Test conversion from ORM model
         math_category = test_categories["math"]
-        category_response = QuizCategory.from_orm(math_category)
+        category_response = QuizCategory.model_validate(math_category, from_attributes=True)
         
         assert category_response.id == math_category.id
         assert category_response.name == "Matematica"
@@ -140,7 +140,7 @@ class TestQuizTemplateSchemas:
     def test_quiz_template_response(self, test_quiz_templates):
         # Test conversion from ORM model
         math_template = test_quiz_templates["math"]
-        template_response = QuizTemplate.from_orm(math_template)
+        template_response = QuizTemplate.model_validate(math_template, from_attributes=True)
         
         assert template_response.id == math_template.id
         assert template_response.uuid == math_template.uuid
@@ -150,7 +150,7 @@ class TestQuizTemplateSchemas:
         assert template_response.created_by == "admin-uuid"
         
         # Test QuizTemplateSummary
-        template_summary = QuizTemplateSummary.from_orm(math_template)
+        template_summary = QuizTemplateSummary.model_validate(math_template, from_attributes=True)
         template_summary.question_count = 3  # This would be set by the API
         
         assert template_summary.id == math_template.id
@@ -216,7 +216,7 @@ class TestQuestionTemplateSchemas:
     def test_question_template_response(self, test_question_templates, test_answer_option_templates):
         # Test conversion from ORM model
         math_q1 = test_question_templates["math_q1"]
-        question_response = QuestionTemplate.from_orm(math_q1)
+        question_response = QuestionTemplate.model_validate(math_q1, from_attributes=True)
         
         assert question_response.id == math_q1.id
         assert question_response.uuid == math_q1.uuid
@@ -250,7 +250,7 @@ class TestAnswerOptionTemplateSchemas:
         # Find the correct answer option for math question 1
         correct_option = next(opt for opt in test_answer_option_templates["math_q1"] if opt.is_correct)
         
-        option_response = AnswerOptionTemplate.from_orm(correct_option)
+        option_response = AnswerOptionTemplate.model_validate(correct_option, from_attributes=True)
         
         assert option_response.id == correct_option.id
         assert option_response.uuid == correct_option.uuid
@@ -300,7 +300,7 @@ class TestQuizSchemas:
     def test_quiz_response(self, test_quizzes):
         # Test conversion from ORM model
         math_quiz = test_quizzes["math"]
-        quiz_response = Quiz.from_orm(math_quiz)
+        quiz_response = Quiz.model_validate(math_quiz, from_attributes=True)
         
         assert quiz_response.id == math_quiz.id
         assert quiz_response.uuid == math_quiz.uuid
@@ -350,7 +350,7 @@ class TestQuizAttemptSchemas:
     def test_quiz_attempt_response(self, test_quiz_attempts):
         # Test conversion from ORM model
         math_attempt = test_quiz_attempts["math"]
-        attempt_response = QuizAttempt.from_orm(math_attempt)
+        attempt_response = QuizAttempt.model_validate(math_attempt, from_attributes=True)
         
         assert attempt_response.id == math_attempt.id
         assert attempt_response.uuid == math_attempt.uuid
@@ -389,7 +389,7 @@ class TestStudentAnswerSchemas:
         
         # Test conversion from mock ORM model
         mock_answer = MockStudentAnswer()
-        answer_response = StudentAnswer.from_orm(mock_answer)
+        answer_response = StudentAnswer.model_validate(mock_answer, from_attributes=True)
         
         assert answer_response.id == mock_answer.id
         assert answer_response.uuid == mock_answer.uuid

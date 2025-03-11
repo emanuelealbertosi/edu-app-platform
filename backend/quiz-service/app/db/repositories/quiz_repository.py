@@ -4,7 +4,7 @@ from sqlalchemy import func
 
 from app.db.models.quiz import (
     Quiz, Question, AnswerOption, 
-    QuizAttempt, StudentAnswer, QuizTemplate
+    QuizAttempt, StudentAnswer, QuizTemplate, QuestionTemplate
 )
 from app.schemas.quiz import (
     QuizCreate, QuizUpdate,
@@ -48,6 +48,11 @@ class QuizRepository:
         return db.query(Quiz).options(
             joinedload(Quiz.attempt).joinedload(QuizAttempt.student_answers)
         ).filter(Quiz.id == quiz_id).first()
+        
+    @staticmethod
+    def get_questions(db: Session, quiz_id: int) -> List[Question]:
+        """Ottiene tutte le domande di un quiz concreto."""
+        return db.query(Question).filter(Question.quiz_id == quiz_id).order_by(Question.order).all()
     
     @staticmethod
     def get_all(
@@ -174,7 +179,7 @@ class QuizRepository:
     def update(db: Session, quiz: Quiz, quiz_update: QuizUpdate) -> Quiz:
         """Aggiorna un quiz esistente nel database."""
         # Aggiorna solo i campi forniti
-        update_data = quiz_update.dict(exclude_unset=True)
+        update_data = quiz_update.model_dump(exclude_unset=True)
         
         for field, value in update_data.items():
             setattr(quiz, field, value)
@@ -407,6 +412,51 @@ class QuizAttemptRepository:
     def get(db: Session, attempt_id: int) -> Optional[QuizAttempt]:
         """Ottiene un tentativo di quiz dal database per ID."""
         return db.query(QuizAttempt).filter(QuizAttempt.id == attempt_id).first()
+        
+    @staticmethod
+    def get_results(db: Session, attempt: QuizAttempt) -> Dict[str, Any]:
+        """Ottiene i risultati di un tentativo di quiz."""
+        # Calcola il numero di risposte corrette
+        correct_answers = db.query(StudentAnswer).filter(
+            StudentAnswer.attempt_id == attempt.id,
+            StudentAnswer.is_correct == True
+        ).count()
+        
+        # Calcola il numero totale di domande
+        quiz = db.query(Quiz).filter(Quiz.id == attempt.quiz_id).first()
+        total_questions = db.query(Question).filter(Question.quiz_id == quiz.id).count()
+        
+        # Calcola la percentuale di risposte corrette
+        percentage = (correct_answers / total_questions * 100) if total_questions > 0 else 0.0
+        
+        # Prendi le risposte dello studente
+        answers = db.query(StudentAnswer).filter(StudentAnswer.attempt_id == attempt.id).all()
+        answers_data = [
+            {
+                "question_uuid": answer.question.uuid,
+                "question_text": answer.question.text,
+                "answer_data": answer.answer_data,
+                "is_correct": answer.is_correct,
+                "score": answer.score,
+            }
+            for answer in answers
+        ]
+        
+        # Prepara i risultati
+        return {
+            "uuid": attempt.uuid,
+            "quiz_uuid": quiz.uuid,
+            "score": attempt.score,
+            "max_score": attempt.max_score,
+            "passed": attempt.passed,
+            "started_at": attempt.started_at,
+            "completed_at": attempt.completed_at,
+            "feedback": attempt.additional_data.get("feedback") if attempt.additional_data else None,
+            "correct_answers": correct_answers,
+            "total_questions": total_questions,
+            "percentage": percentage,
+            "answers": answers_data
+        }
     
     @staticmethod
     def get_by_uuid(db: Session, uuid: str) -> Optional[QuizAttempt]:
@@ -426,9 +476,14 @@ class QuizAttemptRepository:
         ).filter(QuizAttempt.id == attempt_id).first()
     
     @staticmethod
-    def create(db: Session, quiz_id: int) -> QuizAttempt:
+    def create(db: Session, attempt_data: QuizAttemptCreate) -> QuizAttempt:
         """Crea un nuovo tentativo di quiz nel database."""
-        db_attempt = QuizAttempt(quiz_id=quiz_id)
+        # Estrai i dati dal modello Pydantic
+        attempt_dict = attempt_data.model_dump()
+        quiz_id = attempt_dict.pop('quiz_id')
+        
+        # Crea il tentativo usando i dati estratti
+        db_attempt = QuizAttempt(quiz_id=quiz_id, **attempt_dict)
         db.add(db_attempt)
         db.commit()
         db.refresh(db_attempt)
@@ -438,7 +493,7 @@ class QuizAttemptRepository:
     def update(db: Session, attempt: QuizAttempt, attempt_update: QuizAttemptUpdate) -> QuizAttempt:
         """Aggiorna un tentativo di quiz esistente nel database."""
         # Aggiorna solo i campi forniti
-        update_data = attempt_update.dict(exclude_unset=True)
+        update_data = attempt_update.model_dump(exclude_unset=True)
         
         for field, value in update_data.items():
             setattr(attempt, field, value)
@@ -448,3 +503,77 @@ class QuizAttemptRepository:
         db.refresh(attempt)
         
         return attempt
+        
+    @staticmethod
+    def submit_answers(db: Session, attempt: QuizAttempt, answers_data: SubmitQuizAnswers) -> Dict[str, Any]:
+        """Invia le risposte di un tentativo di quiz e calcola il punteggio."""
+        from datetime import datetime
+        from app.db.models.quiz import StudentAnswer
+        
+        # Ottieni il quiz associato al tentativo
+        quiz = db.query(Quiz).filter(Quiz.id == attempt.quiz_id).first()
+        if not quiz:
+            raise ValueError("Quiz non trovato")
+            
+        # Ottieni tutte le domande del quiz
+        questions = db.query(Question).filter(Question.quiz_id == quiz.id).all()
+        questions_dict = {str(q.uuid): q for q in questions}
+        
+        total_score = 0.0
+        max_score = 0.0
+        
+        # Esamina ogni risposta inviata
+        for answer in answers_data.answers:
+            question_id = answer.question_id
+            if question_id not in questions_dict:
+                continue
+                
+            question = questions_dict[question_id]
+            max_score += question.points
+            
+            # Valuta la risposta
+            selected_option = None
+            answer_value = None
+            
+            if hasattr(answer, 'selected_option_id') and answer.selected_option_id is not None:
+                # Risposta a scelta singola
+                selected_option = answer.selected_option_id
+                answer_value = {"selected_option_id": selected_option}
+            elif hasattr(answer, 'selected_option_ids') and answer.selected_option_ids:
+                # Risposta a scelta multipla
+                selected_option = answer.selected_option_ids
+                answer_value = {"selected_option_ids": selected_option}
+            elif hasattr(answer, 'text_answer') and answer.text_answer:
+                # Risposta testuale
+                answer_value = {"text_answer": answer.text_answer}
+            
+            # Calcola se la risposta è corretta e il punteggio
+            is_correct, score = QuizRepository.evaluate_answer(question, answer_value)
+            total_score += score
+            
+            # Salva la risposta nel database
+            student_answer = StudentAnswer(
+                attempt_id=attempt.id,
+                question_id=question.id,
+                answer_data=answer_value,
+                is_correct=is_correct,
+                score=score
+            )
+            db.add(student_answer)
+        
+        # Aggiorna il tentativo con il punteggio e la data di completamento
+        attempt.score = total_score
+        attempt.max_score = max_score
+        attempt.completed_at = datetime.utcnow()
+        attempt.passed = (total_score / max_score * 100) >= quiz.passing_score if max_score > 0 else False
+        
+        # Aggiorna anche il quiz per segnalarlo come completato
+        quiz.is_completed = True
+        
+        db.add(attempt)
+        db.add(quiz)
+        db.commit()
+        db.refresh(attempt)
+        
+        # Restituisci i risultati
+        return QuizAttemptRepository.get_results(db, attempt)

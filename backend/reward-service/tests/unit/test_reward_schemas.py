@@ -49,7 +49,7 @@ class TestRewardCategorySchemas:
     def test_reward_category_response(self, test_reward_categories):
         # Test conversion from ORM model
         badges_category = test_reward_categories["badges"]
-        category_response = RewardCategoryInDB.from_orm(badges_category)
+        category_response = RewardCategoryInDB.model_validate(badges_category)
         
         assert category_response.id == badges_category.id
         assert category_response.name == "Badges"
@@ -60,7 +60,7 @@ class TestRewardCategorySchemas:
     def test_reward_category_with_rewards(self, test_reward_categories):
         # This would normally be populated by the API with relationship loader
         badges_category = test_reward_categories["badges"]
-        category_with_rewards = RewardCategoryWithRewards.from_orm(badges_category)
+        category_with_rewards = RewardCategoryWithRewards.model_validate(badges_category)
         
         assert category_with_rewards.id == badges_category.id
         assert category_with_rewards.name == "Badges"
@@ -135,7 +135,7 @@ class TestRewardSchemas:
     def test_reward_response(self, test_rewards):
         # Test conversion from ORM model
         math_master = test_rewards["math_master"]
-        reward_response = RewardInDB.from_orm(math_master)
+        reward_response = RewardInDB.model_validate(math_master)
         
         assert reward_response.id == math_master.id
         assert reward_response.name == "Math Master"
@@ -148,7 +148,7 @@ class TestRewardSchemas:
     def test_reward_with_category(self, test_rewards):
         # This would normally be populated by the API with relationship loader
         math_master = test_rewards["math_master"]
-        reward_with_category = RewardWithCategory.from_orm(math_master)
+        reward_with_category = RewardWithCategory.model_validate(math_master)
         
         assert reward_with_category.id == math_master.id
         assert reward_with_category.name == "Math Master"
@@ -203,7 +203,7 @@ class TestUserRewardSchemas:
     def test_user_reward_response(self, test_user_rewards):
         # Test conversion from ORM model
         user1_math = test_user_rewards["user1_math"]
-        user_reward_response = UserRewardInDB.from_orm(user1_math)
+        user_reward_response = UserRewardInDB.model_validate(user1_math)
         
         assert user_reward_response.id == user1_math.id
         assert user_reward_response.user_id == "student-uuid-1"
@@ -214,7 +214,7 @@ class TestUserRewardSchemas:
     def test_user_reward_with_reward(self, test_user_rewards):
         # This would normally be populated by the API with relationship loader
         user1_math = test_user_rewards["user1_math"]
-        user_reward_with_reward = UserRewardWithReward.from_orm(user1_math)
+        user_reward_with_reward = UserRewardWithReward.model_validate(user1_math)
         
         assert user_reward_with_reward.id == user1_math.id
         assert user_reward_with_reward.user_id == "student-uuid-1"
@@ -276,7 +276,7 @@ class TestRewardProgressSchemas:
     def test_reward_progress_response(self, test_reward_progress):
         # Test conversion from ORM model
         user1_reading = test_reward_progress["user1_reading"]
-        progress_response = RewardProgressInDB.from_orm(user1_reading)
+        progress_response = RewardProgressInDB.model_validate(user1_reading)
         
         assert progress_response.id == user1_reading.id
         assert progress_response.user_id == "student-uuid-1"

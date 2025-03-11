@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db.base import get_db
-from app.db.models.quiz import Quiz, Question, QuizAttempt
+from app.db.models.quiz import Quiz, Question, QuizAttempt, QuestionTemplate
 from app.schemas.quiz import (
     Quiz as QuizSchema,
     QuizSummary,
@@ -68,6 +68,85 @@ async def get_quizzes(
         })
     
     return result
+
+@router.get("/student/{student_id}", response_model=List[QuizSummary])
+async def get_quizzes_for_student(
+    student_id: str,
+    skip: int = 0,
+    limit: int = 100,
+    path_id: Optional[str] = None,
+    template_id: Optional[int] = None,
+    is_completed: Optional[bool] = None,
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_active_user)
+):
+    """
+    Ottiene l'elenco dei quiz per uno studente specifico.
+    - Amministratori: possono vedere tutti i quiz
+    - Genitori: possono vedere solo i quiz dei loro studenti
+    - Studenti: possono vedere solo i propri quiz
+    """
+    # TODO: Verifica delle autorizzazioni (se il genitore può vedere i quiz dello studente)
+    
+    # Ottieni i quiz
+    quizzes = QuizRepository.get_all(
+        db,
+        skip=skip,
+        limit=limit,
+        student_id=student_id,
+        path_id=path_id,
+        template_id=template_id,
+        is_completed=is_completed
+    )
+    
+    # Aggiungi il conteggio delle domande e il titolo del template per ogni quiz
+    result = []
+    for quiz in quizzes:
+        question_count = QuizRepository.count_questions(db, quiz.id)
+        template = QuizTemplateRepository.get(db, quiz_template_id=quiz.template_id)
+        template_title = template.title if template else "Template sconosciuto"
+        
+        result.append({
+            **quiz.__dict__,
+            "template_title": template_title,
+            "question_count": question_count
+        })
+    
+    return result
+    
+@router.get("/{quiz_uuid}", response_model=QuizSchema)
+async def get_quiz(
+    quiz_uuid: str,
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_active_user)
+):
+    """
+    Ottiene un quiz specifico per UUID.
+    Gli amministratori possono vedere tutti i quiz.
+    Gli studenti possono vedere solo i propri quiz.
+    """
+    # Ottieni il quiz
+    db_quiz = QuizRepository.get_by_uuid(db, quiz_uuid)
+    if not db_quiz:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Quiz non trovato"
+        )
+    
+    # Verifica che l'utente sia autorizzato (solo lo studente, il genitore dello studente o un admin può vedere il quiz)
+    if db_quiz.student_id != current_user.user_id and current_user.role != "admin":
+        # TODO: Verifica se il genitore è autorizzato a vedere il quiz
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Non sei autorizzato a vedere questo quiz"
+        )
+    
+    # Ottieni le domande del quiz
+    questions = QuizRepository.get_questions(db, db_quiz.id)
+    db_quiz_dict = db_quiz.__dict__.copy()
+    db_quiz_dict["questions"] = [question.__dict__ for question in questions]
+    
+    return db_quiz_dict
 
 @router.post("", response_model=QuizSchema, status_code=status.HTTP_201_CREATED)
 async def create_quiz(

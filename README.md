@@ -20,7 +20,8 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
 ### Fase 2.5: Modernizzazione del Codice
 - [x] Aggiornamento a Pydantic V2 ✅
   - [x] Path Service ✅
-  - [ ] Altri servizi (in attesa)
+  - [x] Quiz Service ✅
+  - [x] Reward Service ✅
 
 ### Fase 3: Sviluppo del Frontend
 - [ ] Configurazione React
@@ -33,6 +34,7 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
 - [x] Test unitari (parziale) ✅
 - [x] Test di integrazione (parziale) ✅
 - [x] Adattamento test per integrare autenticazione ✅
+- [x] Fix bug nei test del quiz-service ✅
 - [ ] Test end-to-end
 
 ### Fase 5: Containerizzazione
