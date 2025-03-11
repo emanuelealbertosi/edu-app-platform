@@ -62,6 +62,34 @@ L'applicazione è basata su un'architettura a microservizi:
 - **Validation**: Pydantic V2
 - **Containerizzazione**: Docker e Docker Compose (pianificata)
 
+## Servizi Testati e Verificati
+
+I seguenti servizi sono stati specificamente testati e verificati:
+
+### Auth Service
+Il servizio di autenticazione è stato completamente implementato e testato. Include:
+- Registrazione utenti e login/logout con OAuth2 e JWT
+- Accesso tramite JWT con token di accesso e refresh
+- Gestione ruoli utente (admin, parent, student)
+- Profili utente specifici per genitori e studenti
+- Gestione token refresh
+- Integrazione con PostgreSQL locale
+- Integrazione con gli altri microservizi tramite API Gateway
+
+### Path Service
+Il servizio di percorsi educativi è stato aggiornato e verificato con:
+- Compatibilità con Pydantic V2 (model_dump, model_validate, field_validator)
+- Test unitari completi e funzionanti
+- Integrazione con il sistema di autenticazione
+- API RESTful per la gestione dei template e dei percorsi assegnati
+
+### Reward Service
+Il servizio di gestione ricompense è stato validato con:
+- Integrazione con PostgreSQL in Docker
+- Inizializzazione database con categorie e ricompense
+- Test completi per tutte le API di categorie, ricompense e progressi
+- Autenticazione con auth-service e gestione ruoli utente
+
 ## Servizi Implementati
 
 ### Quiz Service
@@ -345,22 +373,6 @@ Lo script `lancia-locale.sh` è disponibile per gestire i servizi dell'applicazi
 # Riavvia un servizio specifico
 ./lancia-locale.sh restart quiz-service
 ```
-
-## Servizi Testati e Verificati
-
-I seguenti servizi sono stati specificamente testati e verificati:
-
-- **Auth Service** (auth-service):
-  - Registrazione utenti e login/logout con OAuth2 e JWT
-  - Verifica dei ruoli utente (admin, parent, student)
-  - Gestione token refresh
-  - Integrazione con PostgreSQL locale
-
-- **Reward Service** (reward-service):
-  - Integrazione con PostgreSQL in Docker
-  - Inizializzazione database con categorie e ricompense
-  - Test completi per tutte le API di categorie, ricompense e progressi
-  - Autenticazione con auth-service e gestione ruoli utente
 
 I seguenti servizi sono implementati ma richiedono ulteriori test:
 
