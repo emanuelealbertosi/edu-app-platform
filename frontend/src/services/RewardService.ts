@@ -64,6 +64,15 @@ export interface RedemptionResponse {
   remainingPoints: number;
 }
 
+export interface PendingReward {
+  id: string;
+  studentId: string;
+  studentName: string;
+  title: string;
+  cost: number;
+  requestDate: string;
+}
+
 class RewardService {
   constructor() {
     // ApiService gestisce tutto internamente
@@ -259,6 +268,73 @@ class RewardService {
     description: string;
   }>> {
     return ApiService.get(`${REWARD_API_URL}/points/history/${studentId}`);
+  }
+
+  /**
+   * Ottiene le ricompense in attesa di approvazione per i figli del genitore
+   * Solo i genitori possono vedere le ricompense in attesa dei propri figli
+   */
+  public async getPendingRewards(): Promise<PendingReward[]> {
+    try {
+      const result = await ApiService.get<PendingReward[]>(`${REWARD_API_URL}/parent/pending`);
+      return result;
+    } catch (error) {
+      NotificationsService.error(
+        'Si è verificato un errore durante il recupero delle ricompense in attesa',
+        'Errore'
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Approva una richiesta di ricompensa in attesa
+   * @param rewardId ID della ricompensa da approvare
+   */
+  public async approveReward(rewardId: string): Promise<void> {
+    try {
+      await ApiService.put(`${REWARD_API_URL}/parent/approve/${rewardId}`);
+      NotificationsService.success('Ricompensa approvata con successo', 'Approvata');
+    } catch (error) {
+      NotificationsService.error(
+        'Si è verificato un errore durante l\'approvazione della ricompensa',
+        'Errore'
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Rifiuta una richiesta di ricompensa in attesa
+   * @param rewardId ID della ricompensa da rifiutare
+   */
+  public async rejectReward(rewardId: string): Promise<void> {
+    try {
+      await ApiService.put(`${REWARD_API_URL}/parent/reject/${rewardId}`);
+      NotificationsService.success('Ricompensa rifiutata', 'Rifiutata');
+    } catch (error) {
+      NotificationsService.error(
+        'Si è verificato un errore durante il rifiuto della ricompensa',
+        'Errore'
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Ottiene i template di ricompense che possono essere assegnati ai figli
+   * Filtrati in base alle impostazioni del genitore
+   */
+  public async getRewardTemplates(): Promise<RewardTemplate[]> {
+    try {
+      return await ApiService.get<RewardTemplate[]>(`${REWARD_API_URL}/parent/templates`);
+    } catch (error) {
+      NotificationsService.error(
+        'Si è verificato un errore durante il recupero dei template delle ricompense',
+        'Errore'
+      );
+      throw error;
+    }
   }
 }
 
