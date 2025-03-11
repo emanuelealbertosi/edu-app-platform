@@ -15,7 +15,9 @@
 - ✅ Completare i test per tutti i servizi:
   - ✅ Implementare test per il **path-service** con autenticazione
   - ✅ Implementare test per il **reward-service** con autenticazione
-- Verificare l'integrazione tra servizi tramite l'API Gateway
+- ✅ Verificare l'integrazione tra servizi tramite l'API Gateway:
+  - ✅ Implementare test di integrazione per l'autenticazione JWT attraverso l'API Gateway
+  - ✅ Verificare il funzionamento con diversi ruoli utente (admin, parent, student)
 
 ## 3. Sviluppo Frontend
 - Configurare l'ambiente React con Material-UI
