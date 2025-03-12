@@ -49,14 +49,53 @@ class ApiService {
     // Interceptor per aggiungere il token di autenticazione
     this.api.interceptors.request.use(
       (config) => {
-        // Utilizziamo un metodo pubblico per ottenere il token
-        const token = AuthService.getCurrentUser()?.token;
+        // Otteniamo il token direttamente dal localStorage
+        const token = localStorage.getItem('accessToken');
         if (token) {
           config.headers['Authorization'] = `Bearer ${token}`;
         }
         return config;
       },
       (error) => {
+        return Promise.reject(error);
+      }
+    );
+
+    // Interceptor per gestire gli errori di autenticazione e refresh token
+    this.api.interceptors.response.use(
+      (response) => response,
+      async (error) => {
+        const originalRequest = error.config;
+        
+        // Se l'errore è 401 (Unauthorized) e non è già un retry
+        if (error.response?.status === 401 && !originalRequest._retry) {
+          originalRequest._retry = true;
+          try {
+            // Tenta di refreshare il token
+            const refreshToken = localStorage.getItem('refreshToken');
+            if (!refreshToken) {
+              // Nessun refresh token disponibile, richiede login
+              await AuthService.logout();
+              return Promise.reject(error);
+            }
+            
+            // Utilizziamo il metodo pubblico refreshTokens del AuthService
+            const tokens = await AuthService.refreshTokens(refreshToken);
+            
+            // Salviamo i nuovi token nel localStorage
+            localStorage.setItem('accessToken', tokens.accessToken);
+            localStorage.setItem('refreshToken', tokens.refreshToken);
+            
+            // Riprova la richiesta originale con il nuovo token
+            originalRequest.headers['Authorization'] = `Bearer ${tokens.accessToken}`;
+            return this.api(originalRequest);
+          } catch (refreshError) {
+            // Se il refresh fallisce, logout
+            await AuthService.logout();
+            return Promise.reject(refreshError);
+          }
+        }
+        
         return Promise.reject(error);
       }
     );

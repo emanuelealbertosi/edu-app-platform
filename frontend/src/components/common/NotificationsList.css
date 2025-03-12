@@ -1,0 +1,99 @@
+.notifications-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 400px;
+  width: 100%;
+}
+
+.notification {
+  padding: 15px;
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: slide-in 0.3s ease-out forwards;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.notification-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.notification-title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.notification-close {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.notification-close:hover {
+  opacity: 1;
+}
+
+.notification-body {
+  font-size: 14px;
+}
+
+.notification-message {
+  margin: 0 0 8px 0;
+}
+
+.notification-details {
+  margin-top: 8px;
+  padding: 8px;
+  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.05);
+  font-size: 13px;
+}
+
+/* Tipi di notifiche */
+.notification-success {
+  background-color: #e7f8ef;
+  border-left: 4px solid #28a745;
+  color: #1e7e34;
+}
+
+.notification-error {
+  background-color: #ffefef;
+  border-left: 4px solid #dc3545;
+  color: #bd2130;
+}
+
+.notification-warning {
+  background-color: #fff9e6;
+  border-left: 4px solid #ffc107;
+  color: #d39e00;
+}
+
+.notification-info {
+  background-color: #e7f5fe;
+  border-left: 4px solid #17a2b8;
+  color: #138496;
+}
+
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}

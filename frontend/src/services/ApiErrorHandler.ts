@@ -1,4 +1,5 @@
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
+import { NotificationsService } from './NotificationsService';
 
 /**
  * Tipologie di errori API gestiti
@@ -60,7 +61,6 @@ export interface ApiErrorHandlerOptions {
  */
 export class ApiErrorHandler {
   private options: ApiErrorHandlerOptions;
-  private notificationService?: any;
   
   constructor(options: ApiErrorHandlerOptions = {}) {
     this.options = {
@@ -70,13 +70,6 @@ export class ApiErrorHandler {
       showNotifications: true,
       ...options
     };
-    
-    // Importazione dinamica per evitare dipendenze circolari
-    import('./NotificationsService').then(module => {
-      this.notificationService = module.default;
-    }).catch(err => {
-      console.warn('Impossibile caricare NotificationsService:', err);
-    });
   }
   
   /**
@@ -133,7 +126,7 @@ export class ApiErrorHandler {
     const apiError = this.mapErrorToApiError(error);
     
     // Mostra notifica se richiesto
-    if (this.options.showNotifications && this.notificationService) {
+    if (this.options.showNotifications) {
       this.showErrorNotification(apiError);
     }
     
@@ -227,39 +220,41 @@ export class ApiErrorHandler {
    * Mostra una notifica per l'errore API
    */
   private showErrorNotification(error: ApiError): void {
-    if (!this.notificationService) return;
-    
-    let title = 'Errore';
-    let autoClose = false;
-    
-    switch (error.type) {
-      case ApiErrorType.NETWORK_ERROR:
-        title = 'Errore di rete';
-        break;
-      case ApiErrorType.UNAUTHORIZED:
-        title = 'Autenticazione richiesta';
-        break;
-      case ApiErrorType.FORBIDDEN:
-        title = 'Accesso negato';
-        break;
-      case ApiErrorType.NOT_FOUND:
-        title = 'Risorsa non trovata';
-        break;
-      case ApiErrorType.VALIDATION_ERROR:
-        title = 'Dati non validi';
-        break;
-      case ApiErrorType.SERVER_ERROR:
-        title = 'Errore del server';
-        break;
-      case ApiErrorType.TIMEOUT:
-        title = 'Timeout della richiesta';
-        break;
+    try {
+      switch (error.type) {
+        case ApiErrorType.NETWORK_ERROR:
+          NotificationsService.showError('Errore di connessione: Verifica la tua connessione internet.', 'Errore di rete');
+          break;
+        case ApiErrorType.UNAUTHORIZED:
+          NotificationsService.showWarning('Sessione scaduta. Effettua nuovamente il login.');
+          break;
+        case ApiErrorType.VALIDATION_ERROR:
+          if (Array.isArray(error.details)) {
+            const detailsText = error.details
+              .map((detail: any) => {
+                if (detail.loc && detail.msg) {
+                  return `${detail.msg}`;
+                }
+                return detail.toString();
+              })
+              .join('\n');
+            
+            NotificationsService.showError('Errori di validazione', detailsText);
+          } else {
+            NotificationsService.showError(`Errore: ${error.message}`, 
+              error.details ? JSON.stringify(error.details, null, 2) : undefined);
+          }
+          break;
+        case ApiErrorType.TIMEOUT:
+          NotificationsService.showError('Timeout della richiesta: Il server non risponde.', 'Timeout');
+          break;
+        default:
+          NotificationsService.showError(`Errore: ${error.message}`, 
+            `Status: ${error.status || 'N/A'}`);
+      }
+    } catch (error) {
+      console.error('Errore durante la visualizzazione della notifica:', error);
     }
-    
-    this.notificationService.error(error.message, title, {
-      autoClose,
-      details: error.details
-    });
   }
   
   /**

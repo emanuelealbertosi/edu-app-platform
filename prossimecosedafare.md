@@ -48,7 +48,7 @@
   - ✅ Test per componenti dashboard
   - 🔄 Test integrazione con backend
 
-## 4. Integrazione Frontend-Backend (PRIORITÀ ATTUALE)
+## 4. Integrazione Frontend-Backend
 - ✅ Creare servizi API per la comunicazione con il backend:
   - ✅ Implementare `AuthService.ts` per completare integrazione con auth-service
   - ✅ Implementare `QuizService.ts` per integrazione con quiz-service
@@ -78,17 +78,14 @@
   - ✅ Visualizzazione percorsi educativi con dati reali
   - ✅ Interfaccia quiz con dati reali
   - ✅ Shop ricompense con dati reali
-- 🔄 Gestione avanzata delle sessioni e token JWT
-  - 🔄 Implementare refresh automatico dei token
-  - 🔄 Gestione logout su tutti i dispositivi
-  - 🔄 Persistenza dello stato di autenticazione
-- 🔄 Gestione degli errori e delle risposte API
+- ✅ Gestione avanzata delle sessioni e token JWT
+  - ✅ Implementare refresh automatico dei token
+  - ✅ Gestione logout su tutti i dispositivi
+  - ✅ Persistenza dello stato di autenticazione
+- ✅ Gestione degli errori e delle risposte API
   - ✅ Implementare interceptor per gestire errori di rete
   - ✅ Notifiche utente per errori API
   - ✅ Gestione timeout e retry
-- 🔄 Testing integrazione frontend-backend
-  - 🔄 Test end-to-end per flussi critici (auth, quiz, percorsi)
-  - 🔄 Mock delle API per test di componenti
 
 ## 5. Prossimi step prioritari (Marzo 2025)
 - ✅ Completare `RewardShop.tsx` con dati reali da RewardService
@@ -107,9 +104,18 @@
 
 ## 6. Prossimi step prioritari (Aprile 2025)
 - Test di integrazione frontend-backend
-  - Implementare test end-to-end per flussi critici (auth, quiz, percorsi)
-  - Mock delle API per test di componenti
-  - Verificare funzionamento con diversi ruoli utente
+  - 🔄 Correzione test di integrazione:
+    - ✅ Fix test integrazione per NotificationsSystem
+    - ✅ Fix test per componenti NotificationsList e NotificationsContext
+    - 🔄 Correzione test per NotificationsIntegration (gestione errori API)
+    - 🔄 Correzione test AuthService (gestione token e refresh)
+  - 🔄 Test unitari per componenti principali:
+    - ✅ Test unitari per ParentDashboard
+    - ✅ Test unitari per AdminDashboard
+    - 🔄 Test unitari per StudentDashboard
+  - 🔄 Test end-to-end per flussi critici (auth, quiz, percorsi)
+  - 🔄 Mock delle API per test di componenti
+  - 🔄 Verificare funzionamento con diversi ruoli utente
 - Ottimizzazione delle prestazioni
   - Implementare caching lato client per ridurre chiamate API ripetute
   - Ottimizzare il caricamento delle risorse statiche

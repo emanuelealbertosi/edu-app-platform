@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import NotificationsService from './NotificationsService';
+import { NotificationsService } from './NotificationsService';
 
 // Fix per errore lint: "Cannot find name 'process'"
 declare const process: {
