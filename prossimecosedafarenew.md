@@ -12,11 +12,15 @@
   - `SuccessConfetti` - Per celebrazioni con effetto coriandoli
 - ✅ Implementato sistema di notifiche animate con `AnimatedNotification` e `NotificationsList`
 - ✅ Integrato animazioni in componenti chiave dell'applicazione (Login, TakeQuiz, ManageRewards)
+- ✅ Risolto problema delle notifiche duplicate durante il login con credenziali errate:
+  - Ottimizzato `ApiErrorHandler` per evitare notifiche duplicate per autenticazione
+  - Migliorato `AuthService` per gestire correttamente errori durante il login
+  - Implementato sistema antirimbalzo nei form di login per prevenire invii multipli
 
 ## Da Fare a Breve Termine
 
 1. **Completamento Test Esistenti**
-   - Risolvere il test rimanente per la gestione degli errori di login
+   - ✅ Risolvere il test rimanente per la gestione degli errori di login
    - Implementare test end-to-end per verificare il flusso completo dell'utente
    - Aumentare la copertura dei test per i componenti della dashboard
 

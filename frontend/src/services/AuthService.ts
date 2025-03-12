@@ -9,7 +9,7 @@ declare const process: {
 };
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-const AUTH_API_URL = `${API_URL}/auth`;
+const AUTH_API_URL = `${API_URL}/api/auth`;
 
 /**
  * Servizio per gestire le operazioni di autenticazione
@@ -105,14 +105,38 @@ class AuthService {
       async (error) => {
         const originalRequest = error.config;
         
-        // Se l'errore è 401 (Unauthorized) e non è già un retry
+        // Ignora completamente gli errori 401 per le richieste di login
+        if (error.response?.status === 401 && originalRequest.url.includes('/login')) {
+          console.log('[DEBUG] Intercettato errore 401 per login - IGNORO COMPLETAMENTE');
+          return Promise.reject(error);
+        }
+        
+        // Se l'errore è 401 (Unauthorized) per altre richieste e non è già un retry
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
           try {
-            // Tenta di refreshare il token
+            console.log('[DEBUG] Gestione errore 401 nell\'interceptor. URL:', originalRequest.url);
+            
+            // Per tutti gli altri endpoint di autenticazione, lasciamo che l'errore venga gestito dai rispettivi metodi
+            const isAuthEndpoint = [
+              '/register',
+              '/reset-password',
+              '/verify-email',
+              '/forgot-password'
+            ].some(endpoint => originalRequest.url.includes(endpoint));
+            
+            if (isAuthEndpoint) {
+              console.log('[DEBUG] Endpoint di autenticazione rilevato, non gestisco il refresh token');
+              // Non gestire il refresh token e non mostrare notifiche negli endpoint di autenticazione
+              return Promise.reject(error);
+            }
+            
+            // Tenta di refreshare il token per altre richieste
             const refreshToken = this.getRefreshToken();
             if (!refreshToken) {
               // Nessun refresh token disponibile, richiede login
+              // Disabilitiamo temporaneamente questa notifica per debug
+              console.log('[DEBUG] No refresh token disponibile');
               this.logout();
               return Promise.reject(error);
             }
@@ -125,8 +149,35 @@ class AuthService {
             return this.api(originalRequest);
           } catch (refreshError) {
             // Se il refresh fallisce, logout
+            // Disabilitiamo temporaneamente questa notifica per debug
+            console.log('[DEBUG] Refresh token fallito');
             this.logout();
             return Promise.reject(refreshError);
+          }
+        } else if (error.response) {
+          // Gestisci altri errori con status code
+          const statusCode = error.response.status;
+          const errorMessage = error.response.data?.message || error.response.data?.detail || 'Si è verificato un errore';
+          
+          // Non mostrare notifica per errori già gestiti nel metodo login o register
+          const isAuthEndpoint = originalRequest.url === '/login' || originalRequest.url === '/register';
+          if (!isAuthEndpoint) {
+            switch (statusCode) {
+              case 400:
+                NotificationsService.error(errorMessage, 'Richiesta non valida');
+                break;
+              case 403:
+                NotificationsService.error(errorMessage, 'Accesso negato');
+                break;
+              case 404:
+                NotificationsService.error(errorMessage, 'Risorsa non trovata');
+                break;
+              case 500:
+                NotificationsService.error(errorMessage, 'Errore del server');
+                break;
+              default:
+                NotificationsService.error(errorMessage, `Errore ${statusCode}`);
+            }
           }
         }
         return Promise.reject(error);
@@ -182,7 +233,22 @@ class AuthService {
   // Metodi pubblici per operazioni di autenticazione
   public async login(credentials: LoginRequest): Promise<AuthResponse> {
     try {
-      const response = await this.api.post<AuthResponse>('/login', credentials);
+      console.log('[DEBUG LOGIN] Inizio processo di login');
+      
+      // Crea un FormData per conformarsi a OAuth2PasswordRequestForm
+      const formData = new URLSearchParams();
+      formData.append('username', credentials.email); // OAuth2PasswordRequestForm si aspetta 'username' anche se usiamo email
+      formData.append('password', credentials.password);
+      
+      console.log('[DEBUG LOGIN] Invio richiesta login');
+      // Invia richiesta con Content-Type corretta per form data
+      const response = await this.api.post<AuthResponse>('/login', formData.toString(), {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
+      });
+      
+      console.log('[DEBUG LOGIN] Login riuscito');
       const { accessToken, refreshToken, user } = response.data;
       this.setTokens(accessToken, refreshToken);
       localStorage.setItem('user', JSON.stringify(user));
@@ -195,9 +261,53 @@ class AuthService {
       );
       
       return response.data;
-    } catch (error) {
-      // Gli errori sono già gestiti dall'ApiErrorHandler
-      throw error;
+    } catch (err: any) {
+      // Gestione specifica degli errori di login
+      console.log('[DEBUG LOGIN] ====== ERRORE DURANTE IL LOGIN ======');
+      console.error('[DEBUG LOGIN] Dettagli errore:', err);
+      
+      const statusCode = err.response?.status;
+      let errorMessage = 'Si è verificato un errore durante il login';
+      let errorTitle = 'Errore di autenticazione';
+      
+      if (err.response) {
+        console.log('[DEBUG LOGIN] Status code:', statusCode);
+        console.log('[DEBUG LOGIN] Response data:', err.response.data);
+        
+        // Errori specifici in base allo status code
+        switch (statusCode) {
+          case 401:
+            errorMessage = 'Le credenziali inserite non sono valide';
+            break;
+          case 404:
+            errorMessage = 'Servizio di autenticazione non disponibile';
+            break;
+          case 422:
+            errorMessage = 'Formato dati non valido';
+            break;
+          case 500:
+            errorMessage = 'Errore interno del server di autenticazione';
+            break;
+          default:
+            errorMessage = err.response.data?.message || err.response.data?.detail || errorMessage;
+        }
+      } else if (err.request) {
+        console.log('[DEBUG LOGIN] Errore di rete, nessuna risposta ricevuta');
+        // Richiesta inviata ma nessuna risposta ricevuta (errore di rete)
+        errorMessage = 'Impossibile contattare il server. Verifica la tua connessione.';
+        errorTitle = 'Errore di connessione';
+      }
+      
+      console.log('[DEBUG LOGIN] Messaggio errore finale:', errorMessage);
+      console.log('[DEBUG LOGIN] Titolo errore finale:', errorTitle);
+      
+      // Mostra la notifica di errore - UNICA NOTIFICA che dovrebbe apparire
+      NotificationsService.error(errorMessage, errorTitle, { 
+        autoClose: false
+        // Rimuoviamo l'id che non è una proprietà valida di NotificationOptions
+      });
+      
+      throw err;
     }
   }
 

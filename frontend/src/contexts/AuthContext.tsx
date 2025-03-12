@@ -122,12 +122,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       const response = await AuthService.login({ email, password });
       setUser(response.user);
-      NotificationsService.success('Login effettuato', 'Bentornato!');
+      // Rimuoviamo la notifica di successo qui perché è già gestita in AuthService
+      // NotificationsService.success('Login effettuato', 'Bentornato!');
     } catch (err: any) {
       console.error('Errore durante il login:', err);
       const errorMessage = err.response?.data?.message || 'Errore durante il login';
       setError(errorMessage);
-      NotificationsService.error('Errore di autenticazione', errorMessage);
+      // Rimuoviamo la notifica di errore qui perché è già gestita in AuthService
+      // NotificationsService.error('Errore di autenticazione', errorMessage);
       throw err;
     } finally {
       setLoading(false);

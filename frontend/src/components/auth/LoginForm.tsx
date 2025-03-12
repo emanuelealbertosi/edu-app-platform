@@ -93,19 +93,33 @@ const LoginForm: React.FC = () => {
     }));
   };
 
+  // Flag per evitare chiamate duplicate
+  const isSubmitting = React.useRef(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Previeni doppi invii del form
+    if (isSubmitting.current || loading) {
+      console.log('[DEBUG FORM] Login già in corso, prevengo invio duplicato');
+      return;
+    }
 
     if (!validateForm()) {
       return;
     }
 
+    // Imposta flag per prevenire doppie sottomissioni
+    isSubmitting.current = true;
     setLoading(true);
 
     try {
+      console.log('[DEBUG FORM] Invio richiesta login');
       await login(formState.email, formState.password);
+      console.log('[DEBUG FORM] Login completato con successo');
       // Il reindirizzamento avviene tramite l'effetto collaterale
     } catch (error) {
+      console.log('[DEBUG FORM] Errore durante login');
       setFormState((prev) => ({
         ...prev,
         errors: {
@@ -115,6 +129,8 @@ const LoginForm: React.FC = () => {
       }));
     } finally {
       setLoading(false);
+      // Resetta flag dopo il completamento
+      isSubmitting.current = false;
     }
   };
 

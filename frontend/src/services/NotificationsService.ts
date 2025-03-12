@@ -39,6 +39,10 @@ class NotificationsServiceClass {
    * Mostra una notifica di errore
    */
   error(message: string, title?: string, options?: Partial<NotificationOptions>): string | undefined {
+    // Aggiungiamo il debug per tracciare tutte le chiamate al metodo error
+    console.log(`[DEBUG NOTIFICA ERROR] Titolo: "${title}", Messaggio: "${message}"`);
+    console.trace(); // Stampa lo stack trace per vedere da dove viene chiamato
+    
     return this.notify({
       type: NotificationType.ERROR,
       message,

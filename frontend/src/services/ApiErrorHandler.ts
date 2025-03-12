@@ -154,12 +154,30 @@ export class ApiErrorHandler {
   normalizeError(error: any): ApiError {
     const apiError = this.mapErrorToApiError(error);
     
-    // Mostra notifica se richiesto
-    if (this.options.showNotifications) {
+    // Verifica se l'errore è relativo al login prima di mostrare la notifica
+    // Ciò eviterà notifiche duplicate per gli errori di autenticazione
+    const isLoginError = this.isLoginRelatedError(error);
+    
+    if (isLoginError) {
+      console.log('[DEBUG ERROR HANDLER] Errore relativo al login, skippo notifica per evitare duplicati');
+    } else if (this.options.showNotifications) {
+      console.log('[DEBUG ERROR HANDLER] Mostro notifica per errore non relativo al login');
       this.showErrorNotification(apiError);
     }
     
     return apiError;
+  }
+  
+  /**
+   * Verifica se l'errore è relativo a un tentativo di login
+   */
+  private isLoginRelatedError(error: any): boolean {
+    // Verifica se l'errore è di tipo Axios e contiene un URL
+    if (axios.isAxiosError(error) && error.config?.url) {
+      // Controlla se l'URL contiene 'login'
+      return error.config.url.includes('/login');
+    }
+    return false;
   }
   
   /**

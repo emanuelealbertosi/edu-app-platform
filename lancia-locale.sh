@@ -15,14 +15,18 @@ usage() {
     echo "Utilizzo: $0 [opzione]"
     echo ""
     echo "Opzioni:"
-    echo "  setup      Configura l'ambiente di sviluppo (venv, dipendenze)"
-    echo "  start      Avvia tutti i servizi (backend e frontend)"
-    echo "  stop       Ferma tutti i servizi"
-    echo "  restart    Riavvia tutti i servizi"
-    echo "  backend    Avvia solo i servizi di backend"
-    echo "  frontend   Avvia solo il frontend"
-    echo "  status     Mostra lo stato dei servizi"
-    echo "  help       Mostra questo messaggio di aiuto"
+    echo "  setup           Configura l'ambiente di sviluppo (venv, dipendenze)"
+    echo "  start           Avvia tutti i servizi (backend e frontend)"
+    echo "  stop            Ferma tutti i servizi"
+    echo "  restart         Riavvia tutti i servizi"
+    echo "  backend         Avvia solo i servizi di backend"
+    echo "  frontend        Avvia solo il frontend"
+    echo "  stop-frontend   Ferma solo il frontend"
+    echo "  restart-frontend Riavvia solo il frontend"
+    echo "  stop-backend    Ferma solo i servizi backend"
+    echo "  restart-backend Riavvia solo i servizi backend"
+    echo "  status          Mostra lo stato dei servizi"
+    echo "  help            Mostra questo messaggio di aiuto"
     exit 1
 }
 
@@ -121,13 +125,31 @@ start_frontend() {
     fi
 }
 
+# Ferma solo i servizi backend
+stop_backend() {
+    echo "Arresto dei servizi backend..."
+    # Trova e termina i processi uvicorn per i servizi backend
+    pkill -f "uvicorn app.main:app"
+    echo "Servizi backend arrestati."
+}
+
+# Ferma solo il frontend
+stop_frontend() {
+    echo "Arresto del frontend..."
+    # Trova e termina i processi npm per il frontend
+    pkill -f "npm start"
+    # Termina anche i processi Node.js relativi a react-scripts
+    pkill -f "react-scripts start"
+    # Termina tutti i processi Node.js relativi a frontend
+    pkill -f "node.*frontend.*node_modules"
+    echo "Frontend arrestato."
+}
+
 # Ferma tutti i servizi
 stop_services() {
     echo "Arresto di tutti i servizi..."
-    # Trova e termina i processi uvicorn per i servizi backend
-    pkill -f "uvicorn app.main:app"
-    # Trova e termina i processi npm per il frontend
-    pkill -f "npm start"
+    stop_backend
+    stop_frontend
     echo "Tutti i servizi arrestati."
 }
 
@@ -168,6 +190,22 @@ case "$1" in
         ;;
     frontend)
         start_frontend
+        ;;
+    stop-frontend)
+        stop_frontend
+        ;;
+    restart-frontend)
+        stop_frontend
+        sleep 2
+        start_frontend
+        ;;
+    stop-backend)
+        stop_backend
+        ;;
+    restart-backend)
+        stop_backend
+        sleep 2
+        start_backend
         ;;
     status)
         show_status

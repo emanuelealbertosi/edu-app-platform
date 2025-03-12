@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Notification, NotificationOptions, NotificationType } from '../types/notifications';
+import { NotificationsService } from '../services/NotificationsService';
 
 interface NotificationsContextType {
   notifications: Notification[];
@@ -76,6 +77,13 @@ export const NotificationsProvider = ({
     removeNotification,
     clearAllNotifications
   };
+
+  // Inizializzazione del servizio di notifiche
+  useEffect(() => {
+    // Registra l'handler per le notifiche al servizio
+    NotificationsService.setNotificationHandler(addNotification);
+    console.log('NotificationsService inizializzato');
+  }, [addNotification]);
 
   return (
     <NotificationsContext.Provider value={value}>

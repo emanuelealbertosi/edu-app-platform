@@ -71,6 +71,7 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
   - [x] NotificationsService per esposizione API
   - [x] Integrazione con sistema di gestione errori
   - [x] Componenti UI per visualizzazione notifiche
+  - [x] Fix per notifiche duplicate durante errori di autenticazione
 - [x] Miglioramenti dell'esperienza utente
   - [x] Sistema di animazioni e transizioni
   - [x] Componenti per il feedback visivo durante caricamenti

@@ -31,24 +31,41 @@ const Login: React.FC = () => {
   const { login } = useAuth();
   const navigate = useNavigate();
 
+  // Uso useRef per tenere traccia delle chiamate in corso
+  const isSubmitting = React.useRef(false);
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('[DEBUG PAGE LOGIN] handleSubmit chiamato');
+    
+    // Prevenzione doppia sottomissione con flag
+    if (isSubmitting.current || isLoading) {
+      console.log('[DEBUG PAGE LOGIN] Form già in invio, ignoro');
+      return;
+    }
     
     if (!email || !password) {
       NotificationsService.error('Inserisci email e password per accedere');
       return;
     }
     
+    // Imposto flag per prevenire chiamate duplicate
+    isSubmitting.current = true;
     setIsLoading(true);
     
     try {
+      console.log('[DEBUG PAGE LOGIN] Invio richiesta login');
       await login(email, password);
+      console.log('[DEBUG PAGE LOGIN] Login completato con successo');
       // Redirect di base - il componente ProtectedRoute reindirizzerà in base al ruolo
       navigate('/');
     } catch (error) {
-      ApiErrorHandler.handleApiError(error);
+      console.log('[DEBUG PAGE LOGIN] Errore login gestito:', error);
+      // Disabilitiamo ApiErrorHandler qui perché la notifica di errore è già mostrata da AuthService
+      // ApiErrorHandler.handleApiError(error);
     } finally {
       setIsLoading(false);
+      isSubmitting.current = false;
     }
   };
 
