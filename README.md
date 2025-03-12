@@ -259,6 +259,19 @@ Il gateway API funge da punto di ingresso unificato per tutti i servizi backend.
 - `/api/rewards/*`: Servizio di gestione ricompense
 - `/api/user-rewards/*`: Servizio di gestione ricompense (user rewards)
 
+## Problemi Noti
+
+### Autenticazione JWT Frontend-Backend
+
+**Problema**: C'è un'incompatibilità tra il formato dei token JWT tra frontend e backend. Nonostante le modifiche implementate nel backend per garantire che il campo `exp` (expiration) sia un intero e la correzione nel frontend per resettare i token in formato obsoleto, gli utenti continuano a ricevere errori 401 Unauthorized quando tentano di accedere a endpoint protetti.
+
+**Tentativo di soluzione implementato**:
+- Nel backend: Modificato il formato del campo `exp` da float a integer in `create_access_token` e `create_refresh_token`
+- Nel backend: Aggiunta verifica manuale della scadenza con tolleranza di 10 secondi
+- Nel frontend: Aggiunto meccanismo per identificare token in formato obsoleto e forzare il reset
+
+**Status**: In attesa di risoluzione completa. ⚠️ Questa criticita' e' attualmente in cima alla lista delle priorita' di sviluppo.
+
 ## Come Iniziare
 
 ### Prerequisiti

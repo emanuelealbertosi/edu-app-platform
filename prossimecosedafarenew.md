@@ -19,7 +19,13 @@
 
 ## Da Fare a Breve Termine
 
-1. **Completamento Test Esistenti**
+1. **⚠️ CRITICITÀ: Risolvere problemi di autenticazione JWT**
+   - Risolvere incompatibilità formato tra token frontend e backend
+   - Correggere errori 401 Unauthorized nelle chiamate API
+   - Testare e verificare il corretto funzionamento della soluzione implementata
+   - Problema: Il frontend continua a ricevere errori 401 nonostante le modifiche al backend nella gestione dei token JWT
+
+2. **Completamento Test Esistenti**
    - ✅ Risolvere il test rimanente per la gestione degli errori di login
    - Implementare test end-to-end per verificare il flusso completo dell'utente
    - Aumentare la copertura dei test per i componenti della dashboard
