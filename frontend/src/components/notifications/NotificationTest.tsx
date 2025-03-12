@@ -2,7 +2,7 @@ import React from 'react';
 import { Button, Typography, Box, Grid, Paper } from '@mui/material';
 import { NotificationType } from '../../types/notifications';
 import { useNotifications } from '../../contexts/NotificationsContext';
-import NotificationsService from '../../services/NotificationsService';
+import { NotificationsService } from '../../services/NotificationsService';
 
 /**
  * Componente di test per il sistema di notifiche

@@ -18,6 +18,7 @@ interface AuthContextType {
   sessionStatus: 'active' | 'expired' | 'invalid';
   login: (email: string, password: string) => Promise<void>;
   register: (userData: {
+    username: string; // Aggiunto username per compatibilità con RegisterForm
     email: string;
     password: string;
     firstName: string;

@@ -15,10 +15,10 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children, 
   requiredRole 
 }) => {
-  const { isAuthenticated, isLoading, user } = useAuth();
+  const { isAuthenticated, loading, user } = useAuth();
 
   // Mostra un loader mentre verifichiamo l'autenticazione
-  if (isLoading) {
+  if (loading) {
     return (
       <Box 
         sx={{ 

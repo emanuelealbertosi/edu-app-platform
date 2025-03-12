@@ -1,5 +1,5 @@
 import ApiService from './ApiService';
-import NotificationsService from './NotificationsService';
+import { NotificationsService } from './NotificationsService';
 
 // Fix per errore lint: "Cannot find name 'process'"
 declare const process: {
@@ -35,6 +35,7 @@ export interface QuizTemplate {
   totalPoints: number;
   estimatedTime: number;
   questions: Question[];
+  isPublic?: boolean; // Indica se il quiz è pubblico o privato
 }
 
 export interface Quiz {

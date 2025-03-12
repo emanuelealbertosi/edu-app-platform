@@ -4,6 +4,21 @@ import '@testing-library/jest-dom';
 import { MemoryRouter } from 'react-router-dom';
 import LoginForm from '../../../../src/components/auth/LoginForm';
 
+// Mock dei componenti di animazione
+jest.mock('../../../../src/components/animations/Transitions', () => ({
+  FadeIn: ({ children }) => children,
+  SlideInUp: ({ children }) => children,
+  SlideInRight: ({ children }) => children,
+}));
+
+jest.mock('../../../../src/components/animations/LoadingAnimations', () => ({
+  LoadingIndicator: () => <div data-testid="loading-indicator">Loading...</div>,
+}));
+
+jest.mock('../../../../src/components/animations/PageTransitions', () => ({
+  AnimatedPage: ({ children }) => children,
+}));
+
 // Mock del contesto di autenticazione
 jest.mock('../../../../src/contexts/AuthContext', () => ({
   useAuth: () => ({
@@ -111,6 +126,51 @@ describe('LoginForm Component', () => {
     // Verifica messaggio di errore
     await waitFor(() => {
       expect(screen.getByText(/credenziali non valide/i)).toBeInTheDocument();
+    });
+  });
+  
+  test('shows loading indicator during login process', async () => {
+    // Crea una versione mockata di login che non risolve immediatamente
+    const mockLogin = jest.fn().mockImplementation(() => {
+      return new Promise(resolve => {
+        setTimeout(() => resolve(), 100);
+      });
+    });
+    
+    // Override del mock solo per questo test
+    jest.spyOn(require('../../../../src/contexts/AuthContext'), 'useAuth').mockImplementation(() => ({
+      login: mockLogin,
+      isAuthenticated: false,
+      isLoading: false,
+    }));
+    
+    render(
+      <MemoryRouter>
+        <LoginForm />
+      </MemoryRouter>
+    );
+    
+    // Inserisci credenziali
+    fireEvent.change(screen.getByLabelText(/email/i), {
+      target: { value: 'test@example.com' },
+    });
+    
+    fireEvent.change(screen.getByLabelText(/password/i), {
+      target: { value: 'password123' },
+    });
+    
+    // Clicca sul pulsante di accesso
+    fireEvent.click(screen.getByRole('button', { name: /accedi/i }));
+    
+    // Durante il processo di login, verifica che il pulsante sia disabilitato
+    expect(screen.getByRole('button', { name: /accedi/i })).toBeDisabled();
+    
+    // Verifica che l'indicatore di caricamento sia visibile
+    expect(screen.getByRole('button', { name: /accedi/i })).toHaveTextContent(/attendere/i);
+    
+    // Attendi il completamento del login
+    await waitFor(() => {
+      expect(mockLogin).toHaveBeenCalledWith('test@example.com', 'password123');
     });
   });
 });

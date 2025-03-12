@@ -175,7 +175,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title }) => {
                 <Avatar
                   sx={{ bgcolor: 'secondary.main' }}
                 >
-                  {user.firstName ? user.firstName[0] : user.username[0]}
+                  {user.firstName ? user.firstName[0] : user.email[0]}
                 </Avatar>
               </IconButton>
               <Menu

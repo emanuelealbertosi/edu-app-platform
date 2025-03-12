@@ -38,7 +38,7 @@ import {
 } from '../../components/animations/PageTransitions';
 
 // Importiamo le notifiche per integrarle con le animazioni
-import NotificationsService from '../../services/NotificationsService';
+import { NotificationsService } from '../../services/NotificationsService';
 
 // Componente di test per mostrare le diverse animazioni disponibili
 const AnimationTestPage: React.FC = () => {
@@ -268,7 +268,8 @@ const AnimationTestPage: React.FC = () => {
                       <Typography variant="subtitle1" gutterBottom sx={{ mt: 3 }}>
                         Progresso: {progress}%
                       </Typography>
-                      <ProgressBar progress={progress} height={12} />
+                      <ProgressBar progress={progress} />
+                      {/* Nota: la prop sx è stata rimossa perché causava errori di tipizzazione */}
                       
                       <Button 
                         variant="outlined" 

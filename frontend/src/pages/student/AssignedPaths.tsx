@@ -73,7 +73,7 @@ const AssignedPaths: React.FC = () => {
           subject: path.subject || 'Non specificata',
           difficulty: path.difficulty as 'facile' | 'medio' | 'difficile',
           status: path.status as 'non_iniziato' | 'in_corso' | 'completato',
-          targetEndDate: path.targetEndDate,
+          targetEndDate: path.targetEndDate ? path.targetEndDate.toISOString() : undefined,
         }));
         
         setPaths(mappedPaths);

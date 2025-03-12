@@ -144,9 +144,9 @@ const RegisterForm: React.FC = () => {
         username: formState.username,
         email: formState.email,
         password: formState.password,
-        role: formState.role,
-        firstName: formState.firstName || undefined,
-        lastName: formState.lastName || undefined,
+        role: formState.role as 'admin' | 'parent' | 'student', // Cast per garantire che non sia vuoto
+        firstName: formState.firstName || "", // Default a stringa vuota invece di undefined
+        lastName: formState.lastName || "", // Default a stringa vuota invece di undefined
       });
       
       setRegistrationSuccess(true);

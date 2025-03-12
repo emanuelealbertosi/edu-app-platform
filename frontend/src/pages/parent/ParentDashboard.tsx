@@ -40,7 +40,7 @@ import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import StudentService, { Student, StudentActivity } from '../../services/StudentService';
 import PathService, { PathTemplate } from '../../services/PathService';
 import RewardService, { RewardTemplate, PendingReward } from '../../services/RewardService';
-import NotificationsService from '../../services/NotificationsService';
+import { NotificationsService } from '../../services/NotificationsService';
 
 // Importazione componenti di animazione
 import { LoadingIndicator, CardSkeleton } from '../../components/animations/LoadingAnimations';
@@ -157,7 +157,7 @@ const ParentDashboard: React.FC = () => {
               Dashboard Genitore
             </Typography>
             <Typography variant="body1" color="text.secondary" paragraph>
-              Benvenuto, {user?.name || 'Genitore'}! Gestisci i percorsi educativi e le ricompense per i tuoi studenti.
+              Benvenuto, {user?.firstName || 'Genitore'}! Gestisci i percorsi educativi e le ricompense per i tuoi studenti.
             </Typography>
           </FadeIn>
 

@@ -42,7 +42,7 @@ import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom';
 import UserService, { User, SystemStats, AdminActivity } from '../../services/UserService';
 import PathService, { PathTemplate } from '../../services/PathService';
 import QuizService, { QuizTemplate } from '../../services/QuizService';
-import NotificationsService from '../../services/NotificationsService';
+import { NotificationsService } from '../../services/NotificationsService';
 
 // Importazione componenti di animazione
 import { LoadingIndicator, CardSkeleton } from '../../components/animations/LoadingAnimations';

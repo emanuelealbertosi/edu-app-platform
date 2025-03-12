@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import ApiErrorHandler from './ApiErrorHandler';
-import NotificationsService from './NotificationsService';
+import { NotificationsService } from './NotificationsService';
 
 // Fix per errore lint: "Cannot find name 'process'"
 declare const process: {
@@ -26,6 +26,7 @@ export interface Student {
   parentId: string;
   createdAt: Date;
   updatedAt: Date;
+  pendingRewards: number; // Numero di richieste di ricompensa in attesa
 }
 
 /**

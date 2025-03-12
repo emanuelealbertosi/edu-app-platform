@@ -1,0 +1,340 @@
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import CssBaseline from '@mui/material/CssBaseline';
+import { AuthProvider } from './contexts/AuthContext';
+import { NotificationsProvider, useNotifications } from './contexts/NotificationsContext';
+import NotificationsList from './components/Notifications/NotificationsList';
+import { NotificationsService } from './services/NotificationsService';
+import ProtectedRoute from './components/common/ProtectedRoute';
+
+// Pagine pubbliche
+import LoginPage from './pages/public/LoginPage';
+import RegisterPage from './pages/public/RegisterPage';
+import LandingPage from './pages/public/LandingPage';
+
+// Pagine admin
+import AdminDashboard from './pages/admin/AdminDashboard';
+import ManageQuizTemplates from './pages/admin/ManageQuizTemplates';
+import ManageUsers from './pages/admin/ManageUsers';
+
+// Pagine genitore
+import ParentDashboard from './pages/parent/ParentDashboard';
+import ManageStudents from './pages/parent/ManageStudents';
+import ManagePathTemplates from './pages/parent/ManagePathTemplates';
+import ManageRewardTemplates from './pages/parent/ManageRewardTemplates';
+import AssignPaths from './pages/parent/AssignPaths';
+
+// Pagine studente
+import StudentDashboard from './pages/student/StudentDashboard';
+import AssignedPaths from './pages/student/AssignedPaths';
+import RewardShop from './pages/student/RewardShop';
+import TakeQuiz from './pages/student/TakeQuiz';
+
+// Componenti di test e debug
+import NotificationTest from './components/Notifications/NotificationTest';
+import AnimationTestPage from './pages/test/AnimationTestPage';
+
+const theme = createTheme({
+  palette: {
+    primary: {
+      main: '#1976d2',
+    },
+    secondary: {
+      main: '#f50057',
+    },
+    background: {
+      default: '#f5f5f5',
+    },
+  },
+  typography: {
+    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+    h1: {
+      fontSize: '2.5rem',
+      fontWeight: 500,
+    },
+    h2: {
+      fontSize: '2rem',
+      fontWeight: 500,
+    },
+    h3: {
+      fontSize: '1.75rem',
+      fontWeight: 500,
+    },
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none',
+          borderRadius: 8,
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          borderRadius: 12,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+        },
+      },
+    },
+  },
+});
+
+// Componente interno che si occupa di inizializzare i servizi dopo il montaggio dei provider
+function AppContent() {
+  // Otteniamo il contesto delle notifiche
+  const { addNotification } = useNotifications();
+
+  // Inizializza il servizio notifiche collegandolo al provider
+  useEffect(() => {
+    try {
+      NotificationsService.setNotificationHandler(addNotification);
+    } catch (error) {
+      console.error('Errore nell\'inizializzazione del NotificationsService:', error);
+    }
+  }, [addNotification]);
+
+  return (
+    <Router>
+      <NotificationsList />
+
+            <Routes>
+              {/* Percorsi pubblici */}
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              
+              {/* Percorsi Admin */}
+              <Route 
+                path="/admin" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/quiz-templates" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <ManageQuizTemplates />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/quiz-templates/:id" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <ManageQuizTemplates />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/users" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <ManageUsers />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/users/:id" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <ManageUsers />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/settings" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <div>Impostazioni Admin</div>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/admin/logs" 
+                element={
+                  <ProtectedRoute requiredRole="admin">
+                    <div>Log di Sistema</div>
+                  </ProtectedRoute>
+                } 
+              />
+              
+              {/* Percorsi Genitore */}
+              <Route 
+                path="/parent" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <ParentDashboard />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/parent/students" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <ManageStudents />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/parent/students/:id" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <ManageStudents />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/parent/path-templates" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <ManagePathTemplates />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/parent/path-templates/:id" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <ManagePathTemplates />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/parent/reward-templates" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <ManageRewardTemplates />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/parent/reward-templates/:id" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <ManageRewardTemplates />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/parent/assign-paths" 
+                element={
+                  <ProtectedRoute requiredRole="parent">
+                    <AssignPaths />
+                  </ProtectedRoute>
+                } 
+              />
+              
+              {/* Percorsi Studente */}
+              <Route 
+                path="/student" 
+                element={
+                  <ProtectedRoute requiredRole="student">
+                    <StudentDashboard />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/student/paths" 
+                element={
+                  <ProtectedRoute requiredRole="student">
+                    <AssignedPaths />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/student/paths/:id" 
+                element={
+                  <ProtectedRoute requiredRole="student">
+                    <AssignedPaths />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/student/rewards" 
+                element={
+                  <ProtectedRoute requiredRole="student">
+                    <RewardShop />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/student/quiz/:quizId" 
+                element={
+                  <ProtectedRoute requiredRole="student">
+                    <TakeQuiz />
+                  </ProtectedRoute>
+                } 
+              />
+
+              {/* Pagina Profilo (accessibile a tutti gli utenti autenticati) */}
+              <Route 
+                path="/profile" 
+                element={
+                  <ProtectedRoute requiredRole="any">
+                    <div>Pagina Profilo</div>
+                  </ProtectedRoute>
+                } 
+              />
+
+              {/* Pagine di test e debug */}
+              <Route 
+                path="/test/notifications" 
+                element={
+                  <ProtectedRoute requiredRole="any">
+                    <NotificationTest />
+                  </ProtectedRoute>
+                } 
+              />
+              
+              <Route 
+                path="/test/animations" 
+                element={
+                  <ProtectedRoute requiredRole="any">
+                    <AnimationTestPage />
+                  </ProtectedRoute>
+                } 
+              />
+
+              {/* Redirect a percorsi specifici in base al ruolo dopo il login */}
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute requiredRole="any">
+                    {({ user }) => {
+                      if (user?.role === 'admin') return <Navigate to="/admin" />;
+                      if (user?.role === 'parent') return <Navigate to="/parent" />;
+                      if (user?.role === 'student') return <Navigate to="/student" />;
+                      return <Navigate to="/" />;
+                    }}
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Fallback per rotte non trovate */}
+              <Route path="*" element={<Navigate to="/" />} />
+            </Routes>
+    </Router>
+  );
+}
+
+// Componente App principale che configura i provider
+function App() {
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <NotificationsProvider>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </NotificationsProvider>
+    </ThemeProvider>
+  );
+}
+
+export default App;

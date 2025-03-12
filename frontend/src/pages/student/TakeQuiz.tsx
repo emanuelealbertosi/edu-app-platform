@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import MainLayout from '../../components/layout/MainLayout';
+import PageTransition from '../../components/animations/PageTransition';
+import FadeInLoader from '../../components/animations/FadeInLoader';
+import SuccessAnimation from '../../components/animations/SuccessAnimation';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Typography,
   Box,
@@ -35,7 +39,7 @@ import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import StarsIcon from '@mui/icons-material/Stars';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import QuizService, { Quiz as ServiceQuiz, QuizResult, QuizAnswer } from '../../services/QuizService';
-import NotificationsService from '../../services/NotificationsService';
+import { NotificationsService } from '../../services/NotificationsService';
 
 // Importazione componenti di animazione
 import { 
@@ -469,7 +473,8 @@ const TakeQuiz: React.FC = () => {
                             value={answers[quiz.questions[activeStep].id] || ''}
                             onChange={handleOptionChange}
                           >
-                            <AnimatedList>
+                            {/* Usa un Box per avvolgere gli elementi singolarmente */}
+                            <Box>
                               {quiz.questions[activeStep].options?.map((option) => (
                                 <HoverAnimation key={option.id}>
                                   <FormControlLabel
@@ -488,7 +493,7 @@ const TakeQuiz: React.FC = () => {
                                   />
                                 </HoverAnimation>
                               ))}
-                            </AnimatedList>
+                            </Box>
                           </RadioGroup>
                         </FormControl>
                       ) : (

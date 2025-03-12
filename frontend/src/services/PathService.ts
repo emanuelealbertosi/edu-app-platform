@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import NotificationsService from './NotificationsService';
+import { NotificationsService } from './NotificationsService';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 const PATH_API_URL = `${API_URL}/path`;

@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import ApiService from './ApiService';
-import NotificationsService from './NotificationsService';
+import { NotificationsService } from './NotificationsService';
 
 // Fix per errore lint: "Cannot find name 'process'"
 declare const process: {
@@ -45,6 +45,12 @@ export interface Reward {
   expiryDate?: Date;
 }
 
+export interface RecentRedemption {
+  rewardTitle: string;
+  date: string;
+  pointsCost: number;
+}
+
 export interface StudentRewardStats {
   studentId: string;
   availablePoints: number;
@@ -52,6 +58,8 @@ export interface StudentRewardStats {
   totalPointsSpent: number;
   redeemedRewards: number;
   availableRewards: number;
+  recentRedemptions?: RecentRedemption[];
+  pendingRewards?: number;
 }
 
 export interface RedemptionRequest {

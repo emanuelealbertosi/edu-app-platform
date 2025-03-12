@@ -29,6 +29,12 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
   - [x] Layout principale con barra laterale e header 
   - [x] Context per gestione autenticazione 
   - [x] Protected Routes basate sui ruoli 
+  - [x] Sistema di notifiche con animazioni
+  - [x] Componenti di animazione riutilizzabili
+    - [x] PageTransition per transizioni tra pagine
+    - [x] FadeInLoader per caricamenti eleganti
+    - [x] AnimatedCard per interazioni con carte
+    - [x] SuccessAnimation e SuccessConfetti per feedback positivi
 - [x] Interfaccia amministratore 
   - [x] Dashboard principale 
   - [x] Gestione quiz templates 

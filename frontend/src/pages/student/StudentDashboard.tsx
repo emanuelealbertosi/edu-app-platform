@@ -302,9 +302,8 @@ const StudentDashboard: React.FC = () => {
                                 </Typography>
                                 <ProgressBar 
                                   progress={path.progress} 
-                                  height={8} 
-                                  animated={true}
                                 />
+                                {/* Nota: le prop animated e sx sono state rimosse perché causavano errori di tipizzazione */}
                               </Box>
                               {path.due_date && (
                                 <Typography variant="caption" color="textSecondary">

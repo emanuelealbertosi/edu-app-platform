@@ -62,6 +62,35 @@ export interface ApiErrorHandlerOptions {
 export class ApiErrorHandler {
   private options: ApiErrorHandlerOptions;
   
+  /**
+   * Metodo statico per gestire gli errori API (per compatibilità)
+   */
+  static handleApiError(error: any, message?: string): ApiError {
+    const handler = new ApiErrorHandler();
+    return handler.handleApiError(error, message);
+  }
+
+  /**
+   * Metodo per gestire gli errori API
+   */
+  handleApiError(error: any, message?: string): ApiError {
+    const apiError = this.normalizeError(error);
+    
+    if (message) {
+      apiError.message = message;
+    }
+    
+    if (this.options.showNotifications) {
+      this.showErrorNotification(apiError);
+    }
+    
+    if (this.options.onError) {
+      this.options.onError(apiError);
+    }
+    
+    return apiError;
+  }
+  
   constructor(options: ApiErrorHandlerOptions = {}) {
     this.options = {
       timeout: 30000, // 30 secondi di default
