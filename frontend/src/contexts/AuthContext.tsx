@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import AuthService from '../services/AuthService';
+import { NotificationsService } from '../services/NotificationsService';
 
 interface User {
   id: string;
@@ -120,9 +121,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       const response = await AuthService.login({ email, password });
       setUser(response.user);
+      NotificationsService.success('Login effettuato', 'Bentornato!');
     } catch (err: any) {
       console.error('Errore durante il login:', err);
-      setError(err.response?.data?.message || 'Errore durante il login');
+      const errorMessage = err.response?.data?.message || 'Errore durante il login';
+      setError(errorMessage);
+      NotificationsService.error('Errore di autenticazione', errorMessage);
       throw err;
     } finally {
       setLoading(false);
@@ -141,9 +145,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       const response = await AuthService.register(userData);
       setUser(response.user);
+      NotificationsService.success('Registrazione completata', 'Account creato con successo!');
     } catch (err: any) {
       console.error('Errore durante la registrazione:', err);
-      setError(err.response?.data?.message || 'Errore durante la registrazione');
+      const errorMessage = err.response?.data?.message || 'Errore durante la registrazione';
+      setError(errorMessage);
+      NotificationsService.error('Errore di registrazione', errorMessage);
       throw err;
     } finally {
       setLoading(false);
