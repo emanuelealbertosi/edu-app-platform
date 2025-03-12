@@ -34,6 +34,9 @@ app.include_router(quizzes.router, prefix="/api/quizzes", tags=["Quizzes"])
 app.include_router(question_templates.router, prefix="/api/question-templates", tags=["Question Templates"])
 app.include_router(quiz_attempts.router, prefix="/api/quiz-attempts", tags=["Quiz Attempts"])
 
+# Per compatibilità con il frontend
+app.include_router(quiz_templates.router, prefix="/api/quiz/templates", tags=["Quiz Templates Frontend"])
+
 # Per compatibilità con i test
 app.include_router(quiz_templates.router, prefix="/quiz-templates", tags=["Quiz Templates Test"])
 app.include_router(quizzes.router, prefix="/quizzes", tags=["Quizzes Test"])

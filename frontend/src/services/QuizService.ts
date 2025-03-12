@@ -93,14 +93,116 @@ class QuizService {
    * Solo admin può vedere tutti i template
    */
   public async getAllQuizTemplates(): Promise<QuizTemplate[]> {
-    return ApiService.get<QuizTemplate[]>(`${QUIZ_API_URL}/templates`);
+    // Array di percorsi possibili da provare in ordine
+    const possiblePaths = [
+      '/api/quiz/templates',
+      '/api/quiz/v1/templates',
+      '/api/quiz'
+    ];
+    
+    // Flag per tracciare se abbiamo già mostrato un messaggio di errore
+    let errorShown = false;
+    
+    // Prova ogni percorso in sequenza
+    for (const path of possiblePaths) {
+      try {
+        console.log(`Tentativo di accesso al percorso: ${path}`);
+        const result = await ApiService.get<QuizTemplate[]>(`${API_URL}${path}`);
+        console.log(`Successo con il percorso: ${path}`);
+        return result;
+      } catch (error: any) {
+        console.log(`Errore con il percorso ${path}:`, error.response?.status);
+        // Continua a provare altri percorsi se otteniamo 404
+        if (error.response?.status === 404) {
+          continue;
+        }
+        
+        // Per altri errori, mostra una notifica e termina
+        NotificationsService.error(
+          'Errore nel recupero dei template di quiz',
+          'Errore'
+        );
+        errorShown = true;
+        throw error;
+      }
+    }
+    
+    // Se arriviamo qui, nessun percorso ha funzionato
+    if (!errorShown) {
+      NotificationsService.warning(
+        'I template di quiz non sono ancora disponibili',
+        'Funzionalità in sviluppo'
+      );
+    }
+    
+    // Ritorna un template di quiz di esempio per scopi di sviluppo
+    return [
+      {
+        id: 'sample-1',
+        title: 'Quiz di esempio',
+        description: 'Questo è un quiz di esempio poiché i template non sono ancora disponibili',
+        createdBy: 'system',
+        totalQuestions: 0,
+        totalPoints: 0,
+        estimatedTime: 15,
+        questions: [],
+        isPublic: true
+      }
+    ];
   }
 
   /**
    * Ottiene un template di quiz specifico per ID
    */
   public async getQuizTemplate(id: string): Promise<QuizTemplate> {
-    return ApiService.get<QuizTemplate>(`${QUIZ_API_URL}/templates/${id}`);
+    // Array di percorsi possibili da provare in ordine
+    const possiblePaths = [
+      `/api/quiz/templates/${id}`,
+      `/api/quiz/v1/templates/${id}`,
+      `/api/quiz/${id}`
+    ];
+    
+    // Prova ogni percorso in sequenza
+    for (const path of possiblePaths) {
+      try {
+        console.log(`Tentativo di accesso al percorso: ${path}`);
+        const result = await ApiService.get<QuizTemplate>(`${API_URL}${path}`);
+        console.log(`Successo con il percorso: ${path}`);
+        return result;
+      } catch (error: any) {
+        console.log(`Errore con il percorso ${path}:`, error.response?.status);
+        // Continua a provare altri percorsi se otteniamo 404
+        if (error.response?.status === 404) {
+          continue;
+        }
+        
+        // Per altri errori, mostra una notifica e termina
+        NotificationsService.error(
+          'Errore nel recupero del template di quiz',
+          'Errore'
+        );
+        throw error;
+      }
+    }
+    
+    // Se arriviamo qui, nessun percorso ha funzionato
+    NotificationsService.warning(
+      `I dettagli del quiz con ID ${id} non sono disponibili al momento`,
+      'Funzionalità in sviluppo'
+    );
+    
+    // Restituisci un template di esempio per scopi di sviluppo
+    return {
+      id: id,
+      title: 'Quiz di esempio',
+      description: 'Questo è un quiz di esempio poiché il backend non è disponibile',
+      createdBy: 'system',
+      totalQuestions: 0,
+      totalPoints: 0,
+      estimatedTime: 15,
+      questions: [],
+      isPublic: true
+    };
   }
 
   /**

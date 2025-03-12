@@ -2,14 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, List
+import uuid
 
 from app.db.base import get_db
 from app.core.config import settings
 from app.core.security import create_access_token, create_refresh_token, decode_token
 from app.db.repositories.user_repository import UserRepository
 from app.db.repositories.role_repository import RoleRepository
-from app.schemas.user import Token, RefreshToken, UserCreate, User
+from app.schemas.user import Token, RefreshToken, UserCreate, User, SystemStats, AdminActivity, UserInList
+from app.api.dependencies.auth import get_current_user, get_current_admin_user
 
 router = APIRouter()
 
@@ -185,3 +187,128 @@ async def register(
     user = UserRepository.create(db, user_data, [student_role])
     
     return user
+
+@router.get("/stats", response_model=SystemStats)
+async def get_stats(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin_user)
+) -> Any:
+    """
+    Ottiene le statistiche del sistema. Solo per admin.
+    """
+    # In una implementazione reale, queste informazioni verrebbero recuperate dal database
+    # e da altri microservizi, ma per ora restituiamo dati segnaposto
+    
+    # Otteniamo le statistiche degli utenti dal repository
+    user_stats = UserRepository.get_user_statistics(db)
+    
+    # Per i valori che provengono da altri servizi, usiamo valori segnaposto
+    # In un'implementazione reale, questi valori verrebbero recuperati dagli altri servizi
+    return SystemStats(
+        totalUsers=user_stats.get('total_users', 0),
+        activeStudents=user_stats.get('active_students', 0),
+        activeParents=user_stats.get('active_parents', 0),
+        totalPaths=25,  # Dati segnaposto
+        completedPaths=12,  # Dati segnaposto
+        totalQuizzes=48,  # Dati segnaposto
+        completedQuizzes=36,  # Dati segnaposto
+        averageScore=78.5,  # Dati segnaposto
+        totalRewards=15,  # Dati segnaposto
+        redeemedRewards=7  # Dati segnaposto
+    )
+
+@router.get("/users", response_model=List[UserInList])
+async def get_users(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin_user),
+    skip: int = 0,
+    limit: int = 100
+) -> Any:
+    """
+    Ottiene la lista degli utenti. Solo per admin.
+    """
+    users = UserRepository.get_all(db, skip=skip, limit=limit)
+    
+    # Convertiamo i ruoli da oggetti Role a stringhe
+    result = []
+    for user in users:
+        user_data = UserInList(
+            id=str(user.id),
+            uuid=user.uuid,
+            username=user.username,
+            email=user.email,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            is_active=user.is_active,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            roles=[role.name for role in user.roles]
+        )
+        result.append(user_data)
+    
+    return result
+
+@router.get("/activities", response_model=List[AdminActivity])
+async def get_activities(
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_admin_user),
+    skip: int = 0,
+    limit: int = 20
+) -> Any:
+    """
+    Ottiene le attività recenti del sistema. Solo per admin.
+    """
+    # In una implementazione reale, queste informazioni verrebbero recuperate dal database
+    # ma per ora restituiamo dati segnaposto
+    
+    # Esempio di attività del sistema (dati statici)
+    activities = [
+        AdminActivity(
+            id=str(uuid.uuid4()),
+            action="login",
+            userId=str(uuid.uuid4()),
+            username="admin1",
+            userRole="admin",
+            timestamp=datetime.utcnow() - timedelta(hours=1),
+            details={"ip": "192.168.1.1"}
+        ),
+        AdminActivity(
+            id=str(uuid.uuid4()),
+            action="create_quiz",
+            userId=str(uuid.uuid4()),
+            username="teacher1",
+            userRole="admin",
+            timestamp=datetime.utcnow() - timedelta(hours=2),
+            details={"quiz_id": "abc123", "title": "Quiz di matematica"}
+        ),
+        AdminActivity(
+            id=str(uuid.uuid4()),
+            action="assign_path",
+            userId=str(uuid.uuid4()),
+            username="parent1",
+            userRole="parent",
+            timestamp=datetime.utcnow() - timedelta(hours=3),
+            details={"path_id": "def456", "student_id": "student123"}
+        ),
+        AdminActivity(
+            id=str(uuid.uuid4()),
+            action="redeem_reward",
+            userId=str(uuid.uuid4()),
+            username="student1",
+            userRole="student",
+            timestamp=datetime.utcnow() - timedelta(hours=4),
+            details={"reward_id": "ghi789", "points_spent": 500}
+        ),
+        AdminActivity(
+            id=str(uuid.uuid4()),
+            action="complete_quiz",
+            userId=str(uuid.uuid4()),
+            username="student2",
+            userRole="student",
+            timestamp=datetime.utcnow() - timedelta(hours=5),
+            details={"quiz_id": "jkl012", "score": 85}
+        )
+    ]
+    
+    # Applica skip e limit
+    return activities[skip:skip+limit]

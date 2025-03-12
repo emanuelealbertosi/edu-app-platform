@@ -121,7 +121,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setError(null);
     try {
       const response = await AuthService.login({ email, password });
-      setUser(response.user);
+      // Estrai i dati del token per ottenere i dati utente
+      // Il metodo getUserFromToken viene chiamato all'interno di login
+      // e il risultato viene memorizzato in localStorage
+      const userFromStorage = localStorage.getItem('user');
+      if (userFromStorage) {
+        const user = JSON.parse(userFromStorage);
+        setUser(user);
+      } else {
+        setError('Impossibile recuperare i dati dell\'utente dal token');
+      }
       // Rimuoviamo la notifica di successo qui perché è già gestita in AuthService
       // NotificationsService.success('Login effettuato', 'Bentornato!');
     } catch (err: any) {
@@ -147,8 +156,25 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     setError(null);
     try {
       const response = await AuthService.register(userData);
-      setUser(response.user);
-      NotificationsService.success('Registrazione completata', 'Account creato con successo!');
+      // Estrai i dati del token per ottenere i dati utente
+      // Il metodo getUserFromToken viene chiamato all'interno di register
+      // e il risultato viene memorizzato in localStorage
+      const userFromStorage = localStorage.getItem('user');
+      if (userFromStorage) {
+        const user = JSON.parse(userFromStorage);
+        setUser(user);
+      } else {
+        // Fallback: creare un user object basato sui dati di registrazione
+        setUser({
+          id: 'temp-id', // Verrà sostituito dall'ID reale al prossimo login
+          email: userData.email,
+          firstName: userData.firstName,
+          lastName: userData.lastName,
+          role: userData.role
+        });
+      }
+      // Notifica già gestita in AuthService, rimuoviamo da qui
+      // NotificationsService.success('Registrazione completata', 'Account creato con successo!');
     } catch (err: any) {
       console.error('Errore durante la registrazione:', err);
       const errorMessage = err.response?.data?.message || 'Errore durante la registrazione';

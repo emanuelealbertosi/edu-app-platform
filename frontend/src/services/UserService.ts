@@ -90,8 +90,8 @@ class UserService {
    */
   public async getAllUsers(): Promise<User[]> {
     try {
-      const response = await this.api.get<User[]>('/admin/users');
-      return response.data;
+      // Usiamo il percorso corretto senza duplicare API_URL (già presente in ApiService)
+      return await ApiService.get<User[]>('/api/auth/users');
     } catch (error) {
       NotificationsService.error('Errore nel recupero degli utenti', 'Errore');
       throw error;
@@ -103,8 +103,7 @@ class UserService {
    */
   public async getUserById(userId: string): Promise<User> {
     try {
-      const response = await this.api.get<User>(`/admin/users/${userId}`);
-      return response.data;
+      return await ApiService.get<User>(`/api/auth/users/${userId}`);
     } catch (error) {
       NotificationsService.error('Errore nel recupero dei dati dell\'utente', 'Errore');
       throw error;
@@ -122,9 +121,9 @@ class UserService {
     role: 'admin' | 'parent' | 'student';
   }): Promise<User> {
     try {
-      const response = await this.api.post<User>('/admin/users', userData);
+      const user = await ApiService.post<User>('/api/auth/users', userData);
       NotificationsService.success('Utente creato con successo');
-      return response.data;
+      return user;
     } catch (error) {
       NotificationsService.error('Errore nella creazione dell\'utente', 'Errore');
       throw error;
@@ -145,9 +144,9 @@ class UserService {
     }
   ): Promise<User> {
     try {
-      const response = await this.api.put<User>(`/admin/users/${userId}`, userData);
+      const user = await ApiService.put<User>(`/api/auth/users/${userId}`, userData);
       NotificationsService.success('Utente aggiornato con successo');
-      return response.data;
+      return user;
     } catch (error) {
       NotificationsService.error('Errore nell\'aggiornamento dell\'utente', 'Errore');
       throw error;
@@ -159,7 +158,7 @@ class UserService {
    */
   public async deactivateUser(userId: string): Promise<void> {
     try {
-      await this.api.put(`/admin/users/${userId}/deactivate`);
+      await ApiService.put(`/api/auth/users/${userId}/deactivate`);
       NotificationsService.success('Utente disattivato con successo');
     } catch (error) {
       NotificationsService.error('Errore nella disattivazione dell\'utente', 'Errore');
@@ -172,7 +171,7 @@ class UserService {
    */
   public async resetUserPassword(userId: string, newPassword: string): Promise<void> {
     try {
-      await this.api.put(`/admin/users/${userId}/reset-password`, { password: newPassword });
+      await ApiService.put(`/api/auth/users/${userId}/reset-password`, { password: newPassword });
       NotificationsService.success('Password reimpostata con successo');
     } catch (error) {
       NotificationsService.error('Errore nel reset della password', 'Errore');
@@ -185,11 +184,32 @@ class UserService {
    */
   public async getSystemStats(): Promise<SystemStats> {
     try {
-      const response = await this.api.get<SystemStats>('/admin/stats');
-      return response.data;
-    } catch (error) {
-      NotificationsService.error('Errore nel recupero delle statistiche di sistema', 'Errore');
-      throw error;
+      // Usiamo il percorso corretto senza duplicare API_URL (già presente in ApiService)
+      return await ApiService.get<SystemStats>('/api/auth/stats');
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        // L'endpoint non esiste: mostriamo una notifica informativa e restituiamo dati segnaposto
+        NotificationsService.warning(
+          'Le statistiche di sistema non sono ancora disponibili', 
+          'Funzionalità in sviluppo'
+        );
+        // Restituisci dati segnaposto che corrispondano all'interfaccia SystemStats
+        return {
+          totalUsers: 0,
+          activeStudents: 0,
+          activeParents: 0,
+          totalPaths: 0,
+          completedPaths: 0,
+          totalQuizzes: 0,
+          completedQuizzes: 0,
+          averageScore: 0,
+          totalRewards: 0,
+          redeemedRewards: 0
+        };
+      } else {
+        NotificationsService.error('Errore nel recupero delle statistiche di sistema', 'Errore');
+        throw error;
+      }
     }
   }
 
@@ -198,11 +218,21 @@ class UserService {
    */
   public async getSystemActivities(): Promise<AdminActivity[]> {
     try {
-      const response = await this.api.get<AdminActivity[]>('/admin/activities');
-      return response.data;
-    } catch (error) {
-      NotificationsService.error('Errore nel recupero delle attività di sistema', 'Errore');
-      throw error;
+      // Usiamo il percorso corretto senza duplicare API_URL (già presente in ApiService)
+      return await ApiService.get<AdminActivity[]>('/api/auth/activities');
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        // L'endpoint non esiste: mostriamo una notifica informativa e restituiamo un array vuoto
+        NotificationsService.warning(
+          'Il registro delle attività di sistema non è ancora disponibile', 
+          'Funzionalità in sviluppo'
+        );
+        // Restituisci un array vuoto per evitare crash nell'UI
+        return [];
+      } else {
+        NotificationsService.error('Errore nel recupero delle attività di sistema', 'Errore');
+        throw error;
+      }
     }
   }
 }

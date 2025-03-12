@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { NotificationsService } from './NotificationsService';
+import ApiService from './ApiService';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 const PATH_API_URL = `${API_URL}/path`;
@@ -91,16 +92,41 @@ class PathService {
    * Admin e parent possono vedere tutti i template
    */
   public async getAllPathTemplates(): Promise<PathTemplate[]> {
-    const response = await this.api.get<PathTemplate[]>('/templates');
-    return response.data;
+    try {
+      // Verifica se l'utente è autenticato
+      const currentUser = localStorage.getItem('user');
+      if (!currentUser) {
+        NotificationsService.error(
+          'È necessario effettuare l\'accesso per visualizzare i percorsi',
+          'Accesso negato'
+        );
+        return [];
+      }
+      
+      return await ApiService.get<PathTemplate[]>(`${API_URL}/api/paths/templates`);
+    } catch (error: any) {
+      // L'errore 403 indica che l'utente non ha le autorizzazioni necessarie (es. solo admin)
+      if (error.response?.status === 403) {
+        NotificationsService.error(
+          'Non hai le autorizzazioni necessarie per accedere a questa risorsa',
+          'Accesso negato'
+        );
+        return [];
+      }
+      
+      NotificationsService.error(
+        'Errore nel recupero dei template di percorsi',
+        'Errore'
+      );
+      throw error;
+    }
   }
 
   /**
    * Ottiene un template di percorso specifico per ID
    */
   public async getPathTemplate(id: string): Promise<PathTemplate> {
-    const response = await this.api.get<PathTemplate>(`/templates/${id}`);
-    return response.data;
+    return await ApiService.get<PathTemplate>(`${API_URL}/api/paths/templates/${id}`);
   }
 
   /**
@@ -109,12 +135,12 @@ class PathService {
    */
   public async createPathTemplate(template: Omit<PathTemplate, 'id'>): Promise<PathTemplate> {
     try {
-      const response = await this.api.post<PathTemplate>('/templates', template);
+      const result = await ApiService.post<PathTemplate>(`${API_URL}/api/paths/templates`, template);
       NotificationsService.success(
         `Il percorso "${template.title}" è stato creato con successo.`,
         'Percorso creato'
       );
-      return response.data;
+      return result;
     } catch (error) {
       // ApiService già gestisce la visualizzazione degli errori tramite ApiErrorHandler
       throw error;
@@ -127,12 +153,12 @@ class PathService {
    */
   public async updatePathTemplate(id: string, template: Partial<PathTemplate>): Promise<PathTemplate> {
     try {
-      const response = await this.api.put<PathTemplate>(`/templates/${id}`, template);
+      const result = await ApiService.put<PathTemplate>(`${API_URL}/api/paths/templates/${id}`, template);
       NotificationsService.success(
         `Il percorso "${template.title || 'selezionato'}" è stato aggiornato.`,
         'Percorso aggiornato'
       );
-      return response.data;
+      return result;
     } catch (error) {
       throw error;
     }
@@ -144,7 +170,7 @@ class PathService {
    */
   public async deletePathTemplate(id: string): Promise<void> {
     try {
-      await this.api.delete(`/templates/${id}`);
+      await ApiService.delete(`${API_URL}/api/paths/templates/${id}`);
       NotificationsService.success(
         'Il percorso è stato eliminato con successo.',
         'Percorso eliminato'

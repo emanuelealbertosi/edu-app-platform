@@ -95,6 +95,32 @@ class UserRepository:
         return False
     
     @staticmethod
+    def get_user_statistics(db: Session) -> Dict[str, int]:
+        """Ottiene statistiche sugli utenti nel sistema."""
+        from app.db.models.user import User, Role
+        
+        # Contiamo il totale degli utenti
+        total_users = db.query(User).count()
+        
+        # Contiamo gli utenti attivi con ruolo studente
+        active_students = db.query(User).join(User.roles).filter(
+            Role.name == "student",
+            User.is_active == True
+        ).count()
+        
+        # Contiamo gli utenti attivi con ruolo genitore
+        active_parents = db.query(User).join(User.roles).filter(
+            Role.name == "parent",
+            User.is_active == True
+        ).count()
+        
+        return {
+            "total_users": total_users,
+            "active_students": active_students,
+            "active_parents": active_parents
+        }
+    
+    @staticmethod
     def authenticate(db: Session, username_or_email: str, password: str) -> Optional[User]:
         """Autentica un utente controllando username/email e password."""
         from app.core.security import verify_password

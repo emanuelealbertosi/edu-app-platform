@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, validator, Field
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import datetime
 
 # Schema base per il ruolo
@@ -121,8 +121,47 @@ class Token(BaseModel):
 
 class TokenPayload(BaseModel):
     sub: str
-    exp: int
+    exp: Union[int, float]  # Accetta sia int che float per il timestamp di scadenza
     roles: List[str]
+
+# Schema per restituire gli utenti in lista
+class UserInList(BaseModel):
+    id: str
+    uuid: str
+    username: str
+    email: str
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    roles: List[str] = []
+    is_active: bool = True
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
 
 class RefreshToken(BaseModel):
     refresh_token: str
+
+# Schema per le statistiche del sistema
+class SystemStats(BaseModel):
+    totalUsers: int = 0
+    activeStudents: int = 0
+    activeParents: int = 0
+    totalPaths: int = 0
+    completedPaths: int = 0
+    totalQuizzes: int = 0
+    completedQuizzes: int = 0
+    averageScore: float = 0.0
+    totalRewards: int = 0
+    redeemedRewards: int = 0
+
+# Schema per le attività di sistema
+class AdminActivity(BaseModel):
+    id: str
+    action: str
+    userId: str
+    username: str
+    userRole: str
+    timestamp: datetime
+    details: Optional[dict] = None
