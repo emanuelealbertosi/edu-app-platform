@@ -38,6 +38,9 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
 - [x] Interfaccia amministratore 
   - [x] Dashboard principale 
   - [x] Gestione quiz templates 
+    - [x] Normalizzazione dati frontend/backend
+    - [x] Mappatura materie-categorie
+    - [x] Conteggio domande corretto
   - [x] Gestione utenti 
 - [x] Interfaccia genitori 
   - [x] Dashboard principale 

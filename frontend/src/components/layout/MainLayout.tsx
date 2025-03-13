@@ -75,7 +75,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title }) => {
   if (user?.role === 'admin') {
     menuItems = [
       { text: 'Dashboard', icon: <DashboardIcon />, path: '/admin' },
-      { text: 'Template Quiz', icon: <QuizIcon />, path: '/admin/quiz-templates' },
+      { text: 'Template Quiz', icon: <QuizIcon />, path: '/admin/quizzes' },
       { text: 'Gestione Utenti', icon: <PeopleIcon />, path: '/admin/users' },
       { text: 'Impostazioni', icon: <SettingsIcon />, path: '/admin/settings' },
     ];

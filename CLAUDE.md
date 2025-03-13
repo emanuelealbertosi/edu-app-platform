@@ -1,5 +1,48 @@
 # CLAUDE.md - Educational App Codebase Guide
 
+## AGGIORNAMENTI RECENTI (13 marzo 2025)
+
+### Correzioni sui Quiz Template
+
+1. **Problema del category_id risolto**: 
+   - È stato risolto il problema della visualizzazione della materia nei quiz template
+   - La soluzione implementa una corretta mappatura della materia (subject) al relativo category_id numerico
+   - La correzione è stata applicata sia al metodo `normalizeQuizData` che al metodo `handleSave` in `AdminQuizForm.tsx`
+   - Ora quando si crea o si modifica un quiz, il database riceve sempre un valore valido per `category_id`
+
+2. **Visualizzazione corretta del conteggio domande**:
+   - Corretto il problema della visualizzazione del numero di domande in AdminQuizzes.tsx
+   - Modificato il componente per utilizzare `quiz.totalQuestions` invece di `quiz.questions?.length`
+   - Questa modifica garantisce che il conteggio mostrato rifletta il numero effettivo di domande normalizzate
+
+Entrambi i problemi sono ora completamente risolti e l'applicazione dovrebbe funzionare correttamente.
+
+## NOTO PROBLEMA CON L'AGGIORNAMENTO DEI QUIZ
+
+Esiste un problema noto con l'aggiornamento dei quiz nell'applicazione:
+
+1. **Sintomo**: Quando si modifica un quiz esistente, le modifiche sembrano essere salvate correttamente (nessun errore viene mostrato), ma al caricamento successivo, le modifiche alla materia (subject) e alle opzioni delle domande non vengono preservate.
+
+2. **Causa**: Il problema sembra essere legato alla struttura dei dati nel database o nella gestione delle risposte API. Nonostante numerosi tentativi di risolvere il problema lato frontend, il problema persiste.
+
+3. **Soluzione temporanea**: Per modificare un quiz esistente, è consigliabile:
+   - Prendere nota delle informazioni del quiz esistente
+   - Eliminare il quiz
+   - Creare un nuovo quiz con le modifiche desiderate
+
+4. **Piano d'azione**: Un'analisi più approfondita del backend è necessaria per risolvere definitivamente il problema. In particolare, verificare:
+   - La struttura delle tabelle nel database PostgreSQL
+   - Il comportamento degli endpoint di aggiornamento in `quiz-service`
+   - La gestione delle relazioni tra quiz, domande e opzioni
+
+I tentativi di risoluzione finora hanno incluso:
+- Normalizzazione dei dati nel frontend
+- Approccio DELETE + CREATE per l'aggiornamento
+- Invio dei dati nel formato esatto richiesto dal backend
+- Debug esteso in tutte le fasi dell'aggiornamento
+
+Il problema potrebbe richiedere un'analisi del database o una correzione del codice backend.
+
 ## Build/Run Commands
 - Frontend: `cd frontend && npm start` - Runs React frontend
 - Backend: `./lancia-locale.sh backend` - Starts all microservices
@@ -35,5 +78,3 @@
 - Animations: Framer Motion library for transitions and UX elements
 - Testing: Jest/React Testing Library (frontend), pytest (backend)
 
-## Known Issues
-- JWT token format incompatibility between frontend and backend - high priority

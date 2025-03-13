@@ -29,6 +29,8 @@ const AdminDashboard = React.lazy(() => import('./pages/admin/AdminDashboard'));
 const AdminUsers = React.lazy(() => import('./pages/admin/AdminUsers'));
 const AdminPaths = React.lazy(() => import('./pages/admin/AdminPaths'));
 const AdminQuizzes = React.lazy(() => import('./pages/admin/AdminQuizzes'));
+const AdminQuizDetail = React.lazy(() => import('./pages/admin/AdminQuizDetail'));
+const AdminQuizForm = React.lazy(() => import('./pages/admin/AdminQuizForm'));
 
 // Pagine genitore con caricamento lazy
 const ParentDashboard = React.lazy(() => import('./pages/parent/ParentDashboard'));
@@ -87,6 +89,21 @@ function App() {
                 <Route path="/admin/quizzes" element={
                   <ProtectedRoute requiredRole="admin">
                     <AdminQuizzes />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/quizzes/new" element={
+                  <ProtectedRoute requiredRole="admin">
+                    <AdminQuizForm />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/quizzes/:id" element={
+                  <ProtectedRoute requiredRole="admin">
+                    <AdminQuizDetail />
+                  </ProtectedRoute>
+                } />
+                <Route path="/admin/quizzes/:id/edit" element={
+                  <ProtectedRoute requiredRole="admin">
+                    <AdminQuizForm />
                   </ProtectedRoute>
                 } />
 
