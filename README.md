@@ -265,6 +265,26 @@ Il gateway API funge da punto di ingresso unificato per tutti i servizi backend.
 
 ## Problemi Risolti Recentemente
 
+### Dashboard Genitore e Microservizi
+
+**Problema Originale**: Errori 404 Not Found nella dashboard genitore e problemi di routing dei microservizi:
+1. Duplicazione dei prefissi di routing negli endpoint parent dei servizi auth e reward
+2. Repository e schemi mancanti per i profili parent e student
+3. Percorsi incoerenti tra frontend e API Gateway
+
+**Soluzione Implementata**:
+1. Per i problemi di routing:
+   - Rimossi prefissi duplicati nei file router degli endpoint parent
+   - Aggiornati i percorsi nell'API Gateway per mappare correttamente `/auth/parent/*` e `/reward/parent/*`
+   - Corretti i percorsi nei servizi frontend StudentService e RewardService
+
+2. Per i repository e gli schemi mancanti:
+   - Implementati i repository `parent_profile_repository.py` e `student_profile_repository.py`
+   - Creati gli schemi mancanti `parent_profile.py` e `student_profile.py`
+   - Aggiunti modelli mock nel servizio reward per compatibilità con l'autenticazione
+
+**Status**: ✅ RISOLTO. La dashboard genitore ora carica correttamente tutti i dati senza errori 404.
+
 ### Autenticazione JWT e Endpoint Percorsi Educativi
 
 **Problema Originale**: Si verificavano due problemi critici nel sistema:

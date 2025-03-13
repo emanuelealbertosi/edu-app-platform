@@ -13,7 +13,7 @@ from app.schemas.user import User
 from app.schemas.parent_profile import ParentProfile
 from app.schemas.student_profile import StudentProfile
 
-router = APIRouter(prefix="/parent", tags=["parent"])
+router = APIRouter(tags=["parent"])
 
 class StudentActivity:
     """Classe di esempio per le attività degli studenti"""

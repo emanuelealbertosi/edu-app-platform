@@ -8,7 +8,7 @@ from app.schemas.reward import RewardTemplate, RewardCreate, RewardUpdate, Pendi
 from app.db.repositories.reward_repository import RewardRepository
 from app.db.models.user import User as UserModel
 
-router = APIRouter(prefix="/parent", tags=["parent"])
+router = APIRouter(tags=["parent"])
 
 @router.get("/templates", response_model=List[RewardTemplate])
 async def get_parent_reward_templates(

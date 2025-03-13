@@ -2,6 +2,26 @@
 
 ## AGGIORNAMENTI RECENTI (13 marzo 2025)
 
+### Correzioni sulla Dashboard Genitore
+
+1. **Risolto problema di routing dei microservizi**:
+   - Corretti gli errori 404 sulla dashboard genitore
+   - Fissati i percorsi degli endpoint per evitare duplicazione dei prefissi
+   - I router in auth-service e reward-service ora usano il prefisso corretto senza duplicazioni
+   - Aggiornati anche i mapping nell'API Gateway per reindirizzare correttamente
+
+2. **Implementati repository e schemi mancanti**:
+   - Creati i repository mancanti: `parent_profile_repository.py` e `student_profile_repository.py`
+   - Aggiunti gli schemi necessari: `parent_profile.py` e `student_profile.py`
+   - Corretti i percorsi di importazione nei file endpoint parent
+
+3. **Modifiche architetturali microservizi**:
+   - Rimosso il prefisso duplicato nei file router per garantire coerenza
+   - Creato un modello user.py nel servizio reward per compatibilità
+   - Sistemati i percorsi di autenticazione tra i diversi servizi
+
+Tutti i problemi di navigazione e API nella dashboard genitore sono ora risolti.
+
 ### Correzioni sui Quiz Template
 
 1. **Problema del category_id risolto**: 
@@ -14,8 +34,6 @@
    - Corretto il problema della visualizzazione del numero di domande in AdminQuizzes.tsx
    - Modificato il componente per utilizzare `quiz.totalQuestions` invece di `quiz.questions?.length`
    - Questa modifica garantisce che il conteggio mostrato rifletta il numero effettivo di domande normalizzate
-
-Entrambi i problemi sono ora completamente risolti e l'applicazione dovrebbe funzionare correttamente.
 
 ## NOTO PROBLEMA CON L'AGGIORNAMENTO DEI QUIZ
 
