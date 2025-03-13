@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Header, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Header, Request, Body
 from typing import Any, Dict, List
 from jose import jwt
 from pydantic import ValidationError
@@ -12,8 +12,69 @@ from app.db.models.user import User
 from app.core.config import settings
 from app.core.security import decode_token
 from app.schemas.user import TokenPayload
+from app.db.repositories.user_repository import UserRepository
 
 router = APIRouter()
+
+@router.post("/verify-token")
+async def verify_token(
+    token_data: Dict[str, str] = Body(...),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Verifica un token JWT per servizi esterni.
+    """
+    token = token_data.get("token")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Token mancante",
+        )
+    
+    # Log per debug
+    print(f"DEBUG: Ricevuta richiesta di verifica token: {token[:20]}...")
+    
+    # Decodifica il token
+    decoded_token = decode_token(token)
+    if not decoded_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token non valido o decodifica fallita",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Ottieni l'utente
+    user = UserRepository.get_by_uuid(db, decoded_token.sub)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Utente {decoded_token.sub} non trovato",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Utente disattivato",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Estrai i nomi dei ruoli
+    role_names = [role.name for role in user.roles]
+    
+    # Restituisci i dati dell'utente in formato compatibile con tutti i servizi
+    result = {
+        "user_id": user.uuid,
+        "email": user.email,
+        "username": user.username,
+        "is_active": user.is_active,
+        "role": role_names[0] if role_names else "student",  # Default role
+        "roles": role_names,
+        "exp": decoded_token.exp
+    }
+    
+    print(f"DEBUG: Verifica token completata: {result}")
+    return result
 
 @router.get("/token-debug")
 async def debug_token(request: Request) -> Dict[str, Any]:

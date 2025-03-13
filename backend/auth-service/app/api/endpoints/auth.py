@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, List
 import uuid
 
@@ -60,7 +60,7 @@ async def login(
     )
     
     # Salva il token di refresh nel database
-    token_expires_at = datetime.utcnow() + refresh_token_expires
+    token_expires_at = datetime.now(timezone.utc) + refresh_token_expires
     UserRepository.create_refresh_token(db, user.id, refresh_token, token_expires_at)
     
     # Restituisci i token
@@ -89,10 +89,33 @@ async def refresh_token(
     
     # Ottieni il token di refresh dal database
     db_token = UserRepository.get_refresh_token(db, refresh_token_data.refresh_token)
-    if not db_token or db_token.revoked or db_token.expires_at < datetime.utcnow():
+    
+    if not db_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token di refresh scaduto o revocato",
+            detail="Token di refresh non trovato",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    if db_token.revoked:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token di refresh revocato",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        
+    # Controlla la scadenza del token, assicurandoci che entrambi siano timezone-aware
+    now = datetime.now(timezone.utc)
+    token_expires = db_token.expires_at
+    
+    # Se token_expires non ha timezone, convertiamolo
+    if token_expires.tzinfo is None:
+        token_expires = token_expires.replace(tzinfo=timezone.utc)
+        
+    if token_expires < now:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token di refresh scaduto",
             headers={"WWW-Authenticate": "Bearer"},
         )
     
@@ -127,7 +150,7 @@ async def refresh_token(
     UserRepository.revoke_refresh_token(db, refresh_token_data.refresh_token)
     
     # Salva il nuovo token di refresh nel database
-    token_expires_at = datetime.utcnow() + refresh_token_expires
+    token_expires_at = datetime.now(timezone.utc) + refresh_token_expires
     UserRepository.create_refresh_token(db, user.id, new_refresh_token, token_expires_at)
     
     # Restituisci i nuovi token
@@ -269,7 +292,7 @@ async def get_activities(
             userId=str(uuid.uuid4()),
             username="admin1",
             userRole="admin",
-            timestamp=datetime.utcnow() - timedelta(hours=1),
+            timestamp=datetime.now(timezone.utc) - timedelta(hours=1),
             details={"ip": "192.168.1.1"}
         ),
         AdminActivity(
@@ -278,7 +301,7 @@ async def get_activities(
             userId=str(uuid.uuid4()),
             username="teacher1",
             userRole="admin",
-            timestamp=datetime.utcnow() - timedelta(hours=2),
+            timestamp=datetime.now(timezone.utc) - timedelta(hours=2),
             details={"quiz_id": "abc123", "title": "Quiz di matematica"}
         ),
         AdminActivity(
@@ -287,7 +310,7 @@ async def get_activities(
             userId=str(uuid.uuid4()),
             username="parent1",
             userRole="parent",
-            timestamp=datetime.utcnow() - timedelta(hours=3),
+            timestamp=datetime.now(timezone.utc) - timedelta(hours=3),
             details={"path_id": "def456", "student_id": "student123"}
         ),
         AdminActivity(
@@ -296,7 +319,7 @@ async def get_activities(
             userId=str(uuid.uuid4()),
             username="student1",
             userRole="student",
-            timestamp=datetime.utcnow() - timedelta(hours=4),
+            timestamp=datetime.now(timezone.utc) - timedelta(hours=4),
             details={"reward_id": "ghi789", "points_spent": 500}
         ),
         AdminActivity(
@@ -305,7 +328,7 @@ async def get_activities(
             userId=str(uuid.uuid4()),
             username="student2",
             userRole="student",
-            timestamp=datetime.utcnow() - timedelta(hours=5),
+            timestamp=datetime.now(timezone.utc) - timedelta(hours=5),
             details={"quiz_id": "jkl012", "score": 85}
         )
     ]

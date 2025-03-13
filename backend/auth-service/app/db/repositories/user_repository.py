@@ -160,6 +160,18 @@ class UserRepository:
     @staticmethod
     def create_refresh_token(db: Session, user_id: int, token: str, expires_at: Any) -> RefreshToken:
         """Crea un nuovo token di refresh nel database."""
+        # Verifica se esiste già un token identico
+        existing_token = db.query(RefreshToken).filter(RefreshToken.token == token).first()
+        if existing_token:
+            # Se esiste, aggiorniamo la data di scadenza e lo restituiamo
+            existing_token.expires_at = expires_at
+            existing_token.revoked = False
+            db.add(existing_token)
+            db.commit()
+            db.refresh(existing_token)
+            return existing_token
+            
+        # Altrimenti creiamo un nuovo token
         db_token = RefreshToken(
             user_id=user_id,
             token=token,

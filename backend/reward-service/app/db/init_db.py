@@ -85,13 +85,30 @@ SAMPLE_REWARDS = [
 
 def init_db(db: Session) -> None:
     """Inizializza il database con i valori predefiniti."""
-    # Crea le tabelle se non esistono
+    # Crea le tabelle - DROP tabelle esistenti prima se necessario per assicurarsi che siano ricreate correttamente
+    logger.info("Inizializzazione del database: elimino tabelle esistenti e le ricreo...")
+    
+    try:
+        # Elimina le tabelle in ordine inverso delle dipendenze
+        from app.db.models.reward import UserReward, RewardProgress
+        Base.metadata.drop_all(bind=engine, tables=[
+            UserReward.__table__,
+            RewardProgress.__table__,
+            Reward.__table__,
+            RewardCategory.__table__
+        ])
+        logger.info("Tabelle eliminate con successo")
+    except Exception as e:
+        logger.warning(f"Errore durante l'eliminazione delle tabelle: {str(e)}")
+    
+    # Ricrea tutte le tabelle
     Base.metadata.create_all(bind=engine)
+    logger.info("Tabelle create con successo")
     
     # Aggiungi le categorie predefinite
+    logger.info("Aggiungo categorie predefinite...")
     for category in DEFAULT_CATEGORIES:
-        existing_category = RewardCategoryRepository.get_by_name(db, name=category["name"])
-        if not existing_category:
+        try:
             from app.schemas.reward import RewardCategoryCreate
             category_create = RewardCategoryCreate(**category)
             RewardCategoryRepository.create(
@@ -99,34 +116,42 @@ def init_db(db: Session) -> None:
                 category_data=category_create
             )
             logger.info(f"Creata categoria: {category['name']}")
+        except Exception as e:
+            logger.error(f"Errore durante la creazione della categoria {category['name']}: {str(e)}")
+            db.rollback()  # Rollback in caso di errore
+    
+    # Commit categorie
+    db.commit()
     
     # Aggiungi le ricompense di esempio
+    logger.info("Aggiungo ricompense di esempio...")
     for reward_data in SAMPLE_REWARDS:
-        # Trova la categoria
-        category_name = reward_data.pop("category_name")
-        category = RewardCategoryRepository.get_by_name(db, name=category_name)
-        
-        if not category:
-            logger.warning(f"Categoria {category_name} non trovata, non posso creare la ricompensa")
+        try:
+            # Trova la categoria
+            category_name = reward_data.pop("category_name")
+            category = RewardCategoryRepository.get_by_name(db, name=category_name)
+            
+            if not category:
+                logger.warning(f"Categoria {category_name} non trovata, non posso creare la ricompensa")
+                continue
+            
+            # Prepara i dati per la creazione della ricompensa
+            reward_data["category_id"] = category.id
+            
+            # Crea la ricompensa
+            from app.schemas.reward import RewardCreate
+            reward_create = RewardCreate(**reward_data)
+            RewardRepository.create(db, reward_create)
+            
+            logger.info(f"Creata ricompensa: {reward_data['name']}")
+        except Exception as e:
+            logger.error(f"Errore durante la creazione della ricompensa: {str(e)}")
+            db.rollback()  # Rollback in caso di errore
             continue
-        
-        # Prepara i dati per la creazione della ricompensa
-        reward_data["category_id"] = category.id
-        
-        # Verifica se esiste già una ricompensa con lo stesso nome
-        existing_rewards = RewardRepository.get_all(db)
-        if any(reward.name == reward_data["name"] for reward in existing_rewards):
-            logger.info(f"Ricompensa '{reward_data['name']}' già esistente, salto la creazione")
-            continue
-        
-        # Crea la ricompensa
-        from app.schemas.reward import RewardCreate
-        reward_create = RewardCreate(**reward_data)
-        RewardRepository.create(db, reward_create)
-        
-        logger.info(f"Creata ricompensa: {reward_data['name']}")
     
-    logger.info("Inizializzazione del database completata")
+    # Commit finale
+    db.commit()
+    logger.info("Inizializzazione del database completata con successo")
 
 def main():
     """Funzione principale per l'inizializzazione del database."""

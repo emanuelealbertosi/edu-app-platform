@@ -166,57 +166,86 @@ SAMPLE_QUIZZES = [
 
 def init_db(db: Session) -> None:
     """Inizializza il database con i valori predefiniti."""
-    # Crea le tabelle se non esistono
+    # Crea le tabelle - DROP tabelle esistenti prima se necessario per assicurarsi che siano ricreate correttamente
+    logger.info("Inizializzazione del database: elimino tabelle esistenti e le ricreo...")
+    
+    try:
+        # Elimina le tabelle in ordine inverso delle dipendenze
+        from app.db.models.quiz import Quiz, QuizAttempt, Question, AnswerOption
+        Base.metadata.drop_all(bind=engine, tables=[
+            AnswerOption.__table__,
+            Question.__table__,
+            Quiz.__table__,
+            QuizAttempt.__table__,
+            AnswerOptionTemplate.__table__,
+            QuestionTemplate.__table__,
+            QuizTemplate.__table__,
+            QuizCategory.__table__
+        ])
+        logger.info("Tabelle eliminate con successo")
+    except Exception as e:
+        logger.warning(f"Errore durante l'eliminazione delle tabelle: {str(e)}")
+    
+    # Ricrea tutte le tabelle
     Base.metadata.create_all(bind=engine)
+    logger.info("Tabelle create con successo")
     
     # Aggiungi le categorie predefinite
+    logger.info("Aggiungo categorie predefinite...")
     for category in DEFAULT_CATEGORIES:
-        existing_category = QuizCategoryRepository.get_by_name(db, name=category["name"])
-        if not existing_category:
+        try:
             QuizCategoryRepository.create(
                 db=db,
                 name=category["name"],
                 description=category.get("description")
             )
             logger.info(f"Creata categoria: {category['name']}")
+        except Exception as e:
+            logger.error(f"Errore durante la creazione della categoria {category['name']}: {str(e)}")
+            db.rollback()  # Rollback in caso di errore
+    
+    # Commit categorie
+    db.commit()
     
     # Aggiungi i quiz di esempio
+    logger.info("Aggiungo quiz di esempio...")
     for quiz_data in SAMPLE_QUIZZES:
-        # Trova la categoria
-        category_name = quiz_data.pop("category_name")
-        category = QuizCategoryRepository.get_by_name(db, name=category_name)
-        
-        if not category:
-            logger.warning(f"Categoria {category_name} non trovata, non posso creare il quiz")
+        try:
+            # Trova la categoria
+            category_name = quiz_data.pop("category_name") 
+            category = QuizCategoryRepository.get_by_name(db, name=category_name)
+            
+            if not category:
+                logger.warning(f"Categoria {category_name} non trovata, non posso creare il quiz")
+                continue
+            
+            # Prepara i dati per la creazione del quiz
+            questions_data = quiz_data.pop("questions")
+            quiz_data["category_id"] = category.id
+            
+            # Costruisci l'oggetto per la creazione del quiz
+            from app.schemas.quiz import QuizTemplateCreate, QuestionTemplateCreate, AnswerOptionTemplateCreate
+            
+            # Converti le domande
+            questions = []
+            for q_data in questions_data:
+                answer_options_data = q_data.pop("answer_options")
+                answer_options = [AnswerOptionTemplateCreate(**opt) for opt in answer_options_data]
+                questions.append(QuestionTemplateCreate(**q_data, answer_options=answer_options))
+            
+            # Crea il quiz
+            quiz_create = QuizTemplateCreate(**quiz_data, questions=questions)
+            QuizTemplateRepository.create(db, quiz_create)
+            
+            logger.info(f"Creato quiz di esempio: {quiz_data['title']}")
+        except Exception as e:
+            logger.error(f"Errore durante la creazione del quiz: {str(e)}")
+            db.rollback()  # Rollback in caso di errore
             continue
-        
-        # Verifica se esiste già un quiz con lo stesso titolo
-        existing_quizzes = QuizTemplateRepository.get_all(db)
-        if any(quiz.title == quiz_data["title"] for quiz in existing_quizzes):
-            logger.info(f"Quiz '{quiz_data['title']}' già esistente, salto la creazione")
-            continue
-        
-        # Prepara i dati per la creazione del quiz
-        questions_data = quiz_data.pop("questions")
-        quiz_data["category_id"] = category.id
-        
-        # Costruisci l'oggetto per la creazione del quiz
-        from app.schemas.quiz import QuizTemplateCreate, QuestionTemplateCreate, AnswerOptionTemplateCreate
-        
-        # Converti le domande
-        questions = []
-        for q_data in questions_data:
-            answer_options_data = q_data.pop("answer_options")
-            answer_options = [AnswerOptionTemplateCreate(**opt) for opt in answer_options_data]
-            questions.append(QuestionTemplateCreate(**q_data, answer_options=answer_options))
-        
-        # Crea il quiz
-        quiz_create = QuizTemplateCreate(**quiz_data, questions=questions)
-        QuizTemplateRepository.create(db, quiz_create)
-        
-        logger.info(f"Creato quiz di esempio: {quiz_data['title']}")
     
-    logger.info("Inizializzazione del database completata")
+    # Commit finale
+    db.commit()
+    logger.info("Inizializzazione del database completata con successo")
 
 def main():
     """Funzione principale per l'inizializzazione del database."""

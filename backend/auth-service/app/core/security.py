@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional, Union
 
 from jose import jwt
@@ -32,9 +32,9 @@ def create_access_token(subject: Union[str, Any], roles: List[str], expires_delt
         Token JWT codificato
     """
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     
     to_encode = {
         "exp": int(expire.timestamp()),  # Conversione esplicita in intero per compatibilità standard JWT
@@ -56,9 +56,9 @@ def create_refresh_token(subject: Union[str, Any], expires_delta: timedelta = No
         Token JWT codificato
     """
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES)
     
     to_encode = {
         "exp": int(expire.timestamp()),  # Conversione esplicita in intero per compatibilità standard JWT
@@ -109,7 +109,7 @@ def decode_token(token: str) -> Optional[TokenPayload]:
         # Verifica manuale della scadenza con tolleranza di 10 secondi
         if "exp" in payload:
             exp_timestamp = payload["exp"]
-            current_time = int(datetime.utcnow().timestamp())
+            current_time = int(datetime.now(timezone.utc).timestamp())
             
             # Verifica se il token è scaduto con una tolleranza di 10 secondi
             if current_time > exp_timestamp + 10:  # Tolleranza di 10 secondi

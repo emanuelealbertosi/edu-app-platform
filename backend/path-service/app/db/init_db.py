@@ -206,55 +206,80 @@ SAMPLE_TEMPLATES = [
 
 def init_db(db: Session) -> None:
     """Inizializza il database con i valori predefiniti."""
-    # Crea le tabelle se non esistono
+    # Crea le tabelle - DROP tabelle esistenti prima se necessario per assicurarsi che siano ricreate correttamente
+    logger.info("Inizializzazione del database: elimino tabelle esistenti e le ricreo...")
+    
+    try:
+        # Elimina le tabelle in ordine inverso delle dipendenze
+        Base.metadata.drop_all(bind=engine, tables=[
+            PathNode.__table__,
+            Path.__table__,
+            PathNodeTemplate.__table__,
+            PathTemplate.__table__,
+            PathCategory.__table__
+        ])
+        logger.info("Tabelle eliminate con successo")
+    except Exception as e:
+        logger.warning(f"Errore durante l'eliminazione delle tabelle: {str(e)}")
+    
+    # Ricrea tutte le tabelle
     Base.metadata.create_all(bind=engine)
+    logger.info("Tabelle create con successo")
     
     # Aggiungi le categorie predefinite
+    logger.info("Aggiungo categorie predefinite...")
     for category in DEFAULT_CATEGORIES:
-        existing_category = PathCategoryRepository.get_by_name(db, name=category["name"])
-        if not existing_category:
+        try:
             PathCategoryRepository.create(
                 db=db,
                 name=category["name"],
                 description=category.get("description")
             )
             logger.info(f"Creata categoria: {category['name']}")
+        except Exception as e:
+            logger.error(f"Errore durante la creazione della categoria {category['name']}: {str(e)}")
+            db.rollback()  # Rollback in caso di errore
+    
+    # Commit categorie
+    db.commit()
     
     # Aggiungi i template di percorso di esempio
+    logger.info("Aggiungo template di percorso di esempio...")
     for template_data in SAMPLE_TEMPLATES:
-        # Trova la categoria
-        category_name = template_data.pop("category_name")
-        category = PathCategoryRepository.get_by_name(db, name=category_name)
-        
-        if not category:
-            logger.warning(f"Categoria {category_name} non trovata, non posso creare il template")
+        try:
+            # Trova la categoria
+            category_name = template_data.pop("category_name")
+            category = PathCategoryRepository.get_by_name(db, name=category_name)
+            
+            if not category:
+                logger.warning(f"Categoria {category_name} non trovata, non posso creare il template")
+                continue
+            
+            # Prepara i dati per la creazione del template
+            nodes_data = template_data.pop("nodes")
+            template_data["category_id"] = category.id
+            
+            # Costruisci l'oggetto per la creazione del template
+            from app.schemas.path import PathTemplateCreate, PathNodeTemplateCreate
+            
+            # Converti i nodi
+            nodes = []
+            for node_data in nodes_data:
+                nodes.append(PathNodeTemplateCreate(**node_data))
+            
+            # Crea il template
+            template_create = PathTemplateCreate(**template_data, nodes=nodes)
+            PathTemplateRepository.create(db, template_create)
+            
+            logger.info(f"Creato template di percorso: {template_data['title']}")
+        except Exception as e:
+            logger.error(f"Errore durante la creazione del template: {str(e)}")
+            db.rollback()  # Rollback in caso di errore
             continue
-        
-        # Verifica se esiste già un template con lo stesso titolo
-        existing_templates = PathTemplateRepository.get_all(db)
-        if any(template.title == template_data["title"] for template in existing_templates):
-            logger.info(f"Template '{template_data['title']}' già esistente, salto la creazione")
-            continue
-        
-        # Prepara i dati per la creazione del template
-        nodes_data = template_data.pop("nodes")
-        template_data["category_id"] = category.id
-        
-        # Costruisci l'oggetto per la creazione del template
-        from app.schemas.path import PathTemplateCreate, PathNodeTemplateCreate
-        
-        # Converti i nodi
-        nodes = []
-        for node_data in nodes_data:
-            nodes.append(PathNodeTemplateCreate(**node_data))
-        
-        # Crea il template
-        template_create = PathTemplateCreate(**template_data, nodes=nodes)
-        PathTemplateRepository.create(db, template_create)
-        
-        logger.info(f"Creato template di percorso: {template_data['title']}")
     
-    logger.info("Inizializzazione del database completata")
+    # Commit finale
+    db.commit()
+    logger.info("Inizializzazione del database completata con successo")
 
 def main():
     """Funzione principale per l'inizializzazione del database."""

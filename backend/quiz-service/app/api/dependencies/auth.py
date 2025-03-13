@@ -34,10 +34,10 @@ async def get_current_user(authorization: str = Header(None)) -> TokenData:
     token = authorization.replace("Bearer ", "") if authorization.startswith("Bearer ") else authorization
     
     try:
-        # Verifica il token con l'auth service
-        response = requests.get(
-            f"{settings.AUTH_SERVICE_URL}/api/auth/verify",
-            headers={"Authorization": f"Bearer {token}"}
+        # Verifica il token con l'auth service utilizzando il nuovo endpoint di debug
+        response = requests.post(
+            f"{settings.AUTH_SERVICE_URL}/api/debug/verify-token",
+            json={"token": token}
         )
         
         if response.status_code != 200:

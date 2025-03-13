@@ -24,9 +24,9 @@ async def get_current_user(
 
     try:
         # Chiama il servizio di autenticazione per verificare il token
-        response = requests.get(
-            f"{settings.AUTH_SERVICE_URL}/api/auth/verify-token",
-            headers={"Authorization": f"Bearer {token}"}
+        response = requests.post(
+            f"{settings.AUTH_SERVICE_URL}/api/debug/verify-token",
+            json={"token": token}
         )
 
         if response.status_code != 200:
