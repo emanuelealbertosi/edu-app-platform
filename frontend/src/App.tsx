@@ -35,6 +35,8 @@ const AdminQuizForm = React.lazy(() => import('./pages/admin/AdminQuizForm'));
 // Pagine genitore con caricamento lazy
 const ParentDashboard = React.lazy(() => import('./pages/parent/ParentDashboard'));
 const ManageStudents = React.lazy(() => import('./pages/parent/ManageStudents'));
+const ManagePaths = React.lazy(() => import('./pages/parent/ManagePaths'));
+const AssignPaths = React.lazy(() => import('./pages/parent/AssignPaths'));
 const AssignQuizzes = React.lazy(() => import('./pages/parent/AssignQuizzes'));
 const ManageRewards = React.lazy(() => import('./pages/parent/ManageRewards'));
 
@@ -121,6 +123,16 @@ function App() {
                 <Route path="/parent/quizzes" element={
                   <ProtectedRoute requiredRole="parent">
                     <AssignQuizzes />
+                  </ProtectedRoute>
+                } />
+                <Route path="/parent/paths" element={
+                  <ProtectedRoute requiredRole="parent">
+                    <ManagePaths />
+                  </ProtectedRoute>
+                } />
+                <Route path="/parent/assign-paths" element={
+                  <ProtectedRoute requiredRole="parent">
+                    <AssignPaths />
                   </ProtectedRoute>
                 } />
                 <Route path="/parent/rewards" element={

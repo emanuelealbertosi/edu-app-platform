@@ -52,6 +52,9 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
   - [x] Gestione template percorsi 
   - [x] Gestione template ricompense 
   - [x] Assegnazione percorsi 
+  - [x] Assegnazione di percorsi agli studenti
+  - [x] Assegnazione di quiz ai template di percorsi
+  - [x] Dialog interattivo per la selezione e configurazione dei quiz
 - [x] Interfaccia studenti 
   - [x] Dashboard principale 
   - [x] Visualizzazione percorsi assegnati 
@@ -176,6 +179,16 @@ Il servizio di gestione ricompense è stato validato con:
 - **StudentDashboard**: Visualizza una panoramica dei percorsi assegnati e quiz disponibili, utilizzando dati reali da PathService e QuizService
 - **AssignedPaths**: Visualizza i percorsi educativi assegnati allo studente con funzionalità di filtro e ricerca, utilizzando dati da PathService
 - **TakeQuiz**: Interfaccia completa per lo svolgimento dei quiz, con timer, display delle domande e invio delle risposte, completamente integrata con QuizService
+
+### Interfaccia Genitore
+- **ManagePaths**: Gestione completa dei percorsi educativi con funzionalità di creazione, modifica, eliminazione e assegnazione
+  - Assegnazione percorsi a studenti specifici
+  - Assegnazione quiz ai template di percorso con configurazione personalizzata
+  - Dialog interattivo AddQuizToPathDialog per la selezione e configurazione dei quiz
+- **AddQuizToPathDialog**: Componente riutilizzabile per selezionare quiz e configurare i dettagli del nodo nel percorso
+  - Selezione da una lista di quiz disponibili
+  - Configurazione di titolo personalizzato e data di completamento prevista
+  - Completamente integrato con PathService per l'aggiunta di quiz ai percorsi
 
 ### Gestione Autenticazione
 - **AuthContext**: Gestisce lo stato di autenticazione dell'utente utilizzando AuthService per login, registrazione e logout

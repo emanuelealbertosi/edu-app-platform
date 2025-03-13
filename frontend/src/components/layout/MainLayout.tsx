@@ -83,9 +83,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title }) => {
     menuItems = [
       { text: 'Dashboard', icon: <DashboardIcon />, path: '/parent' },
       { text: 'Studenti', icon: <SchoolIcon />, path: '/parent/students' },
-      { text: 'Template Percorsi', icon: <RouteIcon />, path: '/parent/path-templates' },
-      { text: 'Template Ricompense', icon: <EmojiEventsIcon />, path: '/parent/reward-templates' },
+      { text: 'Gestione Percorsi', icon: <RouteIcon />, path: '/parent/paths' },
       { text: 'Assegna Percorsi', icon: <QuizIcon />, path: '/parent/assign-paths' },
+      { text: 'Gestione Ricompense', icon: <EmojiEventsIcon />, path: '/parent/rewards' },
+      { text: 'Assegna Quiz', icon: <QuizIcon />, path: '/parent/quizzes' },
     ];
   } else if (user?.role === 'student') {
     menuItems = [

@@ -561,7 +561,10 @@ const AdminDashboard: React.FC = () => {
                                     </Typography>
                                     <br />
                                     <Typography component="span" variant="body2" color="text.secondary">
-                                      Quiz: {path.quizIds ? path.quizIds.length : 0} • Difficoltà: {path.difficulty}
+                                      Quiz: {path.additional_data?.quizIds?.length || 0} • Difficoltà: {
+                                        path.difficulty_level >= 4 ? 'Difficile' :
+                                        path.difficulty_level >= 2 ? 'Medio' : 'Facile'
+                                      }
                                     </Typography>
                                   </>
                                 }

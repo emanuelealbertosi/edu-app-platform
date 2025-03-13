@@ -10,17 +10,46 @@ const PATH_API_URL = `${API_URL}/path`;
  * Integra con path-service attraverso l'API Gateway
  */
 
-export interface PathTemplate {
-  id: string;
+export interface PathNodeTemplate {
+  id?: string;
+  uuid?: string;
+  path_template_id?: string;
   title: string;
   description: string;
-  createdBy: string;
-  subject: string;
-  difficulty: 'facile' | 'medio' | 'difficile';
-  estimatedDays: number;
-  quizIds: string[];
-  prerequisites?: string[]; // IDs di altri percorsi prerequisiti
-  skills: string[];
+  node_type: 'quiz' | 'content' | 'task' | 'milestone' | 'reward';
+  points: number;
+  order: number;
+  dependencies?: string[];
+  content?: string; // Per i nodi quiz, questo è l'ID del quiz template
+  estimated_time?: number;
+  additional_data?: {
+    [key: string]: any;
+  };
+}
+
+export interface PathTemplate {
+  id?: string;
+  uuid?: string;
+  title: string;
+  description: string;
+  instructions?: string;
+  difficulty_level: number; // 1-5
+  points?: number;
+  estimated_days: number;
+  is_active?: boolean;
+  is_public?: boolean;
+  additional_data?: {
+    subject?: string;
+    skills?: string[];
+    prerequisites?: string[];
+    quizIds?: string[];
+  };
+  category_id?: number | null;
+  created_by?: string;
+  created_by_role?: string;
+  nodes?: PathNodeTemplate[];
+  created_at?: string;
+  updated_at?: string | null;
 }
 
 export interface Path {
@@ -103,7 +132,10 @@ class PathService {
         return [];
       }
       
-      return await ApiService.get<PathTemplate[]>(`${API_URL}/api/path-templates`);
+      // Usa il percorso relativo corretto, senza includere API_URL che è già incluso in ApiService
+      const response = await ApiService.get<PathTemplate[]>('/api/path-templates');
+      console.log('Template di percorsi caricati:', response);
+      return response;
     } catch (error: any) {
       // L'errore 403 indica che l'utente non ha le autorizzazioni necessarie (es. solo admin)
       if (error.response?.status === 403) {
@@ -114,11 +146,12 @@ class PathService {
         return [];
       }
       
+      console.error('Errore nel recupero dei template di percorsi:', error);
       NotificationsService.error(
-        'Errore nel recupero dei template di percorsi',
-        'Errore'
+        'Si è verificato un errore nel caricamento dei template di percorsi. Riprova più tardi.',
+        'Errore di caricamento'
       );
-      throw error;
+      return [];
     }
   }
 
@@ -135,6 +168,7 @@ class PathService {
    */
   public async createPathTemplate(template: Omit<PathTemplate, 'id'>): Promise<PathTemplate> {
     try {
+      console.log('Creazione template percorso:', template);
       const result = await ApiService.post<PathTemplate>(`${API_URL}/api/path-templates`, template);
       NotificationsService.success(
         `Il percorso "${template.title}" è stato creato con successo.`,
@@ -142,6 +176,7 @@ class PathService {
       );
       return result;
     } catch (error) {
+      console.error('Errore creazione template percorso:', error);
       // ApiService già gestisce la visualizzazione degli errori tramite ApiErrorHandler
       throw error;
     }
@@ -153,6 +188,7 @@ class PathService {
    */
   public async updatePathTemplate(id: string, template: Partial<PathTemplate>): Promise<PathTemplate> {
     try {
+      console.log('Aggiornamento template percorso:', template);
       const result = await ApiService.put<PathTemplate>(`${API_URL}/api/path-templates/${id}`, template);
       NotificationsService.success(
         `Il percorso "${template.title || 'selezionato'}" è stato aggiornato.`,
@@ -160,6 +196,28 @@ class PathService {
       );
       return result;
     } catch (error) {
+      console.error('Errore aggiornamento template percorso:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Cambia la visibilità di un template (pubblico/privato)
+   * Solo il creatore del template può modificare la visibilità
+   */
+  public async toggleTemplateVisibility(id: string, isPublic: boolean): Promise<PathTemplate> {
+    try {
+      const result = await ApiService.put<PathTemplate>(`${API_URL}/api/path-templates/${id}`, {
+        is_public: isPublic
+      });
+      
+      NotificationsService.success(
+        `Il percorso è stato reso ${isPublic ? 'pubblico' : 'privato'}.`,
+        'Visibilità aggiornata'
+      );
+      return result;
+    } catch (error) {
+      console.error('Errore aggiornamento visibilità template:', error);
       throw error;
     }
   }
@@ -204,8 +262,17 @@ class PathService {
    */
   public async assignPath(templateId: string, studentId: string, startDate: Date, targetEndDate: Date): Promise<Path> {
     try {
-      const response = await this.api.post<Path>('/assign', {
-        templateId,
+      console.log("Assegnando percorso con templateId:", templateId, "tipo:", typeof templateId);
+      // Converti templateId in numero e verifica che sia valido
+      const templateIdNum = parseInt(templateId, 10);
+      
+      if (isNaN(templateIdNum)) {
+        throw new Error(`ID template non valido: ${templateId}`);
+      }
+      
+      // Utilizziamo l'API Gateway con il percorso corretto
+      const result = await ApiService.post<Path>(`${API_URL}/api/paths/assign`, {
+        templateId: templateIdNum, // Converti da string a int
         studentId,
         startDate: startDate.toISOString(),
         targetEndDate: targetEndDate.toISOString()
@@ -214,8 +281,9 @@ class PathService {
         'Percorso educativo assegnato con successo allo studente.',
         'Percorso assegnato'
       );
-      return response.data;
+      return result; // ApiService.post restituisce direttamente il risultato, non una risposta AxiosResponse
     } catch (error) {
+      console.error("Errore durante l'assegnazione del percorso:", error);
       throw error;
     }
   }
@@ -314,6 +382,95 @@ class PathService {
   public async getStudentPathStatistics(studentId: string): Promise<PathStatistics[]> {
     const response = await this.api.get<PathStatistics[]>(`/statistics/student/${studentId}`);
     return response.data;
+  }
+  /**
+   * Ottiene tutti i nodi di un template di percorso
+   * @param templateId L'ID del template di percorso
+   */
+  public async getTemplateNodes(templateId: string): Promise<PathNodeTemplate[]> {
+    try {
+      const response = await ApiService.get(`/path-templates/${templateId}/nodes`);
+      return response.data;
+    } catch (error) {
+      console.error(`Errore nel caricamento dei nodi del template ${templateId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Crea un nuovo nodo per un template di percorso
+   * @param templateId L'ID del template di percorso
+   * @param node I dati del nodo da creare
+   */
+  public async createTemplateNode(templateId: string, node: Omit<PathNodeTemplate, 'id' | 'path_template_id'>): Promise<PathNodeTemplate> {
+    try {
+      const response = await ApiService.post(`/path-templates/${templateId}/nodes`, node);
+      return response.data;
+    } catch (error) {
+      console.error(`Errore nella creazione del nodo per il template ${templateId}:`, error);
+      NotificationsService.error('Impossibile creare il nodo. Riprova più tardi.');
+      throw error;
+    }
+  }
+
+  /**
+   * Aggiorna un nodo di un template di percorso
+   * @param nodeId L'ID del nodo da aggiornare
+   * @param nodeData I dati aggiornati del nodo
+   */
+  public async updateTemplateNode(nodeId: string, nodeData: Partial<PathNodeTemplate>): Promise<PathNodeTemplate> {
+    try {
+      const response = await ApiService.put(`/path-templates/nodes/${nodeId}`, nodeData);
+      return response.data;
+    } catch (error) {
+      console.error(`Errore nell'aggiornamento del nodo ${nodeId}:`, error);
+      NotificationsService.error('Impossibile aggiornare il nodo. Riprova più tardi.');
+      throw error;
+    }
+  }
+
+  /**
+   * Elimina un nodo di un template di percorso
+   * @param nodeId L'ID del nodo da eliminare
+   */
+  public async deleteTemplateNode(nodeId: string): Promise<void> {
+    try {
+      await ApiService.delete(`/path-templates/nodes/${nodeId}`);
+    } catch (error) {
+      console.error(`Errore nell'eliminazione del nodo ${nodeId}:`, error);
+      NotificationsService.error('Impossibile eliminare il nodo. Riprova più tardi.');
+      throw error;
+    }
+  }
+
+  /**
+   * Crea un nodo quiz collegando un quiz template a un path template
+   * @param templateId L'ID del template di percorso
+   * @param quizId L'ID del quiz template da collegare
+   * @param nodeData Dati aggiuntivi per il nodo (titolo, descrizione, ecc.)
+   */
+  public async addQuizToPathTemplate(templateId: string, quizId: string, nodeData: Partial<PathNodeTemplate>): Promise<PathNodeTemplate> {
+    try {
+      // Prepara i dati del nodo quiz
+      const quizNode = {
+        title: nodeData.title || 'Quiz',
+        description: nodeData.description || 'Completa questo quiz per procedere',
+        node_type: 'quiz' as const,
+        points: nodeData.points || 10,
+        order: nodeData.order || 1,
+        content: quizId, // L'ID del quiz template
+        estimated_time: nodeData.estimated_time || 30, // Tempo stimato in minuti
+        dependencies: nodeData.dependencies || [],
+        additional_data: nodeData.additional_data || {}
+      };
+      
+      // Crea il nodo
+      return await this.createTemplateNode(templateId, quizNode);
+    } catch (error) {
+      console.error(`Errore nell'aggiunta del quiz ${quizId} al template ${templateId}:`, error);
+      NotificationsService.error('Impossibile aggiungere il quiz al percorso. Riprova più tardi.');
+      throw error;
+    }
   }
 }
 

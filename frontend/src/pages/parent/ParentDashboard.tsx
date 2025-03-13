@@ -391,7 +391,7 @@ const ParentDashboard: React.FC = () => {
                                     </Typography>
                                     <br />
                                     <Typography component="span" variant="body2">
-                                      Quiz: {template.quizIds?.length || 0}
+                                      Quiz: {template.additional_data?.quizIds?.length || 0}
                                     </Typography>
                                   </>
                                 }

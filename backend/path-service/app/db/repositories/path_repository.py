@@ -73,19 +73,55 @@ class PathRepository:
     @staticmethod
     def create(db: Session, path_create: PathCreate) -> Path:
         """Crea un nuovo percorso nel database partendo da un template."""
-        # Ottieni il template del percorso
-        template = db.query(PathTemplate).filter(PathTemplate.id == path_create.template_id).first()
-        if not template:
-            raise ValueError(f"Template di percorso con ID {path_create.template_id} non trovato")
+        import logging
+        logger = logging.getLogger("path-service")
         
-        # Prepara i dati del percorso
-        path_data = path_create.model_dump()
-        
-        # Crea il percorso
-        db_path = Path(**path_data, max_score=template.points)
-        db.add(db_path)
-        db.commit()
-        db.refresh(db_path)
+        try:
+            # Ottieni il template del percorso
+            template = db.query(PathTemplate).filter(PathTemplate.id == path_create.template_id).first()
+            if not template:
+                error_msg = f"Template di percorso con ID {path_create.template_id} non trovato"
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            
+            # Prepara i dati del percorso
+            path_data = path_create.model_dump()
+            logger.debug(f"Dati percorso preparati: {path_data}")
+            
+            # Rimuove campi che non appartengono al modello Path
+            if 'title' in path_data:
+                path_data.pop('title')
+            if 'description' in path_data:
+                path_data.pop('description')
+            
+            logger.debug(f"Dati percorso filtrati: {path_data}")
+            
+            # Crea il percorso
+            db_path = Path(**path_data, max_score=template.points)
+            logger.debug("Oggetto percorso creato")
+            db.add(db_path)
+            logger.debug("Oggetto percorso aggiunto alla sessione")
+            
+            try:
+                db.commit()
+                logger.debug("Commit eseguito")
+            except Exception as e:
+                logger.error(f"Errore durante il commit: {str(e)}")
+                db.rollback()
+                logger.debug("Rollback eseguito")
+                raise
+            
+            try:
+                db.refresh(db_path)
+                logger.debug("Refresh eseguito")
+            except Exception as e:
+                logger.error(f"Errore durante il refresh: {str(e)}")
+                raise
+        except Exception as e:
+            logger.error(f"Errore durante la creazione del percorso: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            raise
         
         # Ottieni tutti i nodi del template
         template_nodes = db.query(PathNodeTemplate).filter(
@@ -179,6 +215,63 @@ class PathRepository:
             PathNode.path_id == path_id
         ).order_by(PathNode.order).all()
     
+    @staticmethod
+    def create_node(db: Session, node_create: PathNodeCreate) -> PathNode:
+        """
+        Crea un nuovo nodo per un percorso specifico.
+        
+        Args:
+            db: Sessione del database
+            node_create: Dati per la creazione del nodo
+            
+        Returns:
+            Il nodo creato
+        """
+        import logging
+        import traceback
+        logger = logging.getLogger("path-service")
+        
+        try:
+            # Log dettagliato
+            logger.debug(f"Creazione nodo con dati: {node_create.model_dump_json()}")
+            
+            # Prepara i dati del nodo
+            node_data = node_create.model_dump()
+            logger.debug(f"Dati nodo preparati")
+            
+            # Imposta lo stato iniziale a NOT_STARTED
+            node_data["status"] = CompletionStatus.NOT_STARTED
+            
+            # Crea il nodo
+            db_node = PathNode(**node_data)
+            logger.debug("Oggetto nodo creato")
+            
+            db.add(db_node)
+            logger.debug("Oggetto nodo aggiunto alla sessione")
+            
+            try:
+                db.commit()
+                logger.debug("Commit eseguito")
+            except Exception as e:
+                logger.error(f"Errore durante il commit del nodo: {str(e)}")
+                db.rollback()
+                logger.debug("Rollback eseguito")
+                raise
+            
+            try:
+                db.refresh(db_node)
+                logger.debug("Refresh eseguito")
+            except Exception as e:
+                logger.error(f"Errore durante il refresh del nodo: {str(e)}")
+                raise
+            
+            return db_node
+            
+        except Exception as e:
+            logger.error(f"Errore durante la creazione del nodo: {str(e)}")
+            logger.error(traceback.format_exc())
+            raise
+        
     @staticmethod
     def update_node_status(db: Session, node_uuid: str, status_update: UpdateNodeStatus) -> Optional[PathNode]:
         """

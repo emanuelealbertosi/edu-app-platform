@@ -227,6 +227,11 @@ class PathBase(BaseModel):
 
 class PathCreate(PathBase):
     template_id: int
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: CompletionStatus
+    started_at: Optional[datetime] = None # Campo corretto nel database
+    deadline: Optional[datetime] = None # Campo corretto nel database
 
 class PathUpdate(PathBase):
     student_id: Optional[str] = None
@@ -271,3 +276,16 @@ class UpdateNodeStatus(BaseModel):
     status: CompletionStatus
     score: Optional[int] = None
     feedback: Optional[str] = None
+
+# Schema per l'assegnazione di un percorso a uno studente
+class PathAssign(BaseModel):
+    templateId: int  # ID del template di percorso da assegnare
+    studentId: str   # ID dello studente a cui assegnare il percorso
+    startDate: datetime  # Data di inizio del percorso
+    targetEndDate: datetime  # Data di fine prevista
+    
+    @field_validator('templateId')
+    def validate_template_id(cls, v):
+        if v == 0 or v is None:
+            raise ValueError("templateId non può essere 0 o nullo")
+        return v
