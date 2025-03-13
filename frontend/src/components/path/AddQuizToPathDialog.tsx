@@ -116,7 +116,13 @@ const AddQuizToPathDialog: React.FC<AddQuizToPathDialogProps> = ({
           </Box>
         ) : availableQuizzes.length === 0 ? (
           <Alert severity="info" sx={{ my: 2 }}>
-            Non ci sono quiz disponibili da aggiungere al percorso.
+            <Typography variant="subtitle1" fontWeight="bold">
+              Non ci sono quiz disponibili da aggiungere al percorso.
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              Per aggiungere quiz ai percorsi, è necessario prima creare alcuni quiz accedendo alla sezione
+              "Gestione Quiz" nel pannello amministrativo. Una volta creati, torneranno disponibili qui.
+            </Typography>
           </Alert>
         ) : (
           <Grid container spacing={3}>

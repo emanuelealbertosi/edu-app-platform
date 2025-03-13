@@ -334,15 +334,23 @@ class QuizService {
       '/api/quiz'
     ];
     
-    // Flag per tracciare se abbiamo già mostrato un messaggio di errore
-    let errorShown = false;
+    console.log('RICHIESTA GET QUIZ TEMPLATES');
     
+    let errorShown = false;
     // Prova ogni percorso in sequenza
     for (const path of possiblePaths) {
       try {
         console.log(`Tentativo di accesso al percorso: ${path}`);
         const rawData = await ApiService.get<any[]>(`${API_URL}${path}`);
+        
         console.log(`Successo con il percorso: ${path}`);
+        console.log(`Ricevuti ${rawData.length} quiz templates`);
+        
+        // Se non abbiamo dati, continua con il percorso successivo
+        if (!rawData || rawData.length === 0) {
+          console.log(`Il percorso ${path} non ha restituito dati, provo il prossimo`);
+          continue;
+        }
         
         // Normalizza i dati ricevuti dal backend
         const normalizedTemplates = rawData.map(item => {

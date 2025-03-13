@@ -434,6 +434,17 @@ const ManagePaths: React.FC = () => {
   // Gestisce l'apertura del dialog per assegnare quiz a un percorso
   const handleOpenQuizDialog = (template: PathTemplate) => {
     setSelectedTemplateForQuiz(template);
+    
+    // Controlla i token di autenticazione prima di aprire il dialog
+    const accessToken = localStorage.getItem('accessToken');
+    const refreshToken = localStorage.getItem('refreshToken');
+    console.log('[DEBUG AUTH] Token disponibili:', { 
+      accessToken: accessToken ? 'presente' : 'mancante',
+      refreshToken: refreshToken ? 'presente' : 'mancante'
+    });
+    
+    // Carica i quiz disponibili quando si apre il dialog
+    loadAvailableQuizzes();
     setOpenQuizDialog(true);
   };
   
@@ -445,17 +456,44 @@ const ManagePaths: React.FC = () => {
   
   // Carica i quiz disponibili
   const loadAvailableQuizzes = async () => {
+    console.log('[DEBUG] Inizio caricamento quiz disponibili');
     setLoadingQuizzes(true);
     try {
+      // Aggiunta log prima della chiamata API
+      console.log('[DEBUG] Chiamata a QuizService.getAllQuizTemplates()');
+      
       const quizzes = await QuizService.getAllQuizTemplates();
+      
+      // Verifica se ci sono quiz ritornati
+      console.log('[DEBUG] Quiz ricevuti:', quizzes?.length || 0);
+      
+      if (!quizzes || quizzes.length === 0) {
+        console.warn('[DEBUG] Nessun quiz trovato dal servizio');
+        NotificationsService.info(
+          'Non ci sono quiz disponibili da aggiungere ai percorsi. Crea prima alcuni quiz nel sistema.',
+          'Nessun quiz disponibile'
+        );
+      }
+      
+      // Dettagli dei quiz per debug
+      if (quizzes && quizzes.length > 0) {
+        console.log('[DEBUG] Dettagli quiz ricevuti:', quizzes.map(q => ({
+          id: q.id,
+          title: q.title,
+          subject: q.subject,
+          questions: q.totalQuestions
+        })));
+      }
+      
       setAvailableQuizzes(quizzes);
     } catch (err) {
-      console.error('Errore nel caricamento dei quiz:', err);
+      console.error('[DEBUG] Errore nel caricamento dei quiz:', err);
       NotificationsService.error(
         'Impossibile caricare la lista dei quiz disponibili. Riprova più tardi.',
         'Errore di caricamento'
       );
     } finally {
+      console.log('[DEBUG] Fine caricamento quiz disponibili');
       setLoadingQuizzes(false);
     }
   };
