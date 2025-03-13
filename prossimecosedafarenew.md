@@ -19,11 +19,12 @@
 
 ## Da Fare a Breve Termine
 
-1. **⚠️ CRITICITÀ: Risolvere problemi di autenticazione JWT**
-   - Risolvere incompatibilità formato tra token frontend e backend
-   - Correggere errori 401 Unauthorized nelle chiamate API
-   - Testare e verificare il corretto funzionamento della soluzione implementata
-   - Problema: Il frontend continua a ricevere errori 401 nonostante le modifiche al backend nella gestione dei token JWT
+1. **✅ RISOLTO: Problemi di autenticazione JWT e 422 Unprocessable Entity in percorsi educativi**
+   - ✅ Risolto incompatibilità formato tra token frontend e backend
+   - ✅ Corretti errori 401 Unauthorized nelle chiamate API
+   - ✅ Aggiornati metodi Pydantic V2 in tutti i servizi (model_dump() al posto di dict())
+   - ✅ Corretto routing per path-templates nell'API gateway
+   - ✅ Aggiornati endpoint nel frontend per utilizzare i percorsi corretti
 
 2. **Completamento Test Esistenti**
    - ✅ Risolvere il test rimanente per la gestione degli errori di login

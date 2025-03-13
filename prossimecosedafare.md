@@ -114,14 +114,14 @@
     - ✅ Fix test integrazione per NotificationsSystem
     - ✅ Fix test per componenti NotificationsList e NotificationsContext
     - 🔄 Correzione test per NotificationsIntegration (gestione errori API)
-    - 🔄 Correzione test AuthService (gestione token e refresh)
+    - ✅ Correzione test AuthService (gestione token JWT e refresh)
   - 🔄 Test unitari per componenti principali:
     - ✅ Test unitari per ParentDashboard
     - ✅ Test unitari per AdminDashboard
     - 🔄 Test unitari per StudentDashboard
   - 🔄 Test end-to-end per flussi critici (auth, quiz, percorsi)
   - 🔄 Mock delle API per test di componenti
-  - 🔄 Verificare funzionamento con diversi ruoli utente
+  - ✅ Verificare funzionamento con diversi ruoli utente
   - 🆕 Unit e Integration Tests:
     - ✅ Test unitari per componenti critici (MainLayout, AuthContext, AuthService)
     - ✅ Test di integrazione per flussi utente (ParentAssignPathFlow, AdminUserManagementFlow)

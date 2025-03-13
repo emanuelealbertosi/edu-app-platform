@@ -256,21 +256,29 @@ Il gateway API funge da punto di ingresso unificato per tutti i servizi backend.
 - `/api/auth/*`: Servizio di autenticazione
 - `/api/quiz/*`: Servizio di gestione quiz
 - `/api/paths/*`: Servizio di gestione percorsi
+- `/api/path-templates/*`: Servizio di gestione template percorsi
 - `/api/rewards/*`: Servizio di gestione ricompense
 - `/api/user-rewards/*`: Servizio di gestione ricompense (user rewards)
 
-## Problemi Noti
+## Problemi Risolti Recentemente
 
-### Autenticazione JWT Frontend-Backend
+### Autenticazione JWT e Endpoint Percorsi Educativi
 
-**Problema**: C'è un'incompatibilità tra il formato dei token JWT tra frontend e backend. Nonostante le modifiche implementate nel backend per garantire che il campo `exp` (expiration) sia un intero e la correzione nel frontend per resettare i token in formato obsoleto, gli utenti continuano a ricevere errori 401 Unauthorized quando tentano di accedere a endpoint protetti.
+**Problema Originale**: Si verificavano due problemi critici nel sistema:
+1. Incompatibilità tra il formato dei token JWT tra frontend e backend, causando errori 401 Unauthorized
+2. Errori 422 Unprocessable Entity quando si accedeva agli endpoint dei template di percorsi educativi
 
-**Tentativo di soluzione implementato**:
-- Nel backend: Modificato il formato del campo `exp` da float a integer in `create_access_token` e `create_refresh_token`
-- Nel backend: Aggiunta verifica manuale della scadenza con tolleranza di 10 secondi
-- Nel frontend: Aggiunto meccanismo per identificare token in formato obsoleto e forzare il reset
+**Soluzione Implementata**:
+1. Per i problemi JWT:
+   - Nel backend: Modificato il formato del campo `exp` da float a integer in `create_access_token` e `create_refresh_token`
+   - Aggiornati i metodi di verifica token con `model_dump()` in tutti i servizi per compatibilità Pydantic V2
 
-**Status**: In attesa di risoluzione completa. ⚠️ Questa criticita' e' attualmente in cima alla lista delle priorita' di sviluppo.
+2. Per i problemi degli endpoint dei percorsi educativi:
+   - Corretto il routing nell'API gateway aggiungendo `/api/path-templates/*` come percorso verso il path-service
+   - Aggiornati i metodi `.dict()` a `.model_dump()` nel repository dei template di percorsi
+   - Aggiornati gli endpoint nel servizio frontend PathService.ts
+
+**Status**: ✅ RISOLTO. I test confermano che entrambi i problemi sono stati completamente risolti.
 
 ## Come Iniziare
 

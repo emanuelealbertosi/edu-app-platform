@@ -103,7 +103,7 @@ class PathService {
         return [];
       }
       
-      return await ApiService.get<PathTemplate[]>(`${API_URL}/api/paths/templates`);
+      return await ApiService.get<PathTemplate[]>(`${API_URL}/api/path-templates`);
     } catch (error: any) {
       // L'errore 403 indica che l'utente non ha le autorizzazioni necessarie (es. solo admin)
       if (error.response?.status === 403) {
@@ -126,7 +126,7 @@ class PathService {
    * Ottiene un template di percorso specifico per ID
    */
   public async getPathTemplate(id: string): Promise<PathTemplate> {
-    return await ApiService.get<PathTemplate>(`${API_URL}/api/paths/templates/${id}`);
+    return await ApiService.get<PathTemplate>(`${API_URL}/api/path-templates/${id}`);
   }
 
   /**
@@ -135,7 +135,7 @@ class PathService {
    */
   public async createPathTemplate(template: Omit<PathTemplate, 'id'>): Promise<PathTemplate> {
     try {
-      const result = await ApiService.post<PathTemplate>(`${API_URL}/api/paths/templates`, template);
+      const result = await ApiService.post<PathTemplate>(`${API_URL}/api/path-templates`, template);
       NotificationsService.success(
         `Il percorso "${template.title}" è stato creato con successo.`,
         'Percorso creato'
@@ -153,7 +153,7 @@ class PathService {
    */
   public async updatePathTemplate(id: string, template: Partial<PathTemplate>): Promise<PathTemplate> {
     try {
-      const result = await ApiService.put<PathTemplate>(`${API_URL}/api/paths/templates/${id}`, template);
+      const result = await ApiService.put<PathTemplate>(`${API_URL}/api/path-templates/${id}`, template);
       NotificationsService.success(
         `Il percorso "${template.title || 'selezionato'}" è stato aggiornato.`,
         'Percorso aggiornato'
@@ -170,7 +170,7 @@ class PathService {
    */
   public async deletePathTemplate(id: string): Promise<void> {
     try {
-      await ApiService.delete(`${API_URL}/api/paths/templates/${id}`);
+      await ApiService.delete(`${API_URL}/api/path-templates/${id}`);
       NotificationsService.success(
         'Il percorso è stato eliminato con successo.',
         'Percorso eliminato'

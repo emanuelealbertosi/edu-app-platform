@@ -33,6 +33,7 @@ class Settings(BaseSettings):
         "/api/auth": AUTH_SERVICE_URL,
         "/api/quiz": QUIZ_SERVICE_URL,
         "/api/paths": PATH_SERVICE_URL,
+        "/api/path-templates": PATH_SERVICE_URL,
         "/api/rewards": REWARD_SERVICE_URL,
         "/api/user-rewards": REWARD_SERVICE_URL
     }

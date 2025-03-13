@@ -34,16 +34,25 @@ def verify_token(token: str) -> Dict:
     """
     try:
         # Verifica il token con il servizio di autenticazione
-        auth_service_url = f"{settings.AUTH_SERVICE_URL}/api/auth/verify-token"
+        auth_service_url = f"{settings.AUTH_SERVICE_URL}/api/debug/verify-token"
         response = requests.post(
             auth_service_url,
             json={"token": token}
         )
         
         if response.status_code != 200:
+            # Riporta dettagli più specifici sull'errore
+            error_detail = "Token non valido o scaduto"
+            try:
+                error_data = response.json()
+                if "detail" in error_data:
+                    error_detail = error_data["detail"]
+            except:
+                pass
+                
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token non valido o scaduto",
+                detail=error_detail,
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
@@ -104,7 +113,7 @@ def get_current_user(
         )
         
         # Converti in dizionario per essere compatibile con il resto del codice
-        return user_data.dict()
+        return user_data.model_dump()
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

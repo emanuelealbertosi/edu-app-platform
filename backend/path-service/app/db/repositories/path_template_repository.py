@@ -134,7 +134,7 @@ class PathTemplateRepository:
     @staticmethod
     def add_node(db: Session, path_template_id: int, node_create: PathNodeTemplateCreate) -> PathNodeTemplate:
         """Aggiunge un nodo a un template di percorso."""
-        node_data = node_create.dict()
+        node_data = node_create.model_dump()
         
         # Crea il nodo
         db_node = PathNodeTemplate(**node_data, path_template_id=path_template_id)
@@ -148,7 +148,7 @@ class PathTemplateRepository:
     def update_node(db: Session, node: PathNodeTemplate, node_update: PathNodeTemplateUpdate) -> PathNodeTemplate:
         """Aggiorna un nodo di un template di percorso."""
         # Aggiorna solo i campi forniti
-        update_data = node_update.dict(exclude_unset=True)
+        update_data = node_update.model_dump(exclude_unset=True)
         
         for field, value in update_data.items():
             setattr(node, field, value)
