@@ -107,3 +107,21 @@ async def get_current_student_user(
         )
     
     return current_user
+
+def get_current_user_with_role(allowed_roles: list[str]):
+    """
+    Factory function che restituisce una dipendenza per verificare che l'utente abbia uno dei ruoli specificati.
+    Esempio: get_current_user_with_role(["admin", "parent"])
+    """
+    async def _get_user_with_role(
+        current_user: User = Depends(get_current_active_user)
+    ) -> User:
+        # Verifica se l'utente ha almeno uno dei ruoli richiesti
+        if not any(role.name in allowed_roles for role in current_user.roles):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permessi insufficienti. È richiesto uno dei seguenti ruoli: {', '.join(allowed_roles)}.",
+            )
+        return current_user
+    
+    return _get_user_with_role

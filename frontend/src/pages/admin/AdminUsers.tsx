@@ -27,25 +27,33 @@ import MainLayout from '../../components/layouts/MainLayout';
 import HoverAnimation from '../../components/animations/HoverAnimation';
 import { ApiErrorHandler } from '../../services/ApiErrorHandler';
 import { NotificationsService } from '../../services/NotificationsService';
+import UserService, { User } from '../../services/UserService';
 
-interface User {
-  id: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  role: 'admin' | 'parent' | 'student';
+// Utilizzo l'interfaccia User dal UserService, con alcune personalizzazioni per la UI
+interface UserDisplay extends Omit<User, 'lastLogin' | 'active' | 'createdAt' | 'role'> {
   lastLogin?: string;
   status: 'active' | 'inactive' | 'pending';
+  role: string; // Permettiamo qualsiasi valore di ruolo che verrà poi convertito nella visualizzazione
 }
 
 const AdminUsers: React.FC = () => {
-  const [users, setUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserDisplay[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchQuery, setSearchQuery] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [userToDelete, setUserToDelete] = useState<UserDisplay | null>(null);
+  // Stato per il dialog di modifica
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [userToEdit, setUserToEdit] = useState<UserDisplay | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    role: 'student',
+    status: 'active' as 'active' | 'inactive' | 'pending'
+  });
 
   useEffect(() => {
     fetchUsers();
@@ -54,64 +62,75 @@ const AdminUsers: React.FC = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      // Simulazione chiamata API
-      // const response = await UserService.getAllUsers();
-      // setUsers(response.data);
+      // Utilizziamo il servizio API reale per ottenere tutti gli utenti
+      const usersData = await UserService.getAllUsers();
+      console.log('Utenti ricevuti dal backend:', usersData); // Debug per vedere i dati ricevuti
       
-      // Dati di esempio
-      setTimeout(() => {
-        const mockUsers: User[] = [
-          { 
-            id: '1', 
-            email: 'admin@example.com', 
-            firstName: 'Admin', 
-            lastName: 'User', 
-            role: 'admin',
-            lastLogin: '2023-05-15T10:30:00',
-            status: 'active'
-          },
-          { 
-            id: '2', 
-            email: 'parent1@example.com', 
-            firstName: 'Marco', 
-            lastName: 'Rossi', 
-            role: 'parent',
-            lastLogin: '2023-05-14T14:22:00',
-            status: 'active'
-          },
-          { 
-            id: '3', 
-            email: 'parent2@example.com', 
-            firstName: 'Laura', 
-            lastName: 'Bianchi', 
-            role: 'parent',
-            lastLogin: '2023-05-13T09:15:00',
-            status: 'active'
-          },
-          { 
-            id: '4', 
-            email: 'student1@example.com', 
-            firstName: 'Luca', 
-            lastName: 'Verdi', 
-            role: 'student',
-            lastLogin: '2023-05-12T16:40:00',
-            status: 'active'
-          },
-          { 
-            id: '5', 
-            email: 'student2@example.com', 
-            firstName: 'Sara', 
-            lastName: 'Neri', 
-            role: 'student',
-            lastLogin: '2023-05-10T11:05:00',
-            status: 'inactive'
+      // Convertiamo i dati degli utenti nel formato richiesto dalla UI
+      const formattedUsers: UserDisplay[] = usersData.map(user => {
+        console.log('Dati utente completi:', JSON.stringify(user, null, 2)); // Log dettagliato
+        
+        // Estrai il ruolo, gestendo sia array di ruoli che singoli ruoli
+        let userRole = 'student'; // Valore predefinito
+        
+        // Log dettagliato per il campo ruolo
+        console.log('Analisi ruolo per', user.email, ':', { 
+          role: user.role, 
+          rolesArray: Array.isArray(user.role) ? user.role : 'non è un array',
+          roleType: typeof user.role,
+          hasRolesProperty: !!(user as any).roles,
+          rolesPropertyValue: (user as any).roles
+        });
+        
+        // Gestione di tutte le possibili strutture di ruoli
+        if (Array.isArray(user.role)) {
+          // Se role è un array di stringhe
+          if (user.role.includes('admin')) {
+            userRole = 'admin';
+          } else if (user.role.includes('parent')) {
+            userRole = 'parent';
+          } else if (user.role.includes('student')) {
+            userRole = 'student';
           }
-        ];
-        setUsers(mockUsers);
-        setLoading(false);
-      }, 1000);
+        } else if (Array.isArray((user as any).roles)) {
+          // Se c'è una proprietà roles che è un array
+          const rolesArray = (user as any).roles;
+          if (rolesArray.some((r: any) => r === 'admin' || r.name === 'admin')) {
+            userRole = 'admin';
+          } else if (rolesArray.some((r: any) => r === 'parent' || r.name === 'parent')) {
+            userRole = 'parent';
+          } else if (rolesArray.some((r: any) => r === 'student' || r.name === 'student')) {
+            userRole = 'student';
+          }
+        } else if (typeof user.role === 'string') {
+          // Se role è una stringa semplice
+          if (user.role === 'admin') {
+            userRole = 'admin';
+          } else if (user.role === 'parent') {
+            userRole = 'parent';
+          } else if (user.role === 'student') {
+            userRole = 'student';
+          }
+        }
+        
+        return {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName || user.username || '', 
+          lastName: user.lastName || '',
+          role: userRole, // Usiamo il ruolo estratto
+          // Gestiamo correttamente l'ultimo accesso, verificando vari formati possibili
+          lastLogin: determineLastLogin(user),
+          // Convertiamo correttamente lo stato attivo/inattivo
+          status: (user.active === true || (user as any).is_active === true) ? 'active' : 'inactive'
+        };
+      });
+      
+      setUsers(formattedUsers);
     } catch (error) {
       ApiErrorHandler.handleApiError(error);
+      NotificationsService.error('Impossibile caricare gli utenti', 'Errore');
+    } finally {
       setLoading(false);
     }
   };
@@ -130,22 +149,67 @@ const AdminUsers: React.FC = () => {
     setPage(0);
   };
 
-  const handleDeleteClick = (user: User) => {
+  const handleDeleteClick = (user: UserDisplay) => {
     setUserToDelete(user);
     setDeleteDialogOpen(true);
+  };
+
+  // Funzione per aprire il dialog di modifica
+  const handleEditClick = (user: UserDisplay) => {
+    setUserToEdit(user);
+    setEditFormData({
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      email: user.email,
+      role: user.role,
+      status: user.status
+    });
+    setEditDialogOpen(true);
+  };
+  
+  // Funzione per salvare le modifiche all'utente
+  const handleEditConfirm = async () => {
+    if (!userToEdit) return;
+    
+    try {
+      // Log per debug
+      console.log('Utente da aggiornare:', userToEdit);
+      
+      // Prepara i dati da inviare al backend
+      const userData = {
+        id: userToEdit.id,
+        first_name: editFormData.firstName,  // Usiamo il formato snake_case per il backend
+        last_name: editFormData.lastName,    // Usiamo il formato snake_case per il backend
+        email: editFormData.email,
+        role: editFormData.role as 'admin' | 'parent' | 'student',
+        is_active: editFormData.status === 'active'  // Usiamo il formato snake_case per il backend
+      };
+      
+      console.log('Dati da inviare al backend:', userData);
+      
+      // Chiamata all'API per aggiornare l'utente
+      await UserService.updateUser(userData);
+      
+      // Chiudi il dialog e aggiorna la lista degli utenti
+      setEditDialogOpen(false);
+      NotificationsService.success('Utente aggiornato con successo');
+      fetchUsers();
+    } catch (error) {
+      ApiErrorHandler.handleApiError(error);
+      NotificationsService.error('Impossibile aggiornare l\'utente', 'Errore');
+    }
   };
 
   const handleDeleteConfirm = async () => {
     if (!userToDelete) return;
     
     try {
-      // Simulazione chiamata API
-      // await UserService.deleteUser(userToDelete.id);
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Utilizziamo la chiamata API reale per disattivare l'utente
+      await UserService.deactivateUser(userToDelete.id);
       
-      // Aggiorna la lista degli utenti rimuovendo quello cancellato
-      setUsers(users.filter(user => user.id !== userToDelete.id));
-      NotificationsService.success(`Utente ${userToDelete.firstName} ${userToDelete.lastName} eliminato con successo`);
+      // Aggiorna la lista degli utenti dopo la disattivazione
+      fetchUsers();
+      NotificationsService.success(`Utente ${userToDelete.firstName} ${userToDelete.lastName} disattivato con successo`);
     } catch (error) {
       ApiErrorHandler.handleApiError(error);
     } finally {
@@ -193,6 +257,75 @@ const AdminUsers: React.FC = () => {
       default:
         return <Chip label={status} size="small" />;
     }
+  };
+
+  // Funzione helper per determinare l'ultimo accesso
+  const determineLastLogin = (user: any): string | undefined => {
+    console.log('Verifica lastLogin per', user.email, ':', {
+      lastLogin: user.lastLogin,
+      lastLoginType: typeof user.lastLogin,
+      last_login: (user as any).last_login,
+      last_login_type: typeof (user as any).last_login,
+      updated_at: (user as any).updated_at,
+      updatedAt: (user as any).updatedAt,
+      created_at: (user as any).created_at,
+      createdAt: (user as any).createdAt
+    });
+    
+    // Controlliamo vari formati possibili
+    if (user.lastLogin) {
+      if (typeof user.lastLogin === 'string') {
+        return user.lastLogin; // Già stringa ISO
+      } else if (user.lastLogin instanceof Date) {
+        return user.lastLogin.toISOString();
+      } else if (typeof user.lastLogin === 'object') {
+        // Potrebbe essere in un formato non standard ma con proprietà date/time
+        console.log('lastLogin è un oggetto:', user.lastLogin);
+      }
+    }
+    
+    // Controlliamo last_login in snake_case
+    if ((user as any).last_login) {
+      const lastLogin = (user as any).last_login;
+      if (typeof lastLogin === 'string') {
+        return lastLogin;
+      } else if (lastLogin instanceof Date) {
+        return lastLogin.toISOString();
+      }
+    }
+    
+    // Controlliamo updated_at/updatedAt come fallback
+    if ((user as any).updated_at) {
+      return typeof (user as any).updated_at === 'string' 
+        ? (user as any).updated_at 
+        : new Date((user as any).updated_at).toISOString();
+    }
+    
+    if (user.updatedAt) {
+      return typeof user.updatedAt === 'string' 
+        ? user.updatedAt 
+        : new Date(user.updatedAt).toISOString();
+    }
+    
+    // Usiamo created_at/createdAt come ultimo fallback
+    if ((user as any).created_at) {
+      return typeof (user as any).created_at === 'string' 
+        ? (user as any).created_at 
+        : new Date((user as any).created_at).toISOString();
+    }
+    
+    if (user.createdAt) {
+      return typeof user.createdAt === 'string' 
+        ? user.createdAt 
+        : new Date(user.createdAt).toISOString();
+    }
+    
+    // Prova a verificare se esiste una data di creazione nel formato UTC timestamp
+    if ((user as any).created_at_utc) {
+      return new Date((user as any).created_at_utc * 1000).toISOString();
+    }
+    
+    return undefined; // Nessun accesso trovato
   };
 
   return (
@@ -250,19 +383,37 @@ const AdminUsers: React.FC = () => {
                       .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
                       .map((user) => (
                         <TableRow key={user.id}>
-                          <TableCell>{`${user.firstName} ${user.lastName}`}</TableCell>
+                          <TableCell>
+                            {user.firstName || user.lastName
+                              ? `${user.firstName || ''} ${user.lastName || ''}`.trim()
+                              : user.username || user.email.split('@')[0] || 'Utente'}
+                          </TableCell>
                           <TableCell>{user.email}</TableCell>
                           <TableCell>{getRoleLabel(user.role)}</TableCell>
                           <TableCell>{getStatusLabel(user.status)}</TableCell>
                           <TableCell>
                             {user.lastLogin 
-                              ? new Date(user.lastLogin).toLocaleString('it-IT', {
-                                  day: '2-digit',
-                                  month: '2-digit',
-                                  year: 'numeric',
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })
+                              ? (() => {
+                                  try {
+                                    // Tenta di creare una data valida
+                                    const date = new Date(user.lastLogin);
+                                    // Verifica che la data sia valida
+                                    if (isNaN(date.getTime())) {
+                                      console.error('Data non valida:', user.lastLogin);
+                                      return 'Data non valida';
+                                    }
+                                    return date.toLocaleString('it-IT', {
+                                      day: '2-digit',
+                                      month: '2-digit',
+                                      year: 'numeric',
+                                      hour: '2-digit',
+                                      minute: '2-digit'
+                                    });
+                                  } catch (error) {
+                                    console.error('Errore nel parsing della data:', error);
+                                    return 'Errore data';
+                                  }
+                                })()
                               : 'Mai'}
                           </TableCell>
                           <TableCell align="right">
@@ -270,6 +421,7 @@ const AdminUsers: React.FC = () => {
                               aria-label="modifica"
                               color="primary"
                               size="small"
+                              onClick={() => handleEditClick(user)}
                             >
                               <EditIcon fontSize="small" />
                             </IconButton>
@@ -328,6 +480,82 @@ const AdminUsers: React.FC = () => {
             </Button>
             <Button onClick={handleDeleteConfirm} color="error" autoFocus>
               Elimina
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Dialog per la modifica degli utenti */}
+        <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)}>
+          <DialogTitle>Modifica Utente</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              Modifica i dati dell'utente
+            </DialogContentText>
+            <Box sx={{ mt: 2 }}>
+              <TextField
+                label="Nome"
+                fullWidth
+                margin="normal"
+                value={editFormData.firstName}
+                onChange={(e) => setEditFormData({...editFormData, firstName: e.target.value})}
+              />
+              <TextField
+                label="Cognome"
+                fullWidth
+                margin="normal"
+                value={editFormData.lastName}
+                onChange={(e) => setEditFormData({...editFormData, lastName: e.target.value})}
+              />
+              <TextField
+                label="Email"
+                fullWidth
+                margin="normal"
+                type="email"
+                value={editFormData.email}
+                onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
+              />
+              <TextField
+                select
+                label="Ruolo"
+                fullWidth
+                margin="normal"
+                value={editFormData.role}
+                onChange={(e) => setEditFormData({...editFormData, role: e.target.value})}
+                SelectProps={{
+                  native: true,
+                }}
+              >
+                <option value="admin">Amministratore</option>
+                <option value="parent">Genitore</option>
+                <option value="student">Studente</option>
+              </TextField>
+              <TextField
+                select
+                label="Stato"
+                fullWidth
+                margin="normal"
+                value={editFormData.status}
+                onChange={(e) => setEditFormData({
+                  ...editFormData, 
+                  status: e.target.value as 'active' | 'inactive' | 'pending'
+                })}
+                SelectProps={{
+                  native: true,
+                }}
+              >
+                <option value="active">Attivo</option>
+                <option value="inactive">Inattivo</option>
+              </TextField>
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setEditDialogOpen(false)}>Annulla</Button>
+            <Button 
+              onClick={handleEditConfirm} 
+              color="primary"
+              variant="contained"
+            >
+              Salva
             </Button>
           </DialogActions>
         </Dialog>

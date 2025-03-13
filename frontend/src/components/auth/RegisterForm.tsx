@@ -33,6 +33,8 @@ interface FormState {
     email?: string;
     password?: string;
     confirmPassword?: string;
+    firstName?: string;
+    lastName?: string;
     role?: string;
     general?: string;
   };
@@ -87,12 +89,22 @@ const RegisterForm: React.FC = () => {
       errors.password = "La password è obbligatoria";
       isValid = false;
     } else if (formState.password.length < 8) {
-      errors.password = "La password deve contenere almeno 8 caratteri";
+      errors.password = "⚠️ La password deve contenere almeno 8 caratteri";
       isValid = false;
     }
 
     if (formState.password !== formState.confirmPassword) {
       errors.confirmPassword = "Le password non corrispondono";
+      isValid = false;
+    }
+
+    if (!formState.firstName) {
+      errors.firstName = "Il nome è obbligatorio";
+      isValid = false;
+    }
+
+    if (!formState.lastName) {
+      errors.lastName = "Il cognome è obbligatorio";
       isValid = false;
     }
 
@@ -145,8 +157,8 @@ const RegisterForm: React.FC = () => {
         email: formState.email,
         password: formState.password,
         role: formState.role as 'admin' | 'parent' | 'student', // Cast per garantire che non sia vuoto
-        firstName: formState.firstName || "", // Default a stringa vuota invece di undefined
-        lastName: formState.lastName || "", // Default a stringa vuota invece di undefined
+        firstName: formState.firstName, // Utilizziamo camelCase come previsto dall'interfaccia
+        lastName: formState.lastName, // Utilizziamo camelCase come previsto dall'interfaccia
       });
       
       setRegistrationSuccess(true);
@@ -316,7 +328,7 @@ const RegisterForm: React.FC = () => {
               value={formState.password}
               onChange={handleChange}
               error={!!formState.errors.password}
-              helperText={formState.errors.password}
+              helperText={formState.errors.password || 'La password deve contenere almeno 8 caratteri'}
               disabled={loading}
               InputProps={{
                 endAdornment: (
@@ -391,24 +403,30 @@ const RegisterForm: React.FC = () => {
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
+                  required
                   id="firstName"
                   label="Nome"
                   name="firstName"
                   autoComplete="given-name"
                   value={formState.firstName}
                   onChange={handleChange}
+                  error={!!formState.errors.firstName}
+                  helperText={formState.errors.firstName}
                   disabled={loading}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
                   fullWidth
+                  required
                   id="lastName"
                   label="Cognome"
                   name="lastName"
                   autoComplete="family-name"
                   value={formState.lastName}
                   onChange={handleChange}
+                  error={!!formState.errors.lastName}
+                  helperText={formState.errors.lastName}
                   disabled={loading}
                 />
               </Grid>

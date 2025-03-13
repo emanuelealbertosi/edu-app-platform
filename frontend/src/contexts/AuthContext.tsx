@@ -18,7 +18,7 @@ interface AuthContextType {
   sessionStatus: 'active' | 'expired' | 'invalid';
   login: (email: string, password: string) => Promise<void>;
   register: (userData: {
-    username: string; // Aggiunto username per compatibilità con RegisterForm
+    username: string;
     email: string;
     password: string;
     firstName: string;
@@ -146,6 +146,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   };
 
   const register = async (userData: {
+    username: string;
     email: string;
     password: string;
     firstName: string;

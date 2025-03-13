@@ -32,6 +32,7 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    role: Optional[str] = 'student'  # Aggiungiamo il campo ruolo con default 'student'
     
     @validator('password')
     def password_min_length(cls, v):
@@ -44,6 +45,13 @@ class UserCreate(UserBase):
         if not v.isalnum():
             raise ValueError('Username must be alphanumeric')
         return v
+    
+    @validator('role')
+    def validate_role(cls, v):
+        valid_roles = ['admin', 'parent', 'student']
+        if v not in valid_roles:
+            raise ValueError(f'Role must be one of: {valid_roles}')
+        return v
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
@@ -52,6 +60,16 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     password: Optional[str] = None
     is_active: Optional[bool] = None
+    role: Optional[str] = None  # Aggiungiamo il campo role per consentire la modifica del ruolo
+    
+    @validator('role')
+    def validate_role(cls, v):
+        if v is None:
+            return v
+        valid_roles = ['admin', 'parent', 'student']
+        if v not in valid_roles:
+            raise ValueError(f'Role must be one of: {valid_roles}')
+        return v
 
 class UserInDBBase(UserBase):
     id: int

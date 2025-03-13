@@ -199,15 +199,27 @@ async def register(
             detail="Username già utilizzato",
         )
     
-    # Ottieni il ruolo studente di default
-    student_role = RoleRepository.get_by_name(db, "student")
-    if not student_role:
-        # Se non esiste il ruolo, crea i ruoli predefiniti
-        roles = RoleRepository.get_or_create_default_roles(db)
-        student_role = next((role for role in roles if role.name == "student"), None)
+    # Assicurati che tutti i ruoli predefiniti esistano
+    roles = RoleRepository.get_or_create_default_roles(db)
     
-    # Crea l'utente con il ruolo studente
-    user = UserRepository.create(db, user_data, [student_role])
+    # Controlla se l'utente ha specificato un ruolo valido
+    requested_role = user_data.role if hasattr(user_data, 'role') else None
+    
+    # Log per debugging
+    print(f"Ruolo richiesto dall'utente: {requested_role}")
+    
+    # Ottieni il ruolo specificato dall'utente oppure usa student come fallback
+    if requested_role and requested_role in ["admin", "parent", "student"]:
+        selected_role = RoleRepository.get_by_name(db, requested_role)
+        # Log per debugging
+        print(f"Ruolo selezionato: {selected_role.name if selected_role else 'None'}")
+    else:
+        # Fallback al ruolo student se il ruolo specificato non è valido
+        selected_role = RoleRepository.get_by_name(db, "student")
+        print(f"Usando ruolo student come fallback")
+    
+    # Crea l'utente con il ruolo selezionato
+    user = UserRepository.create(db, user_data, [selected_role])
     
     return user
 

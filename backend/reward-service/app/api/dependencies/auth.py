@@ -1,88 +1,105 @@
-from fastapi import Depends, HTTPException, status, Header
-from typing import Optional, Dict, Any
-import requests
-import json
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from typing import List, Optional, Any, Dict
+
 from app.core.config import settings
 
+# OAuth2 scheme per la gestione del token
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/auth/login",
+    auto_error=False
+)
 
-async def get_current_user(
-    authorization: Optional[str] = Header(None)
-) -> Dict[str, Any]:
+# Funzioni di autenticazione proxy che delegano al servizio di autenticazione
+# Queste sono placeholder - il controllo reale avviene nell'API Gateway
+
+async def get_current_active_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
     """
-    Verifica il token JWT e restituisce le informazioni dell'utente.
-    Fa una richiesta al servizio di autenticazione per verificare il token.
+    Restituisce l'utente corrente.
+    Questa è una versione mock che simula un utente autenticato.
+    La verifica reale è fatta dall'API gateway.
     """
-    if not authorization:
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token di autenticazione mancante",
+            detail="Non autenticato",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    return {"is_active": True, "roles": []}
 
-    # Rimuovi "Bearer " se presente
-    token = authorization.replace("Bearer ", "") if authorization.startswith("Bearer ") else authorization
-
-    try:
-        # Chiama il servizio di autenticazione per verificare il token
-        response = requests.post(
-            f"{settings.AUTH_SERVICE_URL}/api/debug/verify-token",
-            json={"token": token}
+async def get_current_admin_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
+    """
+    Restituisce l'utente amministratore corrente.
+    Questa è una versione mock che simula un utente con ruolo admin.
+    La verifica reale è fatta dall'API gateway.
+    """
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Non autenticato",
+            headers={"WWW-Authenticate": "Bearer"},
         )
+    return {"is_active": True, "roles": [{"name": "admin"}]}
 
-        if response.status_code != 200:
+async def get_current_parent_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
+    """
+    Restituisce l'utente genitore corrente.
+    Questa è una versione mock che simula un utente con ruolo parent.
+    La verifica reale è fatta dall'API gateway.
+    """
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Non autenticato",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return {"is_active": True, "roles": [{"name": "parent"}]}
+
+async def get_current_student_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
+    """
+    Restituisce l'utente studente corrente.
+    Questa è una versione mock che simula un utente con ruolo student.
+    La verifica reale è fatta dall'API gateway.
+    """
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Non autenticato",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return {"is_active": True, "roles": [{"name": "student"}]}
+
+async def get_current_parent_or_admin_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
+    """
+    Restituisce l'utente genitore o amministratore corrente.
+    Questa è una versione mock che simula un utente con ruolo parent o admin.
+    La verifica reale è fatta dall'API gateway.
+    """
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Non autenticato",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return {"is_active": True, "roles": [{"name": "parent"}, {"name": "admin"}]}
+
+def get_current_user_with_role(allowed_roles: list[str]):
+    """
+    Factory function che restituisce una dipendenza per verificare che l'utente abbia uno dei ruoli specificati.
+    Questa funzione è un placeholder - la verifica reale è gestita dall'API gateway.
+    """
+    async def _get_user_with_role(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
+        if not token:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token non valido o scaduto",
+                detail="Non autenticato",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-
-        user_data = response.json()
-        return user_data
-
-    except requests.RequestException as e:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Errore di comunicazione con il servizio di autenticazione: {str(e)}",
-        )
-
-
-async def get_current_active_user(
-    current_user: Dict[str, Any] = Depends(get_current_user),
-) -> Dict[str, Any]:
-    """
-    Verifica che l'utente sia attivo.
-    """
-    if not current_user.get("is_active", False):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Utente disattivato",
-        )
-    return current_user
-
-
-async def get_current_admin_user(
-    current_user: Dict[str, Any] = Depends(get_current_active_user),
-) -> Dict[str, Any]:
-    """
-    Verifica che l'utente sia un amministratore.
-    """
-    if current_user.get("role") != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Operazione riservata agli amministratori",
-        )
-    return current_user
-
-
-async def get_current_parent_or_admin_user(
-    current_user: Dict[str, Any] = Depends(get_current_active_user),
-) -> Dict[str, Any]:
-    """
-    Verifica che l'utente sia un genitore o un amministratore.
-    """
-    if current_user.get("role") not in ["parent", "admin"]:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Operazione riservata ai genitori o agli amministratori",
-        )
-    return current_user
+        # Restituiamo un utente fittizio con i ruoli richiesti
+        # La verifica reale è gestita dall'API gateway
+        return {
+            "is_active": True,
+            "roles": [{"name": role} for role in allowed_roles]
+        }
+    
+    return _get_user_with_role

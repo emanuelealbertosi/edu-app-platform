@@ -85,6 +85,9 @@ async def update_user(
     """
     Aggiorna un utente esistente (solo amministratori).
     """
+    # Log per debug
+    print(f"Richiesta di aggiornamento utente {user_id} con dati: {user_data}")
+    
     user = UserRepository.get(db, user_id)
     if not user:
         raise HTTPException(
@@ -107,8 +110,45 @@ async def update_user(
                 detail="Username già utilizzato",
             )
     
+    # Gestione del ruolo se specificato
+    role_name = user_data.role
+    role_to_set = None
+    
+    if role_name:
+        print(f"Cambio ruolo richiesto a: {role_name}")
+        # Recupera il ruolo corrispondente dal database
+        # RoleRepository utilizza metodi statici, non richiede inizializzazione
+        role_to_set = RoleRepository.get_by_name(db, role_name)
+        
+        if not role_to_set:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Ruolo '{role_name}' non trovato",
+            )
+        
+        # Rimuovi il campo role da user_data per evitare errori durante l'aggiornamento
+        # poiché non è una colonna diretta del modello User
+        user_data_dict = user_data.dict(exclude_unset=True)
+        if "role" in user_data_dict:
+            del user_data_dict["role"]
+        user_data = UserUpdate(**user_data_dict)
+    
     # Aggiorna l'utente
     updated_user = UserRepository.update(db, user, user_data)
+    
+    # Aggiorna il ruolo dell'utente se necessario
+    if role_to_set:
+        print(f"Aggiornamento ruolo utente a: {role_name}")
+        # Rimuovi tutti i ruoli esistenti
+        updated_user.roles = []
+        db.add(updated_user)
+        db.commit()
+        
+        # Aggiungi il nuovo ruolo
+        updated_user.roles = [role_to_set]
+        db.add(updated_user)
+        db.commit()
+        db.refresh(updated_user)
     
     return updated_user
 

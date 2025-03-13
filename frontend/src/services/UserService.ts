@@ -132,10 +132,18 @@ class UserService {
 
   /**
    * Aggiorna un utente esistente (solo admin)
+   * @param userData - Dati utente da aggiornare, può essere passato un oggetto con id incluso o separatamente
    */
   public async updateUser(
-    userId: string,
-    userData: {
+    userDataOrId: string | {
+      id: string;
+      email?: string;
+      firstName?: string;
+      lastName?: string;
+      role?: 'admin' | 'parent' | 'student';
+      active?: boolean;
+    },
+    userData?: {
       email?: string;
       firstName?: string;
       lastName?: string;
@@ -144,7 +152,41 @@ class UserService {
     }
   ): Promise<User> {
     try {
-      const user = await ApiService.put<User>(`/api/auth/users/${userId}`, userData);
+      let userId: string;
+      let dataToSend: any;
+      
+      // Controlla se è stato passato un oggetto completo o un ID + dati separati
+      if (typeof userDataOrId === 'string') {
+        // Caso vecchio: ID separato + userData
+        userId = userDataOrId;
+        dataToSend = userData;
+      } else {
+        // Nuovo caso: oggetto completo con id al suo interno
+        userId = userDataOrId.id;
+        // Creiamo un nuovo oggetto escludendo l'id
+        const { id, ...restData } = userDataOrId;
+        dataToSend = restData;
+      }
+      
+      // Normalizza i campi da camelCase a snake_case per il backend
+      const normalizedData: any = {};
+      
+      // Mappiamo i campi camelCase ai corrispondenti snake_case
+      if (dataToSend.firstName !== undefined) normalizedData.first_name = dataToSend.firstName;
+      if (dataToSend.lastName !== undefined) normalizedData.last_name = dataToSend.lastName;
+      if (dataToSend.email !== undefined) normalizedData.email = dataToSend.email;
+      if (dataToSend.role !== undefined) normalizedData.role = dataToSend.role;
+      if (dataToSend.active !== undefined) normalizedData.is_active = dataToSend.active;
+      
+      console.log(`Aggiornamento utente ${userId}:`, { 
+        endpoint: `/api/auth/users/${userId}`,
+        originaleDataToSend: dataToSend,
+        normalizedData: normalizedData 
+      });
+
+      // Invia i dati normalizzati al backend con l'endpoint corretto
+      // L'API corretta è /api/users/{id} senza 'auth/' nel percorso
+      const user = await ApiService.put<User>(`/api/users/${userId}`, normalizedData);
       NotificationsService.success('Utente aggiornato con successo');
       return user;
     } catch (error) {

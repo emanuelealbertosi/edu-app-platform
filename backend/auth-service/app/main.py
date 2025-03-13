@@ -4,7 +4,7 @@ from typing import List
 import uvicorn
 
 # Import API routers
-from app.api.endpoints import auth, users, roles, debug
+from app.api.endpoints import auth, users, roles, debug, parent
 
 # Create FastAPI app
 app = FastAPI(
@@ -32,6 +32,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(users.router, prefix="/api/users", tags=["Users"])
 app.include_router(roles.router, prefix="/api/roles", tags=["Roles"])
 app.include_router(debug.router, prefix="/api/debug", tags=["Debug"])
+app.include_router(parent.router, prefix="/auth/parent", tags=["Parent"])
 
 @app.get("/")
 async def health_check():

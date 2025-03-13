@@ -21,11 +21,15 @@ export interface LoginRequest {
 }
 
 export interface RegisterRequest {
+  username: string;
   email: string;
   password: string;
   firstName: string;
   lastName: string;
   role: 'admin' | 'parent' | 'student';
+  // I campi in snake_case sono opzionali perché useremo principalmente i campi in camelCase
+  first_name?: string;
+  last_name?: string;
 }
 
 export interface AuthResponse {
@@ -497,9 +501,20 @@ class AuthService {
   }
 
   public async register(userData: RegisterRequest): Promise<AuthResponse> {
+    // Definiamo backendPayload all'esterno del blocco try per renderlo accessibile nel catch
+    const backendPayload = {
+      username: userData.username,
+      email: userData.email,
+      password: userData.password,
+      role: userData.role,
+      first_name: userData.first_name || userData.firstName,
+      last_name: userData.last_name || userData.lastName
+    };
+    
     try {
       console.log('[DEBUG REGISTER] Tentativo di registrazione utente');
-      const response = await this.api.post<AuthResponse>('/register', userData);
+      console.log('[DEBUG REGISTER] Payload adattato per il backend:', backendPayload);
+      const response = await this.api.post<AuthResponse>('/register', backendPayload);
       console.log('[DEBUG REGISTER] Registrazione completata con successo');
       
       // Adattiamo i nomi dei campi per essere compatibili con il resto del codice
@@ -545,8 +560,48 @@ class AuthService {
       console.log('[DEBUG REGISTER] Timer refresh avviato');
       
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('[DEBUG REGISTER] Errore durante la registrazione:', error);
+      
+      // Log dettagliato per diagnosticare l'errore 422
+      if (error.response && error.response.status === 422) {
+        console.error('[DEBUG REGISTER] Errore di validazione (422):', JSON.stringify(error.response.data, null, 2));
+        console.error('[DEBUG REGISTER] Payload inviato:', JSON.stringify(backendPayload, null, 2));
+        
+        // Mostra notifica con dettagli dell'errore
+        const errorDetails = error.response.data.detail || [];
+        let errorMessage = '';
+        
+        if (Array.isArray(errorDetails)) {
+          // Cerca specificamente l'errore della password troppo corta
+          const passwordError = errorDetails.find(detail => 
+            detail.loc.includes('password') && 
+            (detail.msg.includes('at least') || detail.msg.includes('short'))
+          );
+          
+          if (passwordError) {
+            // Evidenzia l'errore della password troppo corta
+            errorMessage = '⚠️ ATTENZIONE: La password deve essere di almeno 8 caratteri. ';
+            
+            // Aggiungi gli altri errori, se presenti
+            errorDetails
+              .filter(detail => detail !== passwordError)
+              .forEach(detail => {
+                errorMessage += `\nCampo '${detail.loc.join('.')}': ${detail.msg}. `;
+              });
+          } else {
+            // Comportamento standard per altri errori
+            errorDetails.forEach(detail => {
+              errorMessage += `Campo '${detail.loc.join('.')}': ${detail.msg}. `;
+            });
+          }
+        } else {
+          errorMessage = error.response.data.detail || 'Dati non validi';
+        }
+        
+        NotificationsService.error(errorMessage, 'Errore di registrazione');
+      }
+      
       throw error;
     }
   }

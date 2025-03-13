@@ -173,3 +173,31 @@ class RewardProgressInDB(RewardProgressBase):
     model_config = {
         "from_attributes": True
     }
+
+class RewardTemplate(RewardBase):
+    """Schema per i template di ricompensa disponibili per i genitori"""
+    id: str
+    category_id: str
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+    
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class PendingReward(BaseModel):
+    """Schema per le ricompense in attesa di approvazione"""
+    id: str
+    reward_id: str
+    user_id: str
+    student_id: str
+    created_at: datetime
+    status: str = "pending"  # pending, approved, rejected
+    notes: Optional[str] = None
+    reward: Optional[RewardInDB] = None
+    
+    model_config = {
+        "from_attributes": True
+    }
