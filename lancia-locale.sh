@@ -69,6 +69,7 @@ usage() {
     echo "  restart-frontend Riavvia solo il frontend"
     echo "  stop-backend    Ferma solo i servizi backend"
     echo "  restart-backend Riavvia solo i servizi backend"
+    echo "  restart-service [service-name] Riavvia un servizio specifico (auth-service, quiz-service, path-service, reward-service, api-gateway)"
     echo "  status          Mostra lo stato dei servizi"
     echo "  help            Mostra questo messaggio di aiuto"
     exit 1
@@ -271,6 +272,91 @@ show_status() {
     fi
 }
 
+# Ferma un servizio specifico
+stop_service() {
+    if [ $# -ne 1 ]; then
+        echo "Errore: Specificare il nome del servizio da fermare"
+        return 1
+    fi
+
+    local service_name=$1
+    local service_port
+
+    case "$service_name" in
+        auth-service)
+            service_port=8001
+            ;;
+        quiz-service)
+            service_port=8002
+            ;;
+        path-service)
+            service_port=8003
+            ;;
+        reward-service)
+            service_port=8004
+            ;;
+        api-gateway)
+            service_port=8000
+            ;;
+        *)
+            echo "Servizio non valido: $service_name"
+            echo "Servizi disponibili: auth-service, quiz-service, path-service, reward-service, api-gateway"
+            return 1
+            ;;
+    esac
+
+    echo "Arresto di $service_name..." | tee -a "$LOG_FILE"
+    pkill -f "uvicorn app.main:app --host 0.0.0.0 --port $service_port"
+    echo "$service_name arrestato." | tee -a "$LOG_FILE"
+    return 0
+}
+
+# Avvia un servizio specifico
+start_service() {
+    if [ $# -ne 1 ]; then
+        echo "Errore: Specificare il nome del servizio da avviare"
+        return 1
+    fi
+
+    local service_name=$1
+    local service_port
+
+    case "$service_name" in
+        auth-service)
+            service_port=8001
+            ;;
+        quiz-service)
+            service_port=8002
+            ;;
+        path-service)
+            service_port=8003
+            ;;
+        reward-service)
+            service_port=8004
+            ;;
+        api-gateway)
+            service_port=8000
+            ;;
+        *)
+            echo "Servizio non valido: $service_name"
+            echo "Servizi disponibili: auth-service, quiz-service, path-service, reward-service, api-gateway"
+            return 1
+            ;;
+    esac
+
+    activate_venv
+
+    echo "Avvio $service_name..." | tee -a "$LOG_FILE"
+    if [ -f "$BACKEND_DIR/$service_name/app/main.py" ]; then
+        (cd "$BACKEND_DIR/$service_name" && source "$VENV_DIR/bin/activate" && python3 -m uvicorn app.main:app --host 0.0.0.0 --port $service_port 2>&1 | tee -a "$LOG_FILE") &
+        echo "$service_name avviato sulla porta $service_port" | tee -a "$LOG_FILE"
+        return 0
+    else
+        echo "$service_name non disponibile." | tee -a "$LOG_FILE"
+        return 1
+    fi
+}
+
 # Verifica opzione passata
 if [ $# -eq 0 ]; then
     usage
@@ -321,6 +407,18 @@ case "$1" in
         sleep 2
         init_logfile
         start_backend
+        ;;
+    restart-service)
+        if [ $# -ne 2 ]; then
+            echo "Errore: È necessario specificare il nome del servizio da riavviare."
+            echo "Esempio: $0 restart-service reward-service"
+            echo "Servizi disponibili: auth-service, quiz-service, path-service, reward-service, api-gateway"
+            exit 1
+        fi
+        stop_service "$2"
+        sleep 2
+        init_logfile
+        start_service "$2"
         ;;
     status)
         show_status

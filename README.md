@@ -45,6 +45,10 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
 - [x] Interfaccia genitori 
   - [x] Dashboard principale 
   - [x] Gestione studenti 
+    - [x] Visualizzazione lista studenti con card
+    - [x] Creazione nuovo studente con validazione
+    - [x] Modifica profilo studente esistente
+    - [x] Fix problema inizializzazione componente
   - [x] Gestione template percorsi 
   - [x] Gestione template ricompense 
   - [x] Assegnazione percorsi 

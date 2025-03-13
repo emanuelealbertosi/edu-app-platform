@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import ApiErrorHandler from './ApiErrorHandler';
 import { NotificationsService } from './NotificationsService';
+import ApiService from './ApiService';
 
 // Fix per errore lint: "Cannot find name 'process'"
 declare const process: {
@@ -90,8 +91,7 @@ class StudentService {
    */
   public async getStudentsByParent(): Promise<Student[]> {
     try {
-      const response = await this.api.get<Student[]>('/parent/students');
-      return response.data;
+      return await ApiService.get<Student[]>(`${AUTH_API_URL}/parent/students`);
     } catch (error) {
       ApiErrorHandler.handleApiError(error, 'Errore nel recupero degli studenti');
       throw error;
@@ -143,8 +143,7 @@ class StudentService {
    */
   public async getAllStudentActivities(): Promise<StudentActivity[]> {
     try {
-      const response = await this.api.get<StudentActivity[]>('/parent/activities');
-      return response.data;
+      return await ApiService.get<StudentActivity[]>(`${AUTH_API_URL}/parent/activities`);
     } catch (error) {
       ApiErrorHandler.handleApiError(error, 'Errore nel recupero delle attività degli studenti');
       throw error;
@@ -161,9 +160,9 @@ class StudentService {
     avatar?: string;
   }): Promise<Student> {
     try {
-      const response = await this.api.post<Student>('/parent/students', student);
+      const response = await ApiService.post<Student>(`${AUTH_API_URL}/parent/students`, student);
       NotificationsService.success('Studente creato con successo');
-      return response.data;
+      return response;
     } catch (error) {
       ApiErrorHandler.handleApiError(error, 'Errore nella creazione dello studente');
       throw error;

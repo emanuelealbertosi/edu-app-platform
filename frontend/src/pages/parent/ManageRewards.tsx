@@ -108,6 +108,8 @@ const ManageRewards: React.FC = () => {
   const [studentStatsDialogOpen, setStudentStatsDialogOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingRewardId, setEditingRewardId] = useState<string | null>(null);
   
   // Form per nuovo reward template
   const [newReward, setNewReward] = useState<RewardForm>({
@@ -134,6 +136,27 @@ const ManageRewards: React.FC = () => {
       ApiErrorHandler.handleApiError(error);
       setLoading(false);
     }
+  };
+
+  const handleEditClick = (template: RewardTemplate) => {
+    // Imposta i dati del template selezionato nel form di modifica
+    setNewReward({
+      title: template.title,
+      description: template.description,
+      category: template.category as 'digitale' | 'fisico' | 'privilegio',
+      pointsCost: template.pointsCost,
+      imageUrl: template.imageUrl || '',
+      availability: template.quantity ? 'limitato' : 'illimitato',
+      quantity: template.quantity || undefined,
+      expiryDate: template.expiryDate ? new Date(template.expiryDate) : null
+    });
+    
+    // Imposta la modalità di modifica
+    setIsEditMode(true);
+    setEditingRewardId(template.id);
+    
+    // Apre il dialog
+    setCreateDialogOpen(true);
   };
 
   const fetchStudents = async () => {
@@ -197,11 +220,14 @@ const ManageRewards: React.FC = () => {
   };
 
   const handleCreateDialogOpen = () => {
+    setIsEditMode(false);
     setCreateDialogOpen(true);
   };
 
   const handleCreateDialogClose = () => {
     setCreateDialogOpen(false);
+    setIsEditMode(false);
+    setEditingRewardId(null);
     // Reset form
     setNewReward({
       title: '',
@@ -220,7 +246,7 @@ const ManageRewards: React.FC = () => {
     }));
   };
 
-  const handleCreateReward = async () => {
+  const handleCreateOrUpdateReward = async () => {
     try {
       // Validazione
       if (!newReward.title.trim() || !newReward.description.trim() || newReward.pointsCost <= 0) {
@@ -236,11 +262,26 @@ const ManageRewards: React.FC = () => {
         expiryDate: newReward.expiryDate || undefined
       };
       
-      // Chiamata al servizio per creare il nuovo template
-      const createdTemplate = await RewardService.createRewardTemplate(templateData);
-      
-      // Aggiorna la lista dei template con il nuovo template
-      setRewardTemplates([...rewardTemplates, createdTemplate]);
+      if (isEditMode && editingRewardId) {
+        // Aggiornamento di un template esistente
+        const updatedTemplate = await RewardService.updateRewardTemplate(editingRewardId, templateData);
+        
+        // Aggiorna la lista dei template sostituendo quello modificato
+        const updatedTemplates = rewardTemplates.map(template => 
+          template.id === editingRewardId ? updatedTemplate : template
+        );
+        setRewardTemplates(updatedTemplates);
+        
+        NotificationsService.success('Premio aggiornato con successo');
+      } else {
+        // Chiamata al servizio per creare il nuovo template
+        const createdTemplate = await RewardService.createRewardTemplate(templateData);
+        
+        // Aggiorna la lista dei template con il nuovo template
+        setRewardTemplates([...rewardTemplates, createdTemplate]);
+        
+        NotificationsService.success('Nuovo premio creato con successo');
+      }
       
       // Chiudi il dialog
       handleCreateDialogClose();
@@ -416,6 +457,7 @@ const ManageRewards: React.FC = () => {
                                   <Button 
                                     size="small"
                                     startIcon={<EditIcon />}
+                                    onClick={() => handleEditClick(template)}
                                   >
                                     Modifica
                                   </Button>
@@ -525,7 +567,7 @@ const ManageRewards: React.FC = () => {
           maxWidth="sm"
           fullWidth
         >
-          <DialogTitle>Crea Nuovo Premio</DialogTitle>
+          <DialogTitle>{isEditMode ? 'Modifica Premio' : 'Crea Nuovo Premio'}</DialogTitle>
           <DialogContent>
             <Box sx={{ mt: 1 }}>
               <TextField
@@ -611,11 +653,11 @@ const ManageRewards: React.FC = () => {
               Annulla
             </Button>
             <Button 
-              onClick={handleCreateReward} 
+              onClick={handleCreateOrUpdateReward} 
               color="primary" 
               variant="contained"
             >
-              Crea Premio
+              {isEditMode ? 'Aggiorna Premio' : 'Crea Premio'}
             </Button>
           </DialogActions>
         </Dialog>

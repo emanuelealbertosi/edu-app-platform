@@ -154,12 +154,15 @@ export class ApiErrorHandler {
   normalizeError(error: any): ApiError {
     const apiError = this.mapErrorToApiError(error);
     
-    // Verifica se l'errore è relativo al login prima di mostrare la notifica
-    // Ciò eviterà notifiche duplicate per gli errori di autenticazione
+    // Verifica se l'errore è relativo al login o se è un errore di ricompense ignorabile
+    // Ciò eviterà notifiche duplicate o non necessarie
     const isLoginError = this.isLoginRelatedError(error);
+    const isIgnorableError = this.isIgnorableRewardError(error);
     
     if (isLoginError) {
       console.log('[DEBUG ERROR HANDLER] Errore relativo al login, skippo notifica per evitare duplicati');
+    } else if (isIgnorableError) {
+      console.log('[DEBUG ERROR HANDLER] Errore 404 relativo alle ricompense, skippo notifica');
     } else if (this.options.showNotifications) {
       console.log('[DEBUG ERROR HANDLER] Mostro notifica per errore non relativo al login');
       this.showErrorNotification(apiError);
@@ -176,6 +179,26 @@ export class ApiErrorHandler {
     if (axios.isAxiosError(error) && error.config?.url) {
       // Controlla se l'URL contiene 'login'
       return error.config.url.includes('/login');
+    }
+    return false;
+  }
+  
+  /**
+   * Verifica se l'errore è un 404 che può essere ignorato (ricompense, favicon, ecc.)
+   */
+  private isIgnorableRewardError(error: any): boolean {
+    // Verifica se l'errore è di tipo Axios, è un 404 e contiene un URL
+    if (axios.isAxiosError(error) && error.response?.status === 404 && error.config?.url) {
+      // Controlla se l'URL contiene '/reward/'
+      if (error.config.url.includes('/reward/')) {
+        // Possiamo ignorare gli errori 404 per le ricompense
+        return true;
+      }
+      
+      // Ignora errori 404 per favicon.ico
+      if (error.config.url.includes('/favicon.ico')) {
+        return true;
+      }
     }
     return false;
   }
@@ -268,6 +291,22 @@ export class ApiErrorHandler {
    */
   private showErrorNotification(error: ApiError): void {
     try {
+      // Aggiungi log diagnostici dettagliati per ogni errore
+      console.log('=== ERRORE DA NOTIFICARE ===');
+      console.log('Tipo errore:', error.type);
+      console.log('Status:', error.status);
+      console.log('Messaggio:', error.message);
+      console.log('Request URL:', error.originalError?.config?.url || 'N/A');
+      console.log('Detail:', error.details);
+      console.trace('Stack trace della notifica:');
+      
+      // Non mostrare notifiche per errori vuoti o con messaggi generici
+      if (!error.message || error.message === 'Risorsa non trovata.' || 
+          (error.type === ApiErrorType.NOT_FOUND && !error.details)) {
+        console.log('Skipping generic/empty notification');
+        return;
+      }
+      
       switch (error.type) {
         case ApiErrorType.NETWORK_ERROR:
           NotificationsService.showError('Errore di connessione: Verifica la tua connessione internet.', 'Errore di rete');
@@ -294,6 +333,18 @@ export class ApiErrorHandler {
           break;
         case ApiErrorType.TIMEOUT:
           NotificationsService.showError('Timeout della richiesta: Il server non risponde.', 'Timeout');
+          break;
+        case ApiErrorType.NOT_FOUND:
+          // Più specifico per NOT_FOUND
+          if (error.originalError?.config?.url) {
+            const url = error.originalError.config.url;
+            if (url.includes('/reward/') || url.includes('/favicon.ico')) {
+              console.log('Ignorato errore 404 per URL specifico:', url);
+              return; // Non mostrare notifica
+            }
+          }
+          NotificationsService.showError(`Risorsa non trovata: ${error.message !== 'Risorsa non trovata.' ? error.message : ''}`, 
+            error.details ? `${error.details}` : '');
           break;
         default:
           NotificationsService.showError(`Errore: ${error.message}`, 

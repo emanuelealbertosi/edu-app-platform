@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, computed_field
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 import uuid
@@ -181,6 +181,13 @@ class RewardTemplate(RewardBase):
     created_by: str
     created_at: datetime
     updated_at: datetime
+    
+    # Campo alias per compatibilità con il frontend
+    @computed_field
+    @property
+    def title(self) -> str:
+        """Alias per il campo name per compatibilità con il frontend"""
+        return self.name
     
     model_config = {
         "from_attributes": True

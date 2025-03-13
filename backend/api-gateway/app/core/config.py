@@ -38,7 +38,8 @@ class Settings(BaseSettings):
         "/api/path-templates": PATH_SERVICE_URL,
         "/api/rewards": REWARD_SERVICE_URL,
         "/api/user-rewards": REWARD_SERVICE_URL,
-        "/reward/parent": REWARD_SERVICE_URL  # Endpoint per ricompense genitore
+        "/reward/parent": REWARD_SERVICE_URL,  # Endpoint per ricompense genitore
+        "/api/templates": REWARD_SERVICE_URL  # Endpoint per template di ricompense
     }
     
     # Endpoint pubblici che non richiedono autenticazione

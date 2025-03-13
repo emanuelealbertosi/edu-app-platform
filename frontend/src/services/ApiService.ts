@@ -52,7 +52,13 @@ class ApiService {
         // Otteniamo il token direttamente dal localStorage
         const token = localStorage.getItem('accessToken');
         if (token) {
+          // Usiamo formato Bearer standard di OAuth2
           config.headers['Authorization'] = `Bearer ${token}`;
+          
+          // Per debugging
+          console.log(`[OAuth2 Debug] Aggiunto token di autenticazione alla richiesta: ${config.url}`);
+        } else {
+          console.log(`[OAuth2 Debug] Richiesta senza token: ${config.url}`);
         }
         return config;
       },

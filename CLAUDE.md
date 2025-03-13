@@ -2,6 +2,19 @@
 
 ## AGGIORNAMENTI RECENTI (13 marzo 2025)
 
+### Fix per il componente ManageStudents
+
+1. **Risolto problema di inizializzazione**:
+   - Corretto l'errore "can't access lexical declaration '__WEBPACK_DEFAULT_EXPORT__' before initialization"
+   - Risolto migliorando la struttura del componente TabPanel
+   - Rinominato il componente a StudentTabPanel per evitare conflitti
+   - Sistemati i riferimenti al componente in tutto il file
+
+2. **Miglioramenti strutturali**:
+   - Riorganizzato il codice per evitare dipendenze circolari
+   - Sistemato l'ordine di inizializzazione dei componenti
+   - Rimossi import non utilizzati per migliorare le prestazioni
+
 ### Correzioni sulla Dashboard Genitore
 
 1. **Risolto problema di routing dei microservizi**:

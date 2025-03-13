@@ -4,7 +4,7 @@ from typing import List
 import uvicorn
 
 # Import API routers
-from app.api.endpoints import rewards, user_rewards, parent
+from app.api.endpoints import rewards, user_rewards, parent, templates
 
 # Create FastAPI app
 app = FastAPI(
@@ -31,6 +31,7 @@ app.add_middleware(
 app.include_router(rewards.router, prefix="/api/rewards", tags=["Rewards"])
 app.include_router(user_rewards.router, prefix="/api/user-rewards", tags=["User Rewards"])
 app.include_router(parent.router, prefix="/reward/parent", tags=["Parent Rewards"])
+app.include_router(templates.router, prefix="/api/templates", tags=["Templates"])
 
 @app.get("/")
 async def health_check():

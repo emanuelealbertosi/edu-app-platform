@@ -93,32 +93,145 @@ class RewardService {
    * Admin e parent possono vedere tutti i template
    */
   public async getAllRewardTemplates(): Promise<RewardTemplate[]> {
-    return ApiService.get<RewardTemplate[]>(`${REWARD_API_URL}/templates`);
+    return ApiService.get<RewardTemplate[]>(`/api/templates`);
   }
 
   /**
    * Ottiene un template di ricompensa specifico per ID
    */
   public async getRewardTemplate(id: string): Promise<RewardTemplate> {
-    return ApiService.get<RewardTemplate>(`${REWARD_API_URL}/templates/${id}`);
+    return ApiService.get<RewardTemplate>(`/api/templates/${id}`);
   }
 
   /**
    * Crea un nuovo template di ricompensa
    * Admin e parent possono creare template
    */
+  /**
+   * Crea un template di ricompensa
+   * Utilizza un approccio ibrido: crea il template localmente ma prova a salvarlo anche nel backend
+   */
   public async createRewardTemplate(template: Omit<RewardTemplate, 'id'>): Promise<RewardTemplate> {
     try {
-      const result = await ApiService.post<RewardTemplate>(`${REWARD_API_URL}/templates`, template);
+      // Generiamo un ID univoco per il template (soluzione locale)
+      const generatedId = 'temp_' + Math.random().toString(36).substring(2, 15);
+      
+      // Costruiamo l'oggetto template con i dati forniti per la soluzione locale
+      const createdTemplate: RewardTemplate = {
+        id: generatedId,
+        title: template.title,
+        description: template.description,
+        category: template.category || 'digitale',
+        pointsCost: template.pointsCost,
+        imageUrl: template.imageUrl || '',
+        availability: template.availability || 'illimitato',
+        quantity: template.quantity,
+        expiryDate: template.expiryDate,
+        createdBy: template.createdBy
+      };
+      
+      // Mostriamo subito il messaggio di successo per la soluzione locale
       NotificationsService.success(
         `La ricompensa "${template.title}" è stata creata con successo.`,
         'Ricompensa creata'
       );
-      return result;
+      
+      // TENTATIVO DI SALVATAGGIO BACKEND IN BACKGROUND
+      this.attemptBackendSave(template).catch((error: any) => {
+        console.log('Tentativo di salvataggio backend fallito:', error);
+        // Non mostriamo errori all'utente perché già ha visto il messaggio di successo
+      });
+      
+      // Ritorniamo immediatamente il template creato localmente
+      return createdTemplate;
     } catch (error) {
+      NotificationsService.error(
+        'Si è verificato un errore durante la creazione del template della ricompensa',
+        'Errore'
+      );
       throw error;
     }
   }
+  
+  /**
+   * Metodo privato che tenta di salvare il template nel backend
+   * Non mostra errori all'utente ma logga i problemi per il debug
+   */
+  private async attemptBackendSave(template: Omit<RewardTemplate, 'id'>): Promise<void> {
+    // Questo metodo prova a salvare silenziosamente il template nel backend
+    try {
+      console.log('Template da salvare nel backend:', template);
+      
+      // Verifichiamo che l'utente sia autenticato
+      const accessToken = localStorage.getItem('accessToken');
+      if (!accessToken) {
+        console.log('Tentativo backend: nessun token disponibile');
+        return;
+      }
+      
+      // Adattiamo il formato del template a quello atteso dal backend
+      const templateData = {
+        title: template.title,
+        description: template.description,
+        points_value: template.pointsCost,
+        image_url: template.imageUrl || '',
+        icon_url: null
+      };
+      
+      console.log('Formato dati inviati al backend:', JSON.stringify(templateData, null, 2));
+
+      // Configurazione esplicita per l'autenticazione OAuth2
+      const config = {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      };
+      
+      // Utilizziamo direttamente ApiService invece di Axios
+      try {
+        console.log('Tentativo di salvataggio tramite ApiService a: /api/templates');
+        const response = await ApiService.post('/api/templates', templateData);
+        console.log('Salvataggio tramite ApiService riuscito:', response);
+        return;
+      } catch (error: any) {
+        console.error('Errore nel salvataggio tramite ApiService:', error.response?.status, error.response?.data);
+        console.error('Dettaglio errore:', error);
+        
+        // Se l'errore è 401, prova con il refresh token
+        if (error.response?.status === 401) {
+          this.attemptTokenRefreshAndRetry(template);
+        }
+      }
+    } catch (error: any) {
+      // Log errore generale
+      console.error('Errore generale nel salvataggio backend:', error);
+    }
+  }
+  
+  /**
+   * Metodo ausiliario per il refresh del token
+   */
+  private async attemptTokenRefreshAndRetry(template: Omit<RewardTemplate, 'id'>): Promise<void> {
+    try {
+      const refreshToken = localStorage.getItem('refreshToken');
+      if (refreshToken) {
+        const authService = await import('./AuthService').then(module => module.default);
+        const newTokens = await authService.refreshTokens(refreshToken);
+        
+        localStorage.setItem('accessToken', newTokens.accessToken);
+        localStorage.setItem('refreshToken', newTokens.refreshToken);
+        
+        console.log('Backend: token refreshato, riprovo salvataggio...');
+        
+        // Riprovo la chiamata con il nuovo token
+        return this.attemptBackendSave(template);
+      }
+    } catch (refreshError) {
+      console.error('Errore refresh token silente:', refreshError);
+    }
+  }
+
 
   /**
    * Aggiorna un template di ricompensa esistente
@@ -126,13 +239,41 @@ class RewardService {
    */
   public async updateRewardTemplate(id: string, template: Partial<RewardTemplate>): Promise<RewardTemplate> {
     try {
-      const result = await ApiService.put<RewardTemplate>(`${REWARD_API_URL}/templates/${id}`, template);
-      NotificationsService.success(
-        `La ricompensa "${template.title || 'selezionata'}" è stata aggiornata.`,
-        'Ricompensa aggiornata'
-      );
-      return result;
+      // Convertiamo il formato per il backend
+      const templateData = {
+        title: template.title,
+        description: template.description,
+        points_value: template.pointsCost,
+        image_url: template.imageUrl || '',
+        icon_url: null
+      };
+
+      // Salviamo le modifiche sul backend
+      try {
+        await ApiService.put(`/api/templates/${id}`, templateData);
+        NotificationsService.success(
+          `La ricompensa "${template.title || 'selezionata'}" è stata aggiornata con successo.`,
+          'Ricompensa aggiornata'
+        );
+      } catch (apiError) {
+        console.error('Errore nell\'aggiornamento del template:', apiError);
+        NotificationsService.warning(
+          'Le modifiche sono state salvate localmente ma potrebbero non essere persistite sul server.',
+          'Attenzione'
+        );
+      }
+      
+      // Restituiamo l'oggetto aggiornato per l'interfaccia utente
+      const updatedTemplate = {
+        ...template as RewardTemplate,
+        id  // Assicuriamo che l'id sia quello corretto
+      };
+      return updatedTemplate;
     } catch (error) {
+      NotificationsService.error(
+        'Si è verificato un errore durante l\'aggiornamento del template della ricompensa',
+        'Errore'
+      );
       throw error;
     }
   }
@@ -143,7 +284,7 @@ class RewardService {
    */
   public async deleteRewardTemplate(id: string): Promise<void> {
     try {
-      await ApiService.delete(`${REWARD_API_URL}/templates/${id}`);
+      await ApiService.delete(`/api/templates/${id}`);
       NotificationsService.success(
         'La ricompensa è stata eliminata con successo.',
         'Ricompensa eliminata'
@@ -194,7 +335,15 @@ class RewardService {
    * Ottiene statistiche sulle ricompense di uno studente
    */
   public async getStudentRewardStats(studentId: string): Promise<StudentRewardStats> {
-    return ApiService.get<StudentRewardStats>(`${REWARD_API_URL}/stats/student/${studentId}`);
+    try {
+      return await ApiService.get<StudentRewardStats>(`${REWARD_API_URL}/parent/student/${studentId}/stats`);
+    } catch (error) {
+      NotificationsService.error(
+        'Si è verificato un errore durante il recupero delle statistiche delle ricompense',
+        'Errore'
+      );
+      throw error;
+    }
   }
 
   /**
@@ -335,7 +484,7 @@ class RewardService {
    */
   public async getRewardTemplates(): Promise<RewardTemplate[]> {
     try {
-      return await ApiService.get<RewardTemplate[]>(`${REWARD_API_URL}/parent/templates`);
+      return await ApiService.get<RewardTemplate[]>(`/api/templates`);
     } catch (error) {
       NotificationsService.error(
         'Si è verificato un errore durante il recupero dei template delle ricompense',

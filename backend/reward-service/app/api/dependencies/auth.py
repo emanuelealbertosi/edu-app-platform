@@ -25,7 +25,7 @@ async def get_current_active_user(token: str = Depends(oauth2_scheme)) -> Dict[s
             detail="Non autenticato",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return {"is_active": True, "roles": []}
+    return {"id": "mock-user-id", "is_active": True, "roles": []}
 
 async def get_current_admin_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
     """
@@ -39,7 +39,7 @@ async def get_current_admin_user(token: str = Depends(oauth2_scheme)) -> Dict[st
             detail="Non autenticato",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return {"is_active": True, "roles": [{"name": "admin"}]}
+    return {"id": "mock-admin-id", "is_active": True, "roles": [{"name": "admin"}]}
 
 async def get_current_parent_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
     """
@@ -53,7 +53,7 @@ async def get_current_parent_user(token: str = Depends(oauth2_scheme)) -> Dict[s
             detail="Non autenticato",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return {"is_active": True, "roles": [{"name": "parent"}]}
+    return {"id": "mock-parent-id", "is_active": True, "roles": [{"name": "parent"}]}
 
 async def get_current_student_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
     """
@@ -67,7 +67,7 @@ async def get_current_student_user(token: str = Depends(oauth2_scheme)) -> Dict[
             detail="Non autenticato",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return {"is_active": True, "roles": [{"name": "student"}]}
+    return {"id": "mock-student-id", "is_active": True, "roles": [{"name": "student"}]}
 
 async def get_current_parent_or_admin_user(token: str = Depends(oauth2_scheme)) -> Dict[str, Any]:
     """
@@ -81,7 +81,7 @@ async def get_current_parent_or_admin_user(token: str = Depends(oauth2_scheme)) 
             detail="Non autenticato",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return {"is_active": True, "roles": [{"name": "parent"}, {"name": "admin"}]}
+    return {"id": "mock-parent-admin-id", "is_active": True, "roles": [{"name": "parent"}, {"name": "admin"}]}
 
 def get_current_user_with_role(allowed_roles: list[str]):
     """
@@ -98,6 +98,7 @@ def get_current_user_with_role(allowed_roles: list[str]):
         # Restituiamo un utente fittizio con i ruoli richiesti
         # La verifica reale è gestita dall'API gateway
         return {
+            "id": f"mock-{'-'.join(allowed_roles)}-id",
             "is_active": True,
             "roles": [{"name": role} for role in allowed_roles]
         }
