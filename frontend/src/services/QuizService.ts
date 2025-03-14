@@ -327,30 +327,23 @@ class QuizService {
    * Solo admin può vedere tutti i template
    */
   public async getAllQuizTemplates(): Promise<QuizTemplate[]> {
-    // Array di percorsi possibili da provare in ordine
-    const possiblePaths = [
-      '/api/quiz/templates',
-      '/api/quiz/v1/templates',
-      '/api/quiz'
-    ];
+    // Utilizziamo l'endpoint corretto /api/quiz/templates
+    const path = '/api/quiz/templates';
     
     console.log('RICHIESTA GET QUIZ TEMPLATES');
     
-    let errorShown = false;
-    // Prova ogni percorso in sequenza
-    for (const path of possiblePaths) {
-      try {
-        console.log(`Tentativo di accesso al percorso: ${path}`);
-        const rawData = await ApiService.get<any[]>(`${API_URL}${path}`);
-        
-        console.log(`Successo con il percorso: ${path}`);
-        console.log(`Ricevuti ${rawData.length} quiz templates`);
-        
-        // Se non abbiamo dati, continua con il percorso successivo
-        if (!rawData || rawData.length === 0) {
-          console.log(`Il percorso ${path} non ha restituito dati, provo il prossimo`);
-          continue;
-        }
+    try {
+      console.log(`Accesso al percorso: ${path}`);
+      const rawData = await ApiService.get<any[]>(`${API_URL}${path}`);
+      
+      console.log(`Successo con il percorso: ${path}`);
+      console.log(`Ricevuti ${rawData.length} quiz templates`);
+      
+      // Se non abbiamo dati, ritorna un array vuoto
+      if (!rawData || rawData.length === 0) {
+        console.log(`Il percorso ${path} non ha restituito dati`);
+        return [];
+      }
         
         // Normalizza i dati ricevuti dal backend
         const normalizedTemplates = rawData.map(item => {
@@ -484,28 +477,16 @@ class QuizService {
         return normalizedTemplates;
       } catch (error: any) {
         console.log(`Errore con il percorso ${path}:`, error.response?.status);
-        // Continua a provare altri percorsi se otteniamo 404
-        if (error.response?.status === 404) {
-          continue;
-        }
         
-        // Per altri errori, mostra una notifica e termina
+        // Mostra una notifica di errore appropriata
         NotificationsService.error(
           'Errore nel recupero dei template di quiz',
           'Errore'
         );
-        errorShown = true;
-        throw error;
+        
+        // Se non ci sono dati, restituisci un array vuoto
+        return [];
       }
-    }
-    
-    // Se arriviamo qui, nessun percorso ha funzionato
-    if (!errorShown) {
-      NotificationsService.warning(
-        'I template di quiz non sono ancora disponibili',
-        'Funzionalità in sviluppo'
-      );
-    }
     
     // Ritorna un template di quiz di esempio per scopi di sviluppo
     return [

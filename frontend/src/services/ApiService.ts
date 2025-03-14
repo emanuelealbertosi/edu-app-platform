@@ -84,13 +84,27 @@ class ApiService {
             '/reward/',
             '/rewards/',
             '/template',
-            '/templates',
             '/parent/',
             '/points'
           ];
           
+          // Escludiamo esplicitamente l'endpoint dei quiz templates 
+          const excludePatterns = [
+            '/quiz/templates',
+            '/api/quiz/templates'
+          ];
+          
           // Verifica se l'URL contiene uno dei pattern da ignorare silenziosamente
-          const shouldIgnore = silentlyIgnorePatterns.some(pattern => url.includes(pattern));
+          // e non contiene pattern che vogliamo esplicitamente non ignorare
+          const containsIgnorePattern = silentlyIgnorePatterns.some(pattern => url.includes(pattern));
+          const containsExcludePattern = excludePatterns.some(pattern => url.includes(pattern));
+          
+          const shouldIgnore = containsIgnorePattern && !containsExcludePattern;
+          
+          // Log di debug per capire cosa sta succedendo con l'endpoint
+          if (url.includes('/quiz') || url.includes('/templates')) {
+            console.log(`[ApiService] URL: ${url} - shouldIgnore: ${shouldIgnore}`);
+          }
           
           if (shouldIgnore) {
             console.log(`[ApiService] Errore 404 ignorato silenziosamente per: ${url}`);

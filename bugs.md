@@ -59,14 +59,45 @@ Il problema sembra riguardare specificamente l'aggiornamento di proprietà come 
 
 ## Servizio Path
 
-### Bug Aperti
+### Bug Risolti
 
 #### PH-001 - Quiz non visualizzati nell'assegnamento al template del percorso
-- **Stato**: 🔴 Aperto
+- **Stato**: 🟢 Risolto
 - **Priorità**: P1
 - **Componente**: Backend
 - **Interfaccia**: Parent
 - **Data**: 2025-03-14
+- **Risolto il**: 2025-03-14
+
+---
+
+## Servizio Quiz
+
+### Bug Risolti
+
+#### QZ-001 - Quiz template non visualizzati nel frontend
+- **Stato**: 🟢 Risolto
+- **Priorità**: P1
+- **Componente**: Backend
+- **Interfaccia**: Tutti gli utenti
+- **Data**: 2025-03-14
+- **Risolto il**: 2025-03-14
+
+**Descrizione**
+I quiz template esistenti nel database non venivano visualizzati nell'interfaccia, nonostante le chiamate API restituissero status 200 (quindi senza errori). Tuttavia, le liste restituite erano vuote per gli utenti non-admin.
+
+**Causa**
+Tutti i quiz template nel database avevano il parametro `is_active: false`. L'API del backend è progettata per filtrare automaticamente i template inattivi quando l'utente che effettua la richiesta non ha il ruolo di amministratore.
+
+**Soluzione**
+Attivati tutti i quiz template esistenti nel database (id: 1, 2, 24) impostando `is_active: true` tramite chiamate API autenticate con account admin.
+
+**Percorsi file coinvolti**
+- `backend/quiz-service/app/api/endpoints/quiz_templates.py`
+- `frontend/src/services/QuizService.ts`
+
+**Note Aggiuntive**
+È necessario rivedere il processo di creazione dei quiz template per assicurarsi che vengano creati come attivi di default, o implementare un controllo più chiaro nell'interfaccia admin per gestire lo stato di attivazione dei template.
 
 **Descrizione**
 Nella pagina Gestione Percorsi, quando si clicca sull'icona di assegnamento quiz al template del percorso, i quiz inseriti dall'admin non vengono visualizzati.
@@ -74,10 +105,18 @@ Nella pagina Gestione Percorsi, quando si clicca sull'icona di assegnamento quiz
 **Errore**
 "GET /api/quiz/v1/templates HTTP/1.1" 404 Not Found
 
+**Soluzione**
+Aggiunto il supporto per l'endpoint `/api/quiz/v1/templates` nel quiz-service, registrando il router con questo prefisso. Il frontend tentava di accedere a questo endpoint ma non era configurato nel backend. È stata anche migliorata la generazione degli ID delle operazioni per evitare avvisi di duplicazione nei log.
+
+**File modificati**
+`/backend/quiz-service/app/main.py`
+
 **URL**
 http://localhost:3000/parent/paths
 
 ---
+
+### Bug Aperti
 
 #### PH-002 - Percorsi pubblici non visualizzati correttamente
 - **Stato**: 🔴 Aperto
@@ -155,9 +194,9 @@ http://localhost:3000/parent/students
 ## Statistiche
 
 - **Totale Bug**: 7
-- **Bug Aperti**: 6
+- **Bug Aperti**: 5
 - **Bug In Progress**: 0
-- **Bug Risolti**: 1
+- **Bug Risolti**: 2
 - **Frontend**: 5
 - **Backend**: 2
 

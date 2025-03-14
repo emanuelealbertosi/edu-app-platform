@@ -35,13 +35,47 @@ app.include_router(question_templates.router, prefix="/api/question-templates", 
 app.include_router(quiz_attempts.router, prefix="/api/quiz-attempts", tags=["Quiz Attempts"])
 
 # Per compatibilità con il frontend
-app.include_router(quiz_templates.router, prefix="/api/quiz/templates", tags=["Quiz Templates Frontend"])
+# Utilizziamo generate_unique_id_function per evitare i warning di duplicate operation ID
+from fastapi.routing import APIRoute
+
+def custom_generate_unique_id(route: APIRoute) -> str:
+    return f"{route.tags[0]}_{route.name}"
+
+# Crea un clone del router con un generator di ID diverso
+frontend_router = quiz_templates.router
+frontend_router.routes[0].operation_id = None
+app.include_router(frontend_router, prefix="/api/quiz/templates", tags=["Quiz Templates Frontend"], 
+                   generate_unique_id_function=custom_generate_unique_id)
+
+frontend_v1_router = quiz_templates.router
+frontend_v1_router.routes[0].operation_id = None
+app.include_router(frontend_v1_router, prefix="/api/quiz/v1/templates", tags=["Quiz Templates Frontend v1"],
+                   generate_unique_id_function=custom_generate_unique_id)
+
+# Supporto per il percorso /api/quiz/templates e /api/quiz/v1/templates
+# Questi percorsi sono sufficienti per il frontend che è stato modificato
+# per utilizzare solo questi due percorsi
 
 # Per compatibilità con i test
-app.include_router(quiz_templates.router, prefix="/quiz-templates", tags=["Quiz Templates Test"])
-app.include_router(quizzes.router, prefix="/quizzes", tags=["Quizzes Test"])
-app.include_router(question_templates.router, prefix="/question-templates", tags=["Question Templates Test"])
-app.include_router(quiz_attempts.router, prefix="/quiz-attempts", tags=["Quiz Attempts Test"])
+test_qt_router = quiz_templates.router
+test_qt_router.routes[0].operation_id = None
+app.include_router(test_qt_router, prefix="/quiz-templates", tags=["Quiz Templates Test"],
+                   generate_unique_id_function=custom_generate_unique_id)
+
+test_q_router = quizzes.router
+test_q_router.routes[0].operation_id = None
+app.include_router(test_q_router, prefix="/quizzes", tags=["Quizzes Test"],
+                   generate_unique_id_function=custom_generate_unique_id)
+
+test_question_router = question_templates.router
+test_question_router.routes[0].operation_id = None
+app.include_router(test_question_router, prefix="/question-templates", tags=["Question Templates Test"],
+                   generate_unique_id_function=custom_generate_unique_id)
+
+test_attempts_router = quiz_attempts.router
+test_attempts_router.routes[0].operation_id = None
+app.include_router(test_attempts_router, prefix="/quiz-attempts", tags=["Quiz Attempts Test"],
+                   generate_unique_id_function=custom_generate_unique_id)
 
 # Importiamo i moduli necessari per le categorie dei quiz
 from fastapi import APIRouter, Depends, HTTPException, status
