@@ -48,7 +48,9 @@ import {
   CheckCircle as ApproveIcon,
   Cancel as RejectIcon,
   AssignmentTurnedIn as AssignIcon,
-  Refresh as RefreshIcon
+  AssignmentTurnedIn as AssignmentTurnedInIcon,
+  Refresh as RefreshIcon,
+  BarChart as BarChartIcon
 } from '@mui/icons-material';
 import MainLayout from '../../components/layouts/MainLayout';
 import PageTransition from '../../components/animations/PageTransition';
@@ -99,7 +101,7 @@ function RecentRedemptions({ selectedStudent, studentStats }: {
       ))}
     </Paper>
   );
-};
+}
 
 // Interfaccia per le statistiche di uno studente
 interface StudentRewardData {
@@ -123,6 +125,7 @@ function ManageRewards() {
   
   // Stati per le tab e le richieste in sospeso
   const [tabValue, setTabValue] = useState<number>(0);
+  const [assignedRewards, setAssignedRewards] = useState<any[]>([]);
   // Utilizziamo un tipo esteso di PendingReward per la UI
   interface ExtendedPendingReward extends PendingReward {
     category?: string;
@@ -156,11 +159,70 @@ function ManageRewards() {
   useEffect(() => {
     fetchRewardTemplates();
     fetchStudents();
-    // Carichiamo le richieste in sospeso solo se siamo nella tab corrispondente
+    
+    // Caricamento dei dati in base alla tab attiva
     if (tabValue === 1) {
       fetchPendingRewards();
+    } else if (tabValue === 2) {
+      // Carica le statistiche degli studenti se siamo nella tab statistiche
+      fetchStudentsWithStats();
+    } else if (tabValue === 3) {
+      // Carica le ricompense assegnate
+      fetchAssignedRewards();
     }
   }, [tabValue]);
+  
+  // Funzione per caricare le ricompense assegnate (non ancora riscattate)
+  const fetchAssignedRewards = async () => {
+    setLoading(true);
+    try {
+      // Ottieni tutte le ricompense assegnate e non ancora riscattate per gli studenti di questo genitore
+      const assignedRewardsData = await Promise.all(
+        students.map(async (student) => {
+          try {
+            // Utilizziamo getUnredeemedRewards invece di recentRedemptions per ottenere i premi assegnati
+            // ma non ancora riscattati
+            const unredeemed = await RewardService.getUnredeemedRewards(student.id);
+            // Aggiungiamo il nome dello studente per la visualizzazione
+            return unredeemed.map(reward => ({
+              ...reward,
+              studentName: student.name,
+              // Aggiungiamo un campo per l'etichetta di stato
+              statusLabel: reward.status === 'disponibile' ? 'Disponibile' : 
+                         reward.status === 'riscattato' ? 'Riscattato' : 
+                         reward.status === 'consegnato' ? 'Consegnato' : 'Scaduto'
+            }));
+          } catch (error) {
+            console.error(`Errore nel caricamento delle ricompense per lo studente ${student.id}`, error);
+            return [];
+          }
+        })
+      );
+      
+      // Unisci tutti i dati in un unico array
+      const allAssignedRewards = assignedRewardsData.flat();
+        
+      setAssignedRewards(allAssignedRewards);
+      setLoading(false);
+    } catch (error) {
+      ApiErrorHandler.handleApiError(error);
+      setLoading(false);
+    }
+  };
+  
+  // Funzione per caricare studenti con tutte le loro statistiche
+  const fetchStudentsWithStats = async () => {
+    setLoading(true);
+    try {
+      await Promise.all(
+        students.map(student => fetchStudentStats(student.id))
+      );
+      setLoading(false);
+    } catch (error) {
+      ApiErrorHandler.handleApiError(error);
+      setLoading(false);
+    }
+  };
   
   // Funzione per recuperare le richieste di premio in attesa di approvazione
   const fetchPendingRewards = async () => {
@@ -528,259 +590,163 @@ function ManageRewards() {
                 icon={<ApproveIcon />} 
                 iconPosition="start" 
               />
+              <Tab 
+                label="Statistiche" 
+                icon={<BarChartIcon />} 
+                iconPosition="start" 
+              />
+              <Tab 
+                label="Premi Assegnati" 
+                icon={<AssignmentTurnedInIcon />} 
+                iconPosition="start" 
+              />
             </Tabs>
           </Paper>
         </Box>
         
         <Grid container spacing={3}>
           {tabValue === 0 ? (
-            <>
-              <Grid item xs={12} md={8}>
-                <Paper sx={{ p: 2, mb: 3 }}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h5" component="h2">
-                  Template premi
-                </Typography>
-                <HoverAnimation>
-                  <Button 
-                    variant="contained" 
-                    startIcon={<AddIcon />}
-                    color="primary"
-                    onClick={handleCreateDialogOpen}
-                  >
-                    Nuovo Premio
-                  </Button>
-                </HoverAnimation>
-              </Box>
-
-              <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-                <TextField
-                  label="Cerca premi"
-                  variant="outlined"
-                  size="small"
-                  fullWidth
-                  value={searchQuery}
-                  onChange={handleSearchChange}
-                  placeholder="Cerca per titolo o descrizione..."
-                />
-                <FormControl sx={{ minWidth: 150 }} size="small">
-                  <InputLabel>Categoria</InputLabel>
-                  <Select
-                    value={categoryFilter}
-                    label="Categoria"
-                    onChange={handleCategoryFilterChange}
-                  >
-                    <MenuItem value="">Tutte</MenuItem>
-                    <MenuItem value="digitale">Digitale</MenuItem>
-                    <MenuItem value="fisico">Fisico</MenuItem>
-                    <MenuItem value="privilegio">Privilegio</MenuItem>
-                  </Select>
-                </FormControl>
-              </Box>
-              
-              {loading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-                  <CircularProgress />
+            // TAB 1: Template premi
+            <Grid item xs={12}>
+              <Paper sx={{ p: 2, mb: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                  <Typography variant="h5" component="h2">
+                    Template premi
+                  </Typography>
+                  <HoverAnimation>
+                    <Button 
+                      variant="contained" 
+                      startIcon={<AddIcon />}
+                      color="primary"
+                      onClick={handleCreateDialogOpen}
+                    >
+                      Nuovo Premio
+                    </Button>
+                  </HoverAnimation>
                 </Box>
-              ) : (
-                <AnimatePresence>
-                  <Grid container spacing={2}>
-                    {filteredRewardTemplates.length > 0 ? (
-                      filteredRewardTemplates.map((template) => (
-                        <Grid item xs={12} sm={6} md={4} key={template.id}>
-                          <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.9 }}
-                            transition={{ duration: 0.3 }}
-                          >
-                            <AnimatedCard sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                                {template.imageUrl && (
-                                  <CardMedia
-                                    component="img"
-                                    height="140"
-                                    image={template.imageUrl}
-                                    alt={template.title}
-                                  />
-                                )}
-                                <CardContent sx={{ flexGrow: 1 }}>
-                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
-                                    <Typography variant="h6" component="h2" gutterBottom>
-                                      {template.title}
-                                    </Typography>
-                                    {getCategoryChip(template.category)}
-                                  </Box>
-                                  <Typography color="textSecondary" variant="body2" gutterBottom>
-                                    {template.description}
-                                  </Typography>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
-                                    <StarsIcon sx={{ color: 'warning.main', mr: 0.5 }} />
-                                    <Typography variant="h6" color="warning.main">
-                                      {template.pointsCost} punti
-                                    </Typography>
-                                  </Box>
-                                  <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-                                    Disponibilità: {template.availability === 'illimitato' ? 'Illimitata' : `${template.quantity || 0} rimasti`}
-                                  </Typography>
-                                </CardContent>
-                                <Divider />
-                                <CardActions sx={{ justifyContent: 'space-between' }}>
-                                  <Box>
-                                    <Button 
-                                      size="small"
-                                      startIcon={<EditIcon />}
-                                      onClick={() => handleEditClick(template)}
-                                      sx={{ mr: 1 }}
-                                    >
-                                      Modifica
-                                    </Button>
-                                    <Button
-                                      size="small"
-                                      startIcon={<AssignIcon />}
-                                      color="success"
-                                      onClick={() => handleAssignClick(template)}
-                                    >
-                                      Assegna
-                                    </Button>
-                                  </Box>
-                                  <IconButton 
-                                    aria-label="elimina" 
-                                    color="error"
-                                    size="small"
-                                    onClick={() => handleDeleteClick(template)}
-                                  >
-                                    <DeleteIcon />
-                                  </IconButton>
-                                </CardActions>
-                            </AnimatedCard>
-                          </motion.div>
-                        </Grid>
-                      ))
-                    ) : (
-                      <Grid item xs={12}>
-                        <Box sx={{ textAlign: 'center', py: 4 }}>
-                          <Typography variant="h6" color="textSecondary">
-                            Nessun premio trovato
-                          </Typography>
-                          <Typography variant="body2" color="textSecondary">
-                            Prova a modificare i criteri di ricerca o crea un nuovo premio
-                          </Typography>
-                        </Box>
-                      </Grid>
-                    )}
-                  </Grid>
-                </AnimatePresence>
-              )}
-            </Paper>
-          </Grid>
 
-          <Grid item xs={12} md={4}>
-            <Paper sx={{ p: 2, mb: 3 }}>
-              <Typography variant="h5" component="h2" gutterBottom>
-                Statistiche Studenti
-              </Typography>
-              <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                Monitora i punti accumulati e i premi riscattati dai tuoi studenti.
-              </Typography>
-
-              {students.length > 0 ? (
-                <Box>
-                  {students.map((student) => {
-                    const studentData = getStudentStats(student.id);
-                    return (
-                      <HoverAnimation key={student.id}>
-                        <Card sx={{ mb: 2 }}>
-                          <CardContent>
-                            <Typography variant="h6" component="h3">
-                              {student.name}
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                              <StarsIcon sx={{ color: 'warning.main', mr: 0.5, fontSize: 20 }} />
-                              <Typography variant="body1">
-                                {studentData.availablePoints} / {studentData.totalPoints} punti
-                              </Typography>
-                            </Box>
-                            <Typography variant="body2" color="textSecondary">
-                              {studentData.redeemedRewards} premi riscattati
-                            </Typography>
-                          </CardContent>
-                          <CardActions>
-                            <Button 
-                              size="small" 
-                              onClick={() => handleStudentStatsClick(student)}
+                <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
+                  <TextField
+                    label="Cerca premi"
+                    variant="outlined"
+                    size="small"
+                    fullWidth
+                    value={searchQuery}
+                    onChange={handleSearchChange}
+                    placeholder="Cerca per titolo o descrizione..."
+                  />
+                  <FormControl sx={{ minWidth: 150 }} size="small">
+                    <InputLabel>Categoria</InputLabel>
+                    <Select
+                      value={categoryFilter}
+                      label="Categoria"
+                      onChange={handleCategoryFilterChange}
+                    >
+                      <MenuItem value="">Tutte</MenuItem>
+                      <MenuItem value="digitale">Digitale</MenuItem>
+                      <MenuItem value="fisico">Fisico</MenuItem>
+                      <MenuItem value="privilegio">Privilegio</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
+                
+                {loading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <AnimatePresence>
+                    <Grid container spacing={2}>
+                      {filteredRewardTemplates.length > 0 ? (
+                        filteredRewardTemplates.map((template) => (
+                          <Grid item xs={12} sm={6} md={4} key={template.id}>
+                            <motion.div
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.9 }}
+                              transition={{ duration: 0.3 }}
                             >
-                              Dettagli
-                            </Button>
-                          </CardActions>
-                        </Card>
-                      </HoverAnimation>
-                    );
-                  })}
-                </Box>
-              ) : (
-                <Box sx={{ textAlign: 'center', py: 4 }}>
-                  <Typography variant="body1" color="textSecondary">
-                    Nessuno studente trovato
-                  </Typography>
-                </Box>
-              )}
-                </Paper>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <Paper sx={{ p: 2, mb: 3 }}>
-                  <Typography variant="h5" component="h2" gutterBottom>
-                    Statistiche Studenti
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-                    Monitora i punti accumulati e i premi riscattati dai tuoi studenti.
-                  </Typography>
-
-                  {students.length > 0 ? (
-                    <Box>
-                      {students.map((student) => {
-                        const studentData = getStudentStats(student.id);
-                        return (
-                          <HoverAnimation key={student.id}>
-                            <Card sx={{ mb: 2 }}>
-                              <CardContent>
-                                <Typography variant="h6" component="h3">
-                                  {student.name}
-                                </Typography>
-                                <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
-                                  <StarsIcon sx={{ color: 'warning.main', mr: 0.5, fontSize: 20 }} />
-                                  <Typography variant="body1">
-                                    {studentData.availablePoints} / {studentData.totalPoints} punti
-                                  </Typography>
-                                </Box>
-                                <Typography variant="body2" color="textSecondary">
-                                  {studentData.redeemedRewards} premi riscattati
-                                </Typography>
-                              </CardContent>
-                              <CardActions>
-                                <Button 
-                                  size="small" 
-                                  onClick={() => handleStudentStatsClick(student)}
-                                >
-                                  Dettagli
-                                </Button>
-                              </CardActions>
-                            </Card>
-                          </HoverAnimation>
-                        );
-                      })}
-                    </Box>
-                  ) : (
-                    <Box sx={{ textAlign: 'center', py: 4 }}>
-                      <Typography variant="body1" color="textSecondary">
-                        Nessuno studente trovato
-                      </Typography>
-                    </Box>
-                  )}
-                </Paper>
-              </Grid>
-            </>
-          ) : (
-            // Tab delle richieste in sospeso
+                              <AnimatedCard sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                                  {template.imageUrl && (
+                                    <CardMedia
+                                      component="img"
+                                      height="140"
+                                      image={template.imageUrl}
+                                      alt={template.title}
+                                    />
+                                  )}
+                                  <CardContent sx={{ flexGrow: 1 }}>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                                      <Typography variant="h6" component="h2" gutterBottom>
+                                        {template.title}
+                                      </Typography>
+                                      {getCategoryChip(template.category)}
+                                    </Box>
+                                    <Typography color="textSecondary" variant="body2" gutterBottom>
+                                      {template.description}
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
+                                      <StarsIcon sx={{ color: 'warning.main', mr: 0.5 }} />
+                                      <Typography variant="h6" color="warning.main">
+                                        {template.pointsCost} punti
+                                      </Typography>
+                                    </Box>
+                                    <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+                                      Disponibilità: {template.availability === 'illimitato' ? 'Illimitata' : `${template.quantity || 0} rimasti`}
+                                    </Typography>
+                                  </CardContent>
+                                  <Divider />
+                                  <CardActions sx={{ justifyContent: 'space-between' }}>
+                                    <Box>
+                                      <Button 
+                                        size="small"
+                                        startIcon={<EditIcon />}
+                                        onClick={() => handleEditClick(template)}
+                                        sx={{ mr: 1 }}
+                                      >
+                                        Modifica
+                                      </Button>
+                                      <Button
+                                        size="small"
+                                        startIcon={<AssignIcon />}
+                                        color="success"
+                                        onClick={() => handleAssignClick(template)}
+                                      >
+                                        Assegna
+                                      </Button>
+                                    </Box>
+                                    <IconButton 
+                                      aria-label="elimina" 
+                                      color="error"
+                                      size="small"
+                                      onClick={() => handleDeleteClick(template)}
+                                    >
+                                      <DeleteIcon />
+                                    </IconButton>
+                                  </CardActions>
+                              </AnimatedCard>
+                            </motion.div>
+                          </Grid>
+                        ))
+                      ) : (
+                        <Grid item xs={12}>
+                          <Box sx={{ textAlign: 'center', py: 4 }}>
+                            <Typography variant="h6" color="textSecondary">
+                              Nessun premio trovato
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary">
+                              Prova a modificare i criteri di ricerca o crea un nuovo premio
+                            </Typography>
+                          </Box>
+                        </Grid>
+                      )}
+                    </Grid>
+                  </AnimatePresence>
+                )}
+              </Paper>
+            </Grid>
+          ) : tabValue === 1 ? (
+            // TAB 2: Richieste in sospeso
             <Grid item xs={12}>
               <Paper sx={{ p: 2, mb: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -863,6 +829,211 @@ function ManageRewards() {
                         </Typography>
                         <Typography variant="body2" color="textSecondary">
                           Al momento non ci sono richieste di riscatto da approvare
+                        </Typography>
+                      </Box>
+                    )}
+                  </>
+                )}
+              </Paper>
+            </Grid>
+          ) : tabValue === 2 ? (
+            // TAB 3: Statistiche studenti
+            <Grid item xs={12}>
+              <Paper sx={{ p: 2, mb: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                  <Typography variant="h5" component="h2">
+                    Statistiche Studenti
+                  </Typography>
+                  <Button 
+                    variant="outlined"
+                    color="primary"
+                    onClick={fetchStudentsWithStats}
+                    startIcon={<RefreshIcon />}
+                  >
+                    Aggiorna
+                  </Button>
+                </Box>
+                
+                {loading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <>
+                    {students.length > 0 ? (
+                      <Grid container spacing={3}>
+                        {students.map((student) => {
+                          const studentData = getStudentStats(student.id);
+                          return (
+                            <Grid item xs={12} md={6} lg={4} key={student.id}>
+                              <HoverAnimation>
+                                <Card sx={{ height: '100%' }}>
+                                  <CardContent>
+                                    <Typography variant="h6" component="h3" gutterBottom>
+                                      {student.name}
+                                    </Typography>
+                                    
+                                    <Grid container spacing={2} sx={{ mb: 2 }}>
+                                      <Grid item xs={6}>
+                                        <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: 'primary.light', color: 'white' }}>
+                                          <Typography variant="body2">Punti totali</Typography>
+                                          <Typography variant="h5">{studentData.totalPoints}</Typography>
+                                        </Paper>
+                                      </Grid>
+                                      
+                                      <Grid item xs={6}>
+                                        <Paper sx={{ p: 1.5, textAlign: 'center', bgcolor: 'success.light', color: 'white' }}>
+                                          <Typography variant="body2">Disponibili</Typography>
+                                          <Typography variant="h5">{studentData.availablePoints}</Typography>
+                                        </Paper>
+                                      </Grid>
+                                    </Grid>
+                                    
+                                    <Divider sx={{ my: 2 }} />
+                                    
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <Typography variant="body1">
+                                        Premi riscattati:
+                                      </Typography>
+                                      <Chip 
+                                        label={studentData.redeemedRewards} 
+                                        color="primary" 
+                                        variant="outlined"
+                                      />
+                                    </Box>
+                                    
+                                    {(() => {
+                                      // Get student stats and redemptions safely
+                                      const stats = studentStats.get(student.id);
+                                      const redemptions = stats?.recentRedemptions || [];
+                                      
+                                      return redemptions.length > 0 && (
+                                        <Box sx={{ mt: 2 }}>
+                                          <Typography variant="subtitle2" gutterBottom>
+                                            Riscatti recenti:
+                                          </Typography>
+                                          {redemptions.slice(0, 2).map((redemption, idx) => (
+                                          <Box key={idx} sx={{ 
+                                            display: 'flex', 
+                                            justifyContent: 'space-between',
+                                            bgcolor: 'background.default',
+                                            p: 1,
+                                            borderRadius: 1,
+                                            mb: 1,
+                                          }}>
+                                            <Typography variant="body2" noWrap sx={{ maxWidth: '70%' }}>
+                                              {redemption.rewardTitle}
+                                            </Typography>
+                                            <Typography variant="caption" color="textSecondary">
+                                              {redemption.date}
+                                            </Typography>
+                                          </Box>
+                                        ))}
+                                      </Box>
+                                    );
+                                    })()}
+                                  </CardContent>
+                                  <CardActions>
+                                    <Button 
+                                      size="small" 
+                                      onClick={() => handleStudentStatsClick(student)}
+                                      color="primary"
+                                    >
+                                      Dettagli completi
+                                    </Button>
+                                  </CardActions>
+                                </Card>
+                              </HoverAnimation>
+                            </Grid>
+                          );
+                        })}
+                      </Grid>
+                    ) : (
+                      <Box sx={{ textAlign: 'center', py: 4 }}>
+                        <Typography variant="h6" color="textSecondary">
+                          Nessuno studente trovato
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          Non ci sono studenti registrati al momento.
+                        </Typography>
+                      </Box>
+                    )}
+                  </>
+                )}
+              </Paper>
+            </Grid>
+          ) : (
+            // TAB 4: Premi assegnati
+            <Grid item xs={12}>
+              <Paper sx={{ p: 2, mb: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                  <Typography variant="h5" component="h2">
+                    Premi Assegnati
+                  </Typography>
+                  <Button 
+                    variant="outlined"
+                    color="primary"
+                    onClick={fetchAssignedRewards}
+                    startIcon={<RefreshIcon />}
+                  >
+                    Aggiorna
+                  </Button>
+                </Box>
+                
+                {loading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <>
+                    {assignedRewards.length > 0 ? (
+                      <List>
+                        {assignedRewards.map((reward, index) => (
+                          <HoverAnimation key={index}>
+                            <Paper elevation={1} sx={{ mb: 2 }}>
+                              <ListItem>
+                                <ListItemAvatar>
+                                  <Avatar sx={{ bgcolor: 'success.main' }}>
+                                    <AssignmentTurnedInIcon />
+                                  </Avatar>
+                                </ListItemAvatar>
+                                <ListItemText
+                                  primary={
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <Typography variant="subtitle1">{reward.title}</Typography>
+                                      <Chip 
+                                        size="small" 
+                                        color={reward.status === 'disponibile' ? 'success' : 'default'}
+                                        label={reward.statusLabel || 'Assegnato'} 
+                                      />
+                                    </Box>
+                                  }
+                                  secondary={
+                                    <>
+                                      <Typography variant="body2" component="span">
+                                        Assegnato a: <strong>{reward.studentName}</strong>
+                                      </Typography>
+                                      <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
+                                        <StarsIcon sx={{ color: 'warning.main', mr: 0.5, fontSize: 16 }} />
+                                        <Typography variant="caption" color="textSecondary">
+                                          {reward.pointsCost} punti
+                                        </Typography>
+                                      </Box>
+                                    </>
+                                  }
+                                />
+                              </ListItem>
+                            </Paper>
+                          </HoverAnimation>
+                        ))}
+                      </List>
+                    ) : (
+                      <Box sx={{ textAlign: 'center', py: 4 }}>
+                        <Typography variant="h6" color="textSecondary">
+                          Nessun premio assegnato
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          Non hai ancora assegnato premi ai tuoi studenti.
                         </Typography>
                       </Box>
                     )}
@@ -1136,6 +1307,6 @@ function ManageRewards() {
       </PageTransition>
     </MainLayout>
   );
-};
+}
 
 export default ManageRewards;
