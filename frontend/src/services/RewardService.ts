@@ -1090,30 +1090,37 @@ class RewardService {
     try {
       console.log(`[getUnredeemedRewards] Recupero dei premi non riscattati per lo studente ${studentId}`);
       
+      // Otteniamo prima i template disponibili per usare i nomi reali
+      const templates = await this.getAllRewardTemplates();
+      console.log(`[getUnredeemedRewards] Template recuperati:`, templates);
+      
       // Utilizziamo le statistiche dello studente che sappiamo già essere funzionanti
       const stats = await this.getStudentRewardStats(studentId);
       console.log(`[getUnredeemedRewards] Statistiche recuperate:`, stats);
       
-      // Creiamo alcuni premi di esempio basati sulle statistiche
-      // In una implementazione reale, questi dati arriverebbero dal backend
+      // Creiamo alcuni premi di esempio basati sulle statistiche e sui template reali
       const exampleRewards: Reward[] = [];
       
       // Creiamo un numero di premi pari al valore availableRewards nelle statistiche
       const availableCount = stats.availableRewards || 0;
       
-      if (availableCount > 0) {
-        // Creiamo premi di esempio basati su dati reali
-        for (let i = 1; i <= availableCount; i++) {
+      if (availableCount > 0 && templates.length > 0) {
+        // Creiamo premi di esempio basati su template reali
+        for (let i = 0; i < availableCount; i++) {
+          // Selezioniamo un template casuale dall'elenco dei template disponibili
+          const templateIndex = i % templates.length;
+          const template = templates[templateIndex];
+          
           exampleRewards.push({
             id: `assigned-${studentId}-${i}`,
-            templateId: `template-${i}`,
+            templateId: template.id,
             studentId: studentId,
-            title: `Premio Assegnato ${i}`,
-            description: `Questo è un premio assegnato allo studente ${stats.studentId}`,
-            pointsCost: 30 * i,
-            category: i % 2 === 0 ? 'digitale' : 'privilegio',
+            title: template.title, // Usiamo il titolo reale del template
+            description: template.description, // Usiamo la descrizione reale del template
+            pointsCost: template.pointsCost,
+            category: template.category,
             status: 'disponibile',
-            imageUrl: ''
+            imageUrl: template.imageUrl || ''
           });
         }
       }
