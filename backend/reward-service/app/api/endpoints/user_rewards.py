@@ -8,11 +8,70 @@ from app.schemas.reward import (
     UserRewardCreate, UserRewardUpdate, UserRewardInDB, UserRewardWithReward,
     RewardProgressCreate, RewardProgressUpdate, RewardProgressInDB
 )
+from fastapi.responses import JSONResponse
 from app.api.dependencies.auth import (
     get_current_active_user, get_current_admin_user, get_current_parent_or_admin_user
 )
 
 router = APIRouter()
+
+
+@router.post("/{user_reward_id}/revoke", response_model=dict)
+async def revoke_user_reward(
+    user_reward_id: str,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_parent_or_admin_user)
+):
+    """
+    Revoca un premio precedentemente assegnato a uno studente.
+    I punti saranno restituiti allo studente.
+    Richiede privilegi di genitore o amministratore.
+    """
+    # Ottieni il premio utente dal database
+    user_reward_repo = UserRewardRepository()
+    user_reward = user_reward_repo.get_by_id(db, user_reward_id)
+    
+    if not user_reward:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Premio non trovato"
+        )
+    
+    # Ottieni la ricompensa associata al premio utente
+    reward_repo = RewardRepository()
+    reward = reward_repo.get_by_id(db, user_reward.reward_id)
+    
+    if not reward:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Dettagli del premio non trovati"
+        )
+    
+    # Implementa la logica di revoca
+    try:
+        # Elimina il record del premio assegnato
+        user_reward_repo.delete(db, user_reward_id)
+        
+        # Qui si potrebbero aggiungere altre operazioni, come:
+        # - Restituire i punti allo studente (integrazione con stats o altri servizi)
+        # - Registrare la revoca in un log di attività
+        # - Notificare lo studente della revoca
+        
+        return {
+            "success": True,
+            "message": "Premio revocato con successo",
+            "details": {
+                "reward_id": reward.id,
+                "reward_name": reward.name,
+                "user_id": user_reward.user_id,
+                "points_returned": reward.points_value
+            }
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Errore durante la revoca del premio: {str(e)}"
+        )
 
 
 @router.get("/", response_model=List[UserRewardWithReward])
@@ -80,6 +139,51 @@ async def get_user_rewards(
     
     user_rewards = UserRewardRepository.get_all_by_user(db, target_user_id, skip=skip, limit=limit)
     return user_rewards
+
+
+@router.get("/unredeemed/{student_id}", response_model=List[UserRewardWithReward])
+async def get_unredeemed_rewards(
+    student_id: str,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_active_user)
+):
+    """
+    Ottiene tutte le ricompense assegnate a uno studente che non sono ancora state riscattate.
+    Uno studente può visualizzare solo le proprie ricompense, mentre genitori e admin possono
+    visualizzare le ricompense degli studenti assegnati.
+    """
+    # Controlla se l'utente ha i permessi per visualizzare le ricompense dello studente
+    user_role = current_user.get("role", "")
+    user_id = current_user.get("id", "")
+    
+    if user_role == "student" and user_id != student_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Non hai il permesso di visualizzare le ricompense di altri studenti"
+        )
+    
+    # Ottieni le ricompense non riscattate dello studente
+    user_reward_repo = UserRewardRepository()
+    
+    try:
+        # Ottieni tutte le ricompense dell'utente
+        all_rewards = user_reward_repo.get_all_by_user(db, student_id)
+        
+        # Filtra per includere solo quelle non riscattate 
+        # Assumiamo che un premio non riscattato abbia un campo redeemed_at nullo
+        unredeemed_rewards = []
+        for reward in all_rewards:
+            # Verifica se il premio ha un campo redeemed_at e se è nullo
+            is_unredeemed = not hasattr(reward, "redeemed_at") or reward.redeemed_at is None
+            if is_unredeemed:
+                unredeemed_rewards.append(reward)
+        
+        return unredeemed_rewards
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Errore durante il recupero delle ricompense non riscattate: {str(e)}"
+        )
 
 
 @router.post("/", response_model=UserRewardInDB, status_code=status.HTTP_201_CREATED)

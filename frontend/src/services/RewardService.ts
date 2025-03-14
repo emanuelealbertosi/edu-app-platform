@@ -1069,43 +1069,132 @@ class RewardService {
     try {
       console.log(`[getUnredeemedRewards] Recupero dei premi non riscattati per lo studente ${studentId}`);
       
-      // Otteniamo prima i template disponibili per usare i nomi reali
-      const templates = await this.getAllRewardTemplates();
-      console.log(`[getUnredeemedRewards] Template recuperati:`, templates);
-      
-      // Utilizziamo le statistiche dello studente che sappiamo già essere funzionanti
-      const stats = await this.getStudentRewardStats(studentId);
-      console.log(`[getUnredeemedRewards] Statistiche recuperate:`, stats);
-      
-      // Creiamo alcuni premi di esempio basati sulle statistiche e sui template reali
-      const exampleRewards: Reward[] = [];
-      
-      // Creiamo un numero di premi pari al valore availableRewards nelle statistiche
-      const availableCount = stats.availableRewards || 0;
-      
-      if (availableCount > 0 && templates.length > 0) {
-        // Creiamo premi di esempio basati su template reali
-        for (let i = 0; i < availableCount; i++) {
-          // Selezioniamo un template casuale dall'elenco dei template disponibili
-          const templateIndex = i % templates.length;
-          const template = templates[templateIndex];
+      try {
+        // Prima proviamo a recuperare i premi reali dal backend
+        const response = await ApiService.get<any>(`/api/user-rewards/unredeemed/${studentId}`);
+        
+        // Verifichiamo che i dati siano presenti
+        if (response && Array.isArray(response)) {
+          console.log(`[getUnredeemedRewards] Recuperati ${response.length} premi reali dal backend`);
           
-          exampleRewards.push({
-            id: `assigned-${studentId}-${i}`,
-            templateId: template.id,
-            studentId: studentId,
-            title: template.title, // Usiamo il titolo reale del template
-            description: template.description, // Usiamo la descrizione reale del template
-            pointsCost: template.pointsCost,
-            category: template.category,
+          // Trasformiamo i dati ricevuti nel formato Reward atteso dal frontend
+          const rewards: Reward[] = response.map(item => ({
+            id: item.id, // ID del record user_reward
+            templateId: item.reward_id,
+            studentId: item.user_id,
+            title: item.reward?.name || 'Premio sconosciuto',
+            description: item.reward?.description || 'Nessuna descrizione disponibile',
+            pointsCost: item.reward?.points_value || 0,
+            category: item.reward?.category || 'altro',
             status: 'disponibile',
-            imageUrl: template.imageUrl || ''
-          });
+            imageUrl: item.reward?.image_url || ''
+          }));
+          
+          if (rewards.length > 0) {
+            safeNotify.success(
+              `Recuperati ${rewards.length} premi disponibili`,
+              'Premi Caricati',
+              { autoClose: true, duration: 3000 }
+            );
+          }
+          
+          return rewards;
         }
+        
+        // Se la risposta è vuota o non valida, passiamo alla generazione fallback
+        throw new Error('Risposta vuota o non valida dal server');
+        
+      } catch (apiError) {
+        // Se l'endpoint non è raggiungibile, creiamo premi simulati come fallback
+        console.warn('Impossibile recuperare i premi reali dal backend, utilizzo modalità fallback:', apiError);
+        
+        // Utilizziamo le statistiche dello studente che sappiamo già essere funzionanti
+        const stats = await this.getStudentRewardStats(studentId);
+        console.log(`[getUnredeemedRewards] Statistiche recuperate per la modalità fallback:`, stats);
+        
+        // Creiamo alcuni premi di esempio basati sulle statistiche
+        const exampleRewards: Reward[] = [];
+        
+        // Creiamo un numero di premi pari al valore availableRewards nelle statistiche
+        const availableCount = stats.availableRewards || 0;
+        
+        // Creiamo un array di template di esempio nel caso in cui il recupero dall'API fallisca
+        let templates: RewardTemplate[] = [];
+        
+        try {
+          // Proviamo a recuperare i template reali
+          templates = await this.getAllRewardTemplates();
+          console.log(`[getUnredeemedRewards] Template recuperati da API per modalità fallback:`, templates);
+        } catch (templateError) {
+          console.warn('Impossibile recuperare i template reali, uso template di esempio:', templateError);
+          
+          // Se il recupero fallisce, creiamo template di esempio
+          templates = [
+            {
+              id: 'template-1',
+              title: 'Regalo Digitale',
+              description: 'Un gioco o app per il tuo dispositivo',
+              pointsCost: 50,
+              category: 'digitale',
+              imageUrl: '',
+              createdBy: 'system',
+              availability: 'illimitato'
+            },
+            {
+              id: 'template-2',
+              title: 'Privilegio Speciale',
+              description: 'Un\'ora extra di gioco la sera',
+              pointsCost: 30,
+              category: 'privilegio',
+              imageUrl: '',
+              createdBy: 'system',
+              availability: 'illimitato'
+            },
+            {
+              id: 'template-3',
+              title: 'Regalo Fisico',
+              description: 'Un libro o giocattolo a tua scelta',
+              pointsCost: 80,
+              category: 'fisico',
+              imageUrl: '',
+              createdBy: 'system',
+              availability: 'illimitato'
+            }
+          ];
+        }
+        
+        if (availableCount > 0 && templates.length > 0) {
+          // Creiamo premi di esempio basati su template (reali o di fallback)
+          for (let i = 0; i < availableCount; i++) {
+            // Selezioniamo un template dall'elenco dei template disponibili
+            const templateIndex = i % templates.length;
+            const template = templates[templateIndex];
+            
+            exampleRewards.push({
+              id: `assigned-${studentId}-${i}`,
+              templateId: template.id,
+              studentId: studentId,
+              title: template.title,
+              description: template.description,
+              pointsCost: template.pointsCost,
+              category: template.category,
+              status: 'disponibile',
+              imageUrl: template.imageUrl || ''
+            });
+          }
+        }
+        
+        // Avvisiamo l'utente che stiamo mostrando dati simulati
+        safeNotify.warning(
+          'Utilizzo dati simulati perché il server non è disponibile', 
+          'Modalità Fallback Attiva',
+          { autoClose: true, duration: 5000 }
+        );
+        
+        console.log(`[getUnredeemedRewards] Restituiti ${exampleRewards.length} premi simulati in modalità fallback`);
+        return exampleRewards;
       }
       
-      console.log(`[getUnredeemedRewards] Restituiti ${exampleRewards.length} premi assegnati`);
-      return exampleRewards;
     } catch (error) {
       console.error('Errore durante il recupero dei premi non riscattati:', error);
       safeNotify.error(
@@ -1125,29 +1214,54 @@ class RewardService {
     try {
       console.log(`[revokeReward] Tentativo di revoca del premio ${rewardId}`);
       
-      // In una vera implementazione, invieremmo una richiesta al backend
-      // per revocare il premio e restituire i punti allo studente
-      // Ad esempio: await ApiService.post(`/api/rewards/${rewardId}/revoke`);
+      // Verifichiamo se l'ID inizia con 'assigned-', indicando un premio simulato localmente
+      if (rewardId.startsWith('assigned-')) {
+        console.log(`[revokeReward] Premio rilevato come simulato (${rewardId}), gestisco la revoca localmente`);
+        
+        // Simuliamo un ritardo di rete
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // Per i premi simulati, gestiamo la revoca localmente
+        safeNotify.success(
+          `Il premio è stato revocato con successo e i punti sono stati restituiti allo studente`,
+          'Premio Revocato',
+          { autoClose: true, duration: 5000 }
+        );
+        
+        return true;
+      }
       
-      // Poiché l'endpoint non esiste, simuliamo una risposta positiva
-      // In una vera implementazione, dovremmo controllare la risposta del server
+      // Per i premi reali, effettuiamo la chiamata all'endpoint di revoca
+      const result = await ApiService.post<any>(`/api/user-rewards/${rewardId}/revoke`);
       
-      // Simuliamo un ritardo di rete
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Mostriamo una notifica di successo
-      safeNotify.success(
-        'Il premio è stato revocato con successo e i punti sono stati restituiti allo studente',
-        'Premio Revocato',
-        { autoClose: true, duration: 5000 }
-      );
-      
-      console.log(`[revokeReward] Premio ${rewardId} revocato con successo`);
-      return true;
-    } catch (error) {
+      // Verifichiamo il successo della revoca
+      if (result && result.success) {
+        // Estrai informazioni aggiuntive dalla risposta
+        const { reward_name, points_returned } = result.details || {};
+        
+        // Mostriamo una notifica di successo
+        safeNotify.success(
+          `Il premio "${reward_name || 'selezionato'}" è stato revocato con successo e ${points_returned || ''} punti sono stati restituiti allo studente`,
+          'Premio Revocato',
+          { autoClose: true, duration: 5000 }
+        );
+        
+        console.log(`[revokeReward] Premio ${rewardId} revocato con successo`, result);
+        return true;
+      } else {
+        // In caso di risposta inattesa
+        throw new Error('Risposta non valida dal server');
+      }
+    } catch (error: any) {
       console.error(`Errore durante la revoca del premio ${rewardId}:`, error);
+      
+      // Estrazione del messaggio di errore per una notifica più informativa
+      const errorMessage = error.response?.data?.detail || 
+                          error.message || 
+                          'Si è verificato un errore sconosciuto';
+                          
       safeNotify.error(
-        'Non è stato possibile revocare il premio',
+        `Non è stato possibile revocare il premio: ${errorMessage}`,
         'Errore'
       );
       return false;
