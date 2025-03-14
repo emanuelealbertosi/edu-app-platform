@@ -74,13 +74,24 @@ const RewardsStore: React.FC = () => {
   }, []);
 
   const fetchRewards = async () => {
+    console.log('RewardsStore: Inizio fetchRewards');
     setLoading(true);
     try {
       // Utilizziamo il servizio reale per ottenere i premi disponibili
+      console.log('RewardsStore: Chiamata a RewardService.getAvailableRewards()');
       const rewards = await RewardService.getAvailableRewards();
+      console.log('RewardsStore: Ricevute ricompense:', rewards);
+      console.log('RewardsStore: Numero di ricompense ricevute:', rewards.length);
+      
+      // Verifichiamo che i dati ricevuti siano nel formato corretto
+      if (rewards && rewards.length > 0) {
+        console.log('RewardsStore: Prima ricompensa:', rewards[0]);
+      }
+      
       setAvailableRewards(rewards);
       setLoading(false);
     } catch (error) {
+      console.error('RewardsStore: Errore in fetchRewards:', error);
       ApiErrorHandler.handleApiError(error);
       setLoading(false);
     }

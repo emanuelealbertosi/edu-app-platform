@@ -25,7 +25,18 @@ import {
   MenuItem,
   SelectChangeEvent,
   Fab,
-  InputAdornment
+  InputAdornment,
+  Tabs,
+  Tab,
+  Badge,
+  Alert,
+  Tooltip,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemAvatar,
+  Avatar,
+  ListItemSecondaryAction
 } from '@mui/material';
 import { 
   Add as AddIcon, 
@@ -33,7 +44,11 @@ import {
   Delete as DeleteIcon,
   EmojiEvents as TrophyIcon,
   School as SchoolIcon,
-  Stars as StarsIcon
+  Stars as StarsIcon,
+  CheckCircle as ApproveIcon,
+  Cancel as RejectIcon,
+  AssignmentTurnedIn as AssignIcon,
+  Refresh as RefreshIcon
 } from '@mui/icons-material';
 import MainLayout from '../../components/layouts/MainLayout';
 import PageTransition from '../../components/animations/PageTransition';
@@ -42,7 +57,7 @@ import AnimatedCard from '../../components/animations/AnimatedCard';
 import HoverAnimation from '../../components/animations/HoverAnimation';
 import { ApiErrorHandler } from '../../services/ApiErrorHandler';
 import { NotificationsService } from '../../services/NotificationsService';
-import RewardService, { RewardTemplate, StudentRewardStats } from '../../services/RewardService';
+import RewardService, { RewardTemplate, StudentRewardStats, PendingReward } from '../../services/RewardService';
 import StudentService, { Student } from '../../services/StudentService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../../contexts/AuthContext';
@@ -60,10 +75,10 @@ interface RewardForm {
 }
 
 // Componente per visualizzare i riscatti recenti
-const RecentRedemptions: React.FC<{
+function RecentRedemptions({ selectedStudent, studentStats }: {
   selectedStudent: Student | null;
   studentStats: Map<string, StudentRewardStats>;
-}> = ({ selectedStudent, studentStats }) => {
+}) {
   if (!selectedStudent) return null;
   
   const stats = studentStats.get(selectedStudent.id);
@@ -95,7 +110,7 @@ interface StudentRewardData {
   redeemedRewards: number;
 }
 
-const ManageRewards: React.FC = () => {
+function ManageRewards() {
   const { user } = useAuth();
   const [rewardTemplates, setRewardTemplates] = useState<RewardTemplate[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
@@ -105,11 +120,28 @@ const ManageRewards: React.FC = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [rewardToDelete, setRewardToDelete] = useState<RewardTemplate | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  
+  // Stati per le tab e le richieste in sospeso
+  const [tabValue, setTabValue] = useState<number>(0);
+  // Utilizziamo un tipo esteso di PendingReward per la UI
+  interface ExtendedPendingReward extends PendingReward {
+    category?: string;
+    description?: string;
+  }
+  const [pendingRewards, setPendingRewards] = useState<ExtendedPendingReward[]>([]);
+  const [pendingLoading, setPendingLoading] = useState<boolean>(false);
+  
+  // Stati per l'assegnazione dei premi
+  const [assignDialogOpen, setAssignDialogOpen] = useState<boolean>(false);
+  const [selectedTemplate, setSelectedTemplate] = useState<RewardTemplate | null>(null);
+  const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   const [studentStatsDialogOpen, setStudentStatsDialogOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingRewardId, setEditingRewardId] = useState<string | null>(null);
+  
+  // I duplicati sono stati rimossi, questi stati sono già dichiarati sopra
   
   // Form per nuovo reward template
   const [newReward, setNewReward] = useState<RewardForm>({
@@ -124,7 +156,46 @@ const ManageRewards: React.FC = () => {
   useEffect(() => {
     fetchRewardTemplates();
     fetchStudents();
-  }, []);
+    // Carichiamo le richieste in sospeso solo se siamo nella tab corrispondente
+    if (tabValue === 1) {
+      fetchPendingRewards();
+    }
+  }, [tabValue]);
+  
+  // Funzione per recuperare le richieste di premio in attesa di approvazione
+  const fetchPendingRewards = async () => {
+    setPendingLoading(true);
+    try {
+      const rewards = await RewardService.getPendingRewards();
+      // Aggiungiamo al tipo PendingReward le proprietà aggiuntive necessarie per la visualizzazione
+      // senza modificare l'originale
+      setPendingRewards(rewards.map(reward => ({
+        ...reward,
+        // Aggiungiamo proprietà per la visualizzazione nella UI
+        category: 'digitale',
+        description: '' // Placeholder vuoto per compatibilità con l'interfaccia UI
+      })));
+      setPendingLoading(false);
+    } catch (error) {
+      ApiErrorHandler.handleApiError(error);
+      setPendingLoading(false);
+    }
+  };
+  
+  // Funzione per ottenere le statistiche di uno studente specifico
+  const fetchStudentStats = async (studentId: string) => {
+    try {
+      const stats = await RewardService.getStudentRewardStats(studentId);
+      setStudentStats(prev => {
+        const newMap = new Map(prev);
+        newMap.set(studentId, stats);
+        return newMap;
+      });
+    } catch (error) {
+      console.error(`Errore nel caricamento delle statistiche per lo studente ${studentId}`, error);
+      ApiErrorHandler.handleApiError(error);
+    }
+  };
 
   const fetchRewardTemplates = async () => {
     setLoading(true);
@@ -299,6 +370,76 @@ const ManageRewards: React.FC = () => {
     setStudentStatsDialogOpen(false);
     setSelectedStudent(null);
   };
+  
+  // Funzione per aprire il dialog di assegnazione premio
+  const handleAssignClick = (template: RewardTemplate) => {
+    setSelectedTemplate(template);
+    setSelectedStudentId(students.length > 0 ? students[0].id : '');
+    setAssignDialogOpen(true);
+  };
+  
+  // Funzione per chiudere il dialog di assegnazione premio
+  const handleAssignDialogClose = () => {
+    setAssignDialogOpen(false);
+    setSelectedTemplate(null);
+    setSelectedStudentId('');
+  };
+  
+  // Funzione per assegnare un premio a uno studente
+  const handleAssignReward = async () => {
+    if (!selectedTemplate || !selectedStudentId) {
+      NotificationsService.error('Seleziona un template e uno studente validi');
+      return;
+    }
+    
+    try {
+      await RewardService.assignRewardToStudent(selectedTemplate.id, selectedStudentId);
+      
+      // Aggiorniamo le statistiche dello studente
+      fetchStudentStats(selectedStudentId);
+      
+      handleAssignDialogClose();
+    } catch (error) {
+      ApiErrorHandler.handleApiError(error);
+    }
+  };
+  
+  // Funzione per approvare un premio in attesa
+  const handleApproveReward = async (rewardId: string) => {
+    try {
+      await RewardService.approveReward(rewardId);
+      // Aggiorniamo la lista rimuovendo il premio approvato
+      setPendingRewards(pendingRewards.filter(reward => reward.id !== rewardId));
+      NotificationsService.success('Premio approvato con successo', 'Approvato');
+      // Aggiorniamo anche le statistiche degli studenti
+      fetchStudents();
+    } catch (error) {
+      ApiErrorHandler.handleApiError(error);
+    }
+  };
+  
+  // Funzione per rifiutare un premio in attesa
+  const handleRejectReward = async (rewardId: string) => {
+    try {
+      await RewardService.rejectReward(rewardId);
+      // Aggiorniamo la lista rimuovendo il premio rifiutato
+      setPendingRewards(pendingRewards.filter(reward => reward.id !== rewardId));
+      NotificationsService.success('Premio rifiutato con successo', 'Rifiutato');
+      // Aggiorniamo anche le statistiche degli studenti
+      fetchStudents();
+    } catch (error) {
+      ApiErrorHandler.handleApiError(error);
+    }
+  };
+  
+  // Gestione del cambio di tab
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
+    // Se passiamo alla tab delle richieste, aggiorniamo la lista
+    if (newValue === 1) {
+      fetchPendingRewards();
+    }
+  };
 
   const filteredRewardTemplates = rewardTemplates.filter(template => {
     const searchLower = searchQuery.toLowerCase();
@@ -363,12 +504,42 @@ const ManageRewards: React.FC = () => {
           </Typography>
         </Box>
 
+        <Box sx={{ width: '100%', mb: 3 }}>
+          <Paper sx={{ p: 0 }}>
+            <Tabs
+              value={tabValue}
+              onChange={handleTabChange}
+              indicatorColor="primary"
+              textColor="primary"
+              variant="fullWidth"
+              aria-label="gestione premi tabs"
+            >
+              <Tab 
+                label="Template" 
+                icon={<StarsIcon />} 
+                iconPosition="start" 
+              />
+              <Tab 
+                label={
+                  <Badge badgeContent={pendingRewards.length} color="error" max={99}>
+                    Richieste in sospeso
+                  </Badge>
+                } 
+                icon={<ApproveIcon />} 
+                iconPosition="start" 
+              />
+            </Tabs>
+          </Paper>
+        </Box>
+        
         <Grid container spacing={3}>
-          <Grid item xs={12} md={8}>
-            <Paper sx={{ p: 2, mb: 3 }}>
+          {tabValue === 0 ? (
+            <>
+              <Grid item xs={12} md={8}>
+                <Paper sx={{ p: 2, mb: 3 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="h5" component="h2">
-                  Premi disponibili
+                  Template premi
                 </Typography>
                 <HoverAnimation>
                   <Button 
@@ -454,13 +625,24 @@ const ManageRewards: React.FC = () => {
                                 </CardContent>
                                 <Divider />
                                 <CardActions sx={{ justifyContent: 'space-between' }}>
-                                  <Button 
-                                    size="small"
-                                    startIcon={<EditIcon />}
-                                    onClick={() => handleEditClick(template)}
-                                  >
-                                    Modifica
-                                  </Button>
+                                  <Box>
+                                    <Button 
+                                      size="small"
+                                      startIcon={<EditIcon />}
+                                      onClick={() => handleEditClick(template)}
+                                      sx={{ mr: 1 }}
+                                    >
+                                      Modifica
+                                    </Button>
+                                    <Button
+                                      size="small"
+                                      startIcon={<AssignIcon />}
+                                      color="success"
+                                      onClick={() => handleAssignClick(template)}
+                                    >
+                                      Assegna
+                                    </Button>
+                                  </Box>
                                   <IconButton 
                                     aria-label="elimina" 
                                     color="error"
@@ -542,8 +724,153 @@ const ManageRewards: React.FC = () => {
                   </Typography>
                 </Box>
               )}
-            </Paper>
-          </Grid>
+                </Paper>
+              </Grid>
+              <Grid item xs={12} md={4}>
+                <Paper sx={{ p: 2, mb: 3 }}>
+                  <Typography variant="h5" component="h2" gutterBottom>
+                    Statistiche Studenti
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+                    Monitora i punti accumulati e i premi riscattati dai tuoi studenti.
+                  </Typography>
+
+                  {students.length > 0 ? (
+                    <Box>
+                      {students.map((student) => {
+                        const studentData = getStudentStats(student.id);
+                        return (
+                          <HoverAnimation key={student.id}>
+                            <Card sx={{ mb: 2 }}>
+                              <CardContent>
+                                <Typography variant="h6" component="h3">
+                                  {student.name}
+                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                                  <StarsIcon sx={{ color: 'warning.main', mr: 0.5, fontSize: 20 }} />
+                                  <Typography variant="body1">
+                                    {studentData.availablePoints} / {studentData.totalPoints} punti
+                                  </Typography>
+                                </Box>
+                                <Typography variant="body2" color="textSecondary">
+                                  {studentData.redeemedRewards} premi riscattati
+                                </Typography>
+                              </CardContent>
+                              <CardActions>
+                                <Button 
+                                  size="small" 
+                                  onClick={() => handleStudentStatsClick(student)}
+                                >
+                                  Dettagli
+                                </Button>
+                              </CardActions>
+                            </Card>
+                          </HoverAnimation>
+                        );
+                      })}
+                    </Box>
+                  ) : (
+                    <Box sx={{ textAlign: 'center', py: 4 }}>
+                      <Typography variant="body1" color="textSecondary">
+                        Nessuno studente trovato
+                      </Typography>
+                    </Box>
+                  )}
+                </Paper>
+              </Grid>
+            </>
+          ) : (
+            // Tab delle richieste in sospeso
+            <Grid item xs={12}>
+              <Paper sx={{ p: 2, mb: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                  <Typography variant="h5" component="h2">
+                    Richieste in sospeso
+                  </Typography>
+                  <Button 
+                    variant="outlined"
+                    color="primary"
+                    onClick={fetchPendingRewards}
+                    startIcon={<RefreshIcon />}
+                  >
+                    Aggiorna
+                  </Button>
+                </Box>
+                
+                {pendingLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <>
+                    {pendingRewards.length > 0 ? (
+                      <List>
+                        {pendingRewards.map((reward) => (
+                          <Paper key={reward.id} elevation={1} sx={{ mb: 2 }}>
+                            <ListItem>
+                              <ListItemAvatar>
+                                <Avatar sx={{ bgcolor: 'warning.main' }}>
+                                  <StarsIcon />
+                                </Avatar>
+                              </ListItemAvatar>
+                              <ListItemText
+                                primary={
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Typography variant="subtitle1">{reward.title}</Typography>
+                                    {getCategoryChip('digitale')}
+                                  </Box>
+                                }
+                                secondary={
+                                  <>
+                                    <Typography variant="body2" component="span">
+                                      Richiesto da: <strong>{reward.studentName}</strong> - {reward.cost} punti
+                                    </Typography>
+                                    <Typography variant="caption" color="textSecondary">
+                                      Richiesto il: {reward.requestDate}
+                                    </Typography>
+                                  </>
+                                }
+                              />
+                              <ListItemSecondaryAction>
+                                <Tooltip title="Approva richiesta">
+                                  <IconButton 
+                                    edge="end" 
+                                    color="success" 
+                                    onClick={() => handleApproveReward(reward.id)}
+                                    sx={{ mr: 1 }}
+                                  >
+                                    <ApproveIcon />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Rifiuta richiesta">
+                                  <IconButton 
+                                    edge="end" 
+                                    color="error"
+                                    onClick={() => handleRejectReward(reward.id)}
+                                  >
+                                    <RejectIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              </ListItemSecondaryAction>
+                            </ListItem>
+                          </Paper>
+                        ))}
+                      </List>
+                    ) : (
+                      <Box sx={{ textAlign: 'center', py: 4 }}>
+                        <Typography variant="h6" color="textSecondary">
+                          Nessuna richiesta in sospeso
+                        </Typography>
+                        <Typography variant="body2" color="textSecondary">
+                          Al momento non ci sono richieste di riscatto da approvare
+                        </Typography>
+                      </Box>
+                    )}
+                  </>
+                )}
+              </Paper>
+            </Grid>
+          )}
         </Grid>
 
         {/* FAB per aggiungere velocemente un nuovo premio */}
@@ -560,6 +887,59 @@ const ManageRewards: React.FC = () => {
           <AddIcon />
         </Fab>
 
+        {/* Dialog per assegnare un premio a uno studente */}
+        <Dialog
+          open={assignDialogOpen}
+          onClose={handleAssignDialogClose}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>Assegna Premio</DialogTitle>
+          <DialogContent>
+            {selectedTemplate && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle1" gutterBottom>
+                  Stai per assegnare il premio: <strong>{selectedTemplate.title}</strong>
+                </Typography>
+                <Typography variant="body2" color="textSecondary" gutterBottom>
+                  {selectedTemplate.description}
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', my: 2 }}>
+                  <StarsIcon sx={{ color: 'warning.main', mr: 0.5 }} />
+                  <Typography variant="subtitle2" color="warning.main">
+                    {selectedTemplate.pointsCost} punti
+                  </Typography>
+                </Box>
+                <FormControl fullWidth margin="normal">
+                  <InputLabel>Studente</InputLabel>
+                  <Select
+                    value={selectedStudentId}
+                    label="Studente"
+                    onChange={(e) => setSelectedStudentId(e.target.value)}
+                  >
+                    {students.map(student => (
+                      <MenuItem key={student.id} value={student.id}>
+                        {student.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleAssignDialogClose}>Annulla</Button>
+            <Button 
+              onClick={handleAssignReward} 
+              color="primary" 
+              variant="contained"
+              disabled={!selectedTemplate || !selectedStudentId}
+            >
+              Assegna
+            </Button>
+          </DialogActions>
+        </Dialog>
+        
         {/* Dialog di creazione nuovo premio */}
         <Dialog
           open={createDialogOpen}

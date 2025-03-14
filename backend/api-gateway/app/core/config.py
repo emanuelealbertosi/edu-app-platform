@@ -37,6 +37,7 @@ class Settings(BaseSettings):
         "/api/paths": PATH_SERVICE_URL,
         "/api/path-templates": PATH_SERVICE_URL,
         "/api/rewards": REWARD_SERVICE_URL,
+        "/api/rewards/stats": REWARD_SERVICE_URL,  # Endpoint per statistiche ricompense
         "/api/user-rewards": REWARD_SERVICE_URL,
         "/reward/parent": REWARD_SERVICE_URL,  # Endpoint per ricompense genitore
         "/api/templates": REWARD_SERVICE_URL  # Endpoint per template di ricompense

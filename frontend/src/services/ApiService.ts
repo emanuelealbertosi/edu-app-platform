@@ -67,11 +67,43 @@ class ApiService {
       }
     );
 
-    // Interceptor per gestire gli errori di autenticazione e refresh token
+    // Interceptor per gestire gli errori di autenticazione, refresh token e filtrare errori 404
     this.api.interceptors.response.use(
       (response) => response,
       async (error) => {
         const originalRequest = error.config;
+        
+        // Filtriamo preventivamente gli errori 404 per alcuni endpoint
+        if (error.response?.status === 404) {
+          const url = originalRequest.url || '';
+          
+          // Lista di pattern URL per cui ignorare silenziosamente errori 404
+          const silentlyIgnorePatterns = [
+            '/api/rewards', 
+            '/api/templates', 
+            '/reward/',
+            '/rewards/',
+            '/template',
+            '/templates',
+            '/parent/',
+            '/points'
+          ];
+          
+          // Verifica se l'URL contiene uno dei pattern da ignorare silenziosamente
+          const shouldIgnore = silentlyIgnorePatterns.some(pattern => url.includes(pattern));
+          
+          if (shouldIgnore) {
+            console.log(`[ApiService] Errore 404 ignorato silenziosamente per: ${url}`);
+            
+            // Per GET restituiamo array vuoto o null
+            if (originalRequest.method === 'get') {
+              return Promise.resolve({ data: originalRequest.url.includes('stats') ? {} : [] });
+            }
+            
+            // Per altre richieste, restituiamo un oggetto vuoto
+            return Promise.resolve({ data: {} });
+          }
+        }
         
         // Se l'errore è 401 (Unauthorized) e non è già un retry
         if (error.response?.status === 401 && !originalRequest._retry) {

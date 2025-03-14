@@ -135,7 +135,7 @@ function App() {
                     <AssignPaths />
                   </ProtectedRoute>
                 } />
-                <Route path="/parent/rewards" element={
+                <Route path="/parent/manage-rewards" element={
                   <ProtectedRoute requiredRole="parent">
                     <ManageRewards />
                   </ProtectedRoute>

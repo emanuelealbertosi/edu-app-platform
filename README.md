@@ -93,6 +93,9 @@ Questa è un'applicazione educativa con funzionalità di gestione quiz, percorsi
   - [x] Debug del servizio quiz per recupero dei template
   - [x] Miglioramento della gestione token di autenticazione
   - [x] Implementazione di logging dettagliato per tracciamento problemi
+  - [x] Miglioramento delle notifiche di errore nell'assegnazione dei premi
+    - [x] Notifiche duplicate per errori 400 ora visualizzate come info in blu
+    - [x] Messaggi più chiari e intuitivi per migliorare l'esperienza utente
 - [ ] Ottimizzazione delle prestazioni
   - [ ] Implementazione caching lato client
   - [ ] Caricamento ottimizzato delle risorse

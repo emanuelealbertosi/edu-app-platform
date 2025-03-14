@@ -91,6 +91,11 @@ class RewardRepository:
             query = query.filter(Reward.category_id == category_id)
             
         return query.offset(skip).limit(limit).all()
+        
+    @staticmethod
+    def count_reward_assignments(db: Session, reward_id: str) -> int:
+        """Conta quante volte una ricompensa è stata assegnata agli utenti"""
+        return db.query(UserReward).filter(UserReward.reward_id == reward_id).count()
 
     @staticmethod
     def create(db: Session, reward_data: RewardCreate) -> Reward:

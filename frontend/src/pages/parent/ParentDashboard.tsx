@@ -333,7 +333,7 @@ const ParentDashboard: React.FC = () => {
                     <Button 
                       fullWidth 
                       variant="contained" 
-                      onClick={() => navigate('/parent/rewards')}
+                      onClick={() => navigate('/parent/manage-rewards')}
                     >
                       Gestisci ricompense
                     </Button>

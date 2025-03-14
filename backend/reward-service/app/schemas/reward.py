@@ -91,6 +91,13 @@ class RewardInDB(RewardBase):
     created_by: str
     created_at: datetime
     updated_at: datetime
+    
+    # Campo alias per compatibilità con il frontend
+    @computed_field
+    @property
+    def title(self) -> str:
+        """Alias per il campo name per compatibilità con il frontend"""
+        return self.name
 
     model_config = {
         "from_attributes": True
@@ -138,7 +145,14 @@ class UserRewardInDB(UserRewardBase):
 class UserRewardWithReward(UserRewardInDB):
     """Schema per ricompense utente con i dettagli della ricompensa"""
     reward: RewardInDB
-
+    
+    # Campo calcolato per compatibilità con il frontend che si aspetta 'title'
+    @computed_field
+    @property
+    def title(self) -> str:
+        """Alias per il campo name della ricompensa associata"""
+        return self.reward.name if self.reward else ""
+    
     model_config = {
         "from_attributes": True
     }

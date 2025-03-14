@@ -48,9 +48,18 @@ def requires_auth(path: str) -> bool:
 
 # Funzione per determinare il servizio di destinazione
 def get_target_service(path: str) -> str:
+    # Prima controlliamo percorsi specifici che potrebbero dare problemi
+    if path.startswith('/api/rewards/stats/'):
+        logger.info(f"Routing speciale per percorso nidificato: {path} -> {settings.REWARD_SERVICE_URL}")
+        return settings.REWARD_SERVICE_URL
+        
+    # Gestione normale per tutti gli altri percorsi
     for prefix, service_url in settings.SERVICE_ROUTES.items():
         if path.startswith(prefix):
             return service_url
+            
+    # Nessun servizio trovato per questo percorso
+    logger.error(f"Nessun servizio trovato per il percorso: {path}")
     raise HTTPException(status_code=404, detail="Servizio non trovato")
 
 # Endpoint di health check
@@ -64,11 +73,26 @@ async def api_gateway(request: Request, path: str):
     # Costruisci il percorso completo
     full_path = f"/{path}"
     
-    # Determina il servizio di destinazione
-    target_service = get_target_service(full_path)
+    # Log DEBUG dettagliato
+    logger.info(f"API Gateway ricevuto percorso: {full_path}")
+    
+    # Caso speciale per le statistiche ricompense
+    if "/api/rewards/stats/" in full_path:
+        logger.info(f"PERCORSO CRITICO RICONOSCIUTO: {full_path}")
+        target_service = settings.REWARD_SERVICE_URL
+        logger.info(f"Reindirizzamento speciale a: {target_service}")
+    else:
+        # Determina il servizio di destinazione
+        try:
+            target_service = get_target_service(full_path)
+            logger.info(f"Servizio target normale: {target_service}")
+        except Exception as e:
+            logger.error(f"Errore nel routing: {e}")
+            raise
     
     # Costruisci l'URL di destinazione
     target_url = f"{target_service}{full_path}"
+    logger.info(f"URL finale di destinazione: {target_url}")
     
     # Crea un nuovo client HTTP
     async with httpx.AsyncClient() as client:
@@ -80,8 +104,10 @@ async def api_gateway(request: Request, path: str):
             headers = {key: value for key, value in request.headers.items() 
                       if key.lower() not in ['host', 'content-length']}
             
-            # Log della richiesta
-            logger.info(f"Proxy request to: {target_url} - Method: {request.method}")
+            # Log della richiesta con dettagli header e auth
+            auth_header = headers.get('authorization', 'NESSUNO')
+            auth_present = 'PRESENTE' if auth_header else 'MANCANTE'
+            logger.info(f"Proxy request to: {target_url} - Method: {request.method} - Auth: {auth_present}")
             
             # Invia la richiesta al servizio di destinazione
             response = await client.request(
@@ -93,6 +119,9 @@ async def api_gateway(request: Request, path: str):
                 cookies=request.cookies,
                 follow_redirects=True
             )
+            
+            # Log dettagliato della risposta
+            logger.info(f"Risposta da {target_url}: Status {response.status_code}, Content-Type: {response.headers.get('content-type')}")
             
             # Crea la risposta da inviare al client
             return Response(

@@ -1,5 +1,10 @@
 import axios, { AxiosError, AxiosRequestConfig, AxiosResponse } from 'axios';
-import { NotificationsService } from './NotificationsService';
+
+// Utilizziamo un'importazione dinamica per evitare dipendenze circolari
+let NotificationsService: any = null;
+import('./NotificationsService').then(module => {
+  NotificationsService = module.NotificationsService;
+});
 
 /**
  * Tipologie di errori API gestiti
@@ -184,20 +189,30 @@ export class ApiErrorHandler {
   }
   
   /**
-   * Verifica se l'errore è un 404 che può essere ignorato (ricompense, favicon, ecc.)
+   * Verifica se l'errore è un 404 che può essere ignorato (ricompense, templates, favicon, ecc.)
    */
   private isIgnorableRewardError(error: any): boolean {
     // Verifica se l'errore è di tipo Axios, è un 404 e contiene un URL
     if (axios.isAxiosError(error) && error.response?.status === 404 && error.config?.url) {
-      // Controlla se l'URL contiene '/reward/'
-      if (error.config.url.includes('/reward/')) {
-        // Possiamo ignorare gli errori 404 per le ricompense
-        return true;
-      }
+      // Lista di pattern da ignorare per errori 404
+      const ignorablePatterns = [
+        '/reward/',
+        '/rewards/',
+        '/api/rewards',
+        '/api/templates',
+        '/templates/',
+        '/favicon.ico',
+        '/api/parent',
+        '/parent/',
+        '/api/points'
+      ];
       
-      // Ignora errori 404 per favicon.ico
-      if (error.config.url.includes('/favicon.ico')) {
-        return true;
+      // Verifica se l'URL contiene uno dei pattern ignorabili
+      for (const pattern of ignorablePatterns) {
+        if (error.config.url.includes(pattern)) {
+          console.log(`[DEBUG ERROR HANDLER] Ignorato errore 404 per URL: ${error.config.url}`);
+          return true;
+        }
       }
     }
     return false;
@@ -286,6 +301,10 @@ export class ApiErrorHandler {
     };
   }
   
+  // Teniamo traccia degli errori recenti per evitare duplicazioni 
+  private recentErrors: Set<string> = new Set();
+  private readonly ERROR_MEMORY_TIME = 5000; // 5 secondi di "memoria"
+
   /**
    * Mostra una notifica per l'errore API
    */
@@ -298,12 +317,37 @@ export class ApiErrorHandler {
       console.log('Messaggio:', error.message);
       console.log('Request URL:', error.originalError?.config?.url || 'N/A');
       console.log('Detail:', error.details);
-      console.trace('Stack trace della notifica:');
+      
+      // Controlliamo gli URL per far gestire certi errori direttamente dal servizio relativo
+      const url = error.originalError?.config?.url || '';
+      if (url.includes('/api/rewards') || url.includes('/api/templates')) {
+        console.log('URL relativo alle ricompense, la notifica sarà gestita dal servizio RewardService');
+        return;
+      }
       
       // Non mostrare notifiche per errori vuoti o con messaggi generici
       if (!error.message || error.message === 'Risorsa non trovata.' || 
           (error.type === ApiErrorType.NOT_FOUND && !error.details)) {
         console.log('Skipping generic/empty notification');
+        return;
+      }
+      
+      // Evitiamo duplicazioni di errori simili in breve tempo
+      const errorKey = `${error.type}-${error.status}-${error.message}`;
+      if (this.recentErrors.has(errorKey)) {
+        console.log('Errore simile mostrato di recente, evito duplicazione');
+        return;
+      }
+      
+      // Aggiungiamo questo errore ai recenti e lo rimuoviamo dopo un po'
+      this.recentErrors.add(errorKey);
+      setTimeout(() => {
+        this.recentErrors.delete(errorKey);
+      }, this.ERROR_MEMORY_TIME);
+      
+      // Se NotificationsService non è ancora pronto, logghiamo e non facciamo niente
+      if (!NotificationsService) {
+        console.warn('NotificationsService non ancora disponibile. Errore non mostrato:', error.message);
         return;
       }
       
@@ -335,14 +379,13 @@ export class ApiErrorHandler {
           NotificationsService.showError('Timeout della richiesta: Il server non risponde.', 'Timeout');
           break;
         case ApiErrorType.NOT_FOUND:
-          // Più specifico per NOT_FOUND
-          if (error.originalError?.config?.url) {
-            const url = error.originalError.config.url;
-            if (url.includes('/reward/') || url.includes('/favicon.ico')) {
-              console.log('Ignorato errore 404 per URL specifico:', url);
-              return; // Non mostrare notifica
-            }
+          // Per NOT_FOUND, controlliamo ancora una volta l'URL
+          if (this.isIgnorableRewardError(error.originalError)) {
+            console.log('Ignorato errore 404 per URL specific.');
+            return; // Non mostrare notifica
           }
+          
+          // Solo se proprio necessario mostriamo l'errore 404
           NotificationsService.showError(`Risorsa non trovata: ${error.message !== 'Risorsa non trovata.' ? error.message : ''}`, 
             error.details ? `${error.details}` : '');
           break;

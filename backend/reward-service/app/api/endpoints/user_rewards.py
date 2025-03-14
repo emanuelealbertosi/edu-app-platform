@@ -28,19 +28,52 @@ async def get_user_rewards(
     Se user_id non è specificato, restituisce le ricompense dell'utente corrente.
     Se l'utente è un amministratore o un genitore, può visualizzare le ricompense di qualsiasi utente.
     """
+    # Log per debug dei problemi di autorizzazione
+    print(f"DEBUG - GET user-rewards - current_user: {current_user}")
+    
+    # Estrazione sicura dell'ID utente
+    user_id_current = current_user.get("id", "")
+    print(f"DEBUG - user_id_current: {user_id_current}")
+    
+    # Estrazione dei ruoli: potrebbe essere sotto "role" o "roles"
+    user_roles = []
+    
+    # Caso 1: role come stringa singola
+    if "role" in current_user:
+        user_roles.append(current_user["role"])
+    
+    # Caso 2: roles come array di oggetti con proprietà "name"
+    if "roles" in current_user and isinstance(current_user["roles"], list):
+        for role_obj in current_user["roles"]:
+            if isinstance(role_obj, dict) and "name" in role_obj:
+                user_roles.append(role_obj["name"])
+            elif isinstance(role_obj, str):
+                user_roles.append(role_obj)
+    
+    print(f"DEBUG - user_roles estratti: {user_roles}")
+    
     # Se non è specificato user_id, usa l'ID dell'utente corrente
-    target_user_id = user_id if user_id else current_user["id"]
+    target_user_id = user_id if user_id else user_id_current
+    print(f"DEBUG - target_user_id richiesto: {target_user_id}")
+    
+    # Verifica se l'utente ha i permessi necessari
+    is_admin = "admin" in user_roles
+    is_parent = "parent" in user_roles
+    is_self_request = target_user_id == user_id_current
+    
+    print(f"DEBUG - Controlli autorizzazione: is_admin={is_admin}, is_parent={is_parent}, is_self_request={is_self_request}")
     
     # Se l'utente richiede di vedere le ricompense di un altro utente,
     # verifica che abbia i permessi necessari
-    if target_user_id != current_user["id"] and current_user["role"] not in ["admin", "parent"]:
+    if not is_self_request and not (is_admin or is_parent):
+        print(f"DEBUG - Accesso negato: l'utente {user_id_current} con ruoli {user_roles} non può accedere alle ricompense dell'utente {target_user_id}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Non hai i permessi per visualizzare le ricompense di questo utente"
         )
     
     # Per i genitori, verifica che l'utente richiesto sia un figlio
-    if current_user["role"] == "parent" and target_user_id != current_user["id"]:
+    if is_parent and not is_self_request:
         # Qui dovresti verificare che l'utente target sia un figlio del genitore
         # Per ora, lasciamo passare e assumiamo che il controllo sia fatto dal servizio di autenticazione
         pass
@@ -59,19 +92,78 @@ async def assign_reward_to_user(
     Assegna una ricompensa a un utente.
     Richiede privilegi di amministratore o genitore.
     """
-    # Verifica che l'utente abbia i permessi per assegnare la ricompensa
-    if current_user["role"] != "admin" and user_reward.user_id != current_user["id"]:
-        # Per i genitori, verifica che l'utente target sia un figlio
-        # Per ora, lasciamo passare e assumiamo che il controllo sia fatto dal servizio di autenticazione
-        pass
+    # Estrazione sicura dell'ID utente
+    user_id = current_user.get("id", "")
+    
+    # Estrazione dei ruoli: potrebbe essere sotto "role" o "roles"
+    user_roles = []
+    
+    # Caso 1: role come stringa singola
+    if "role" in current_user:
+        user_roles.append(current_user["role"])
+    
+    # Caso 2: roles come array di oggetti con proprietà "name"
+    if "roles" in current_user and isinstance(current_user["roles"], list):
+        for role_obj in current_user["roles"]:
+            if isinstance(role_obj, dict) and "name" in role_obj:
+                user_roles.append(role_obj["name"])
+            elif isinstance(role_obj, str):
+                user_roles.append(role_obj)
+    
+    # Log per debug dell'autenticazione
+    print(f"DEBUG - current_user: {current_user}")
+    print(f"DEBUG - user_reward: {user_reward.model_dump()}")
+    print(f"DEBUG - ruoli estratti: {user_roles}")
+    
+    # Verifica se l'utente ha i permessi necessari
+    is_admin = "admin" in user_roles
+    is_parent = "parent" in user_roles
+    is_self_assignment = user_reward.user_id == user_id
+    
+    if not (is_admin or is_parent or is_self_assignment):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Non hai i permessi per assegnare ricompense a questo utente"
+        )
+        
+    # Per i genitori, verificare che l'utente target sia un figlio
+    # Per ora, lasciamo passare e assumiamo che il controllo sia fatto dal servizio di autenticazione
     
     try:
         user_reward_data = user_reward.model_dump()
+        print(f"DEBUG - Tentativo di creare user_reward: {user_reward_data}")
+        
+        # Verifichiamo se la ricompensa esiste
+        from app.db.repositories.reward_repository import RewardRepository
+        reward = RewardRepository.get_by_id(db, user_reward_data["reward_id"])
+        if not reward:
+            print(f"DEBUG - ERRORE: Ricompensa con ID {user_reward_data['reward_id']} non trovata nel database")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Ricompensa con ID {user_reward_data['reward_id']} non trovata"
+            )
+        print(f"DEBUG - Ricompensa trovata: {reward.id} - {reward.name}")
+        
+        # Verifichiamo se l'utente ha già questa ricompensa
+        existing = UserRewardRepository.get_by_user_and_reward(
+            db, user_reward_data["user_id"], user_reward_data["reward_id"]
+        )
+        if existing:
+            print(f"DEBUG - ERRORE: L'utente {user_reward_data['user_id']} possiede già la ricompensa {user_reward_data['reward_id']}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="L'utente possiede già questa ricompensa"
+            )
+            
+        # Se arriviamo qui, possiamo procedere con la creazione
         new_user_reward = UserRewardRepository.create(db, user_reward_data)
+        print(f"DEBUG - Ricompensa utente creata con successo: {new_user_reward.id}")
         return new_user_reward
     except HTTPException as e:
+        print(f"DEBUG - HTTPException durante la creazione: {e.status_code} - {e.detail}")
         raise e
     except Exception as e:
+        print(f"DEBUG - Eccezione generica durante la creazione: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Si è verificato un errore durante l'assegnazione della ricompensa: {str(e)}"
@@ -96,7 +188,30 @@ async def get_user_reward(
         )
     
     # Verifica che l'utente abbia i permessi per visualizzare questa ricompensa
-    if user_reward.user_id != current_user["id"] and current_user["role"] not in ["admin", "parent"]:
+    # Estrazione sicura dell'ID utente
+    user_id = current_user.get("id", "")
+    
+    # Estrazione dei ruoli: potrebbe essere sotto "role" o "roles"
+    user_roles = []
+    
+    # Caso 1: role come stringa singola
+    if "role" in current_user:
+        user_roles.append(current_user["role"])
+    
+    # Caso 2: roles come array di oggetti con proprietà "name"
+    if "roles" in current_user and isinstance(current_user["roles"], list):
+        for role_obj in current_user["roles"]:
+            if isinstance(role_obj, dict) and "name" in role_obj:
+                user_roles.append(role_obj["name"])
+            elif isinstance(role_obj, str):
+                user_roles.append(role_obj)
+    
+    # Verifica se l'utente ha i permessi necessari
+    is_admin = "admin" in user_roles
+    is_parent = "parent" in user_roles
+    is_self_access = user_reward.user_id == user_id
+    
+    if not is_self_access and not (is_admin or is_parent):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Non hai i permessi per visualizzare questa ricompensa"

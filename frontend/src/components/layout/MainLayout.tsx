@@ -85,7 +85,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title }) => {
       { text: 'Studenti', icon: <SchoolIcon />, path: '/parent/students' },
       { text: 'Gestione Percorsi', icon: <RouteIcon />, path: '/parent/paths' },
       { text: 'Assegna Percorsi', icon: <QuizIcon />, path: '/parent/assign-paths' },
-      { text: 'Gestione Ricompense', icon: <EmojiEventsIcon />, path: '/parent/rewards' },
+      { text: 'Gestione Ricompense', icon: <EmojiEventsIcon />, path: '/parent/manage-rewards' },
       { text: 'Assegna Quiz', icon: <QuizIcon />, path: '/parent/quizzes' },
     ];
   } else if (user?.role === 'student') {
