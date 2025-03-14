@@ -1038,32 +1038,11 @@ class RewardService {
       console.error('Errore durante l\'assegnazione del premio:', error);
       
       // Gestiamo i diversi tipi di errore in modo specifico
-      // Caso 1: L'utente possiede già questa ricompensa (400 Bad Request)
-      if (error.response?.status === 400 && 
-          error.response?.data?.detail?.includes('possiede già')) {
-        // Usiamo info che è di colore blu per un messaggio non critico ma informativo
-        safeNotify.info(
-          `Lo studente ha già ricevuto il premio "${template.title}"`,
-          'Premio già assegnato',
-          { autoClose: true, hideAfter: 5000 }  // Chiusura automatica dopo 5 secondi
-        );
-        
-        // Restituiamo un oggetto segnaposto per evitare errori UI
-        return {
-          id: 'duplicate-reward',
-          templateId: template.id,
-          studentId,
-          title: template.title,
-          description: template.description,
-          pointsCost: template.pointsCost || template.cost || 0,
-          cost: template.cost || template.pointsCost || 0,
-          category: template.category,
-          imageUrl: template.imageUrl,
-          status: 'disponibile'
-        } as Reward;
-      } 
-      // Caso 2: Problema di autorizzazione (403 Forbidden)
-      else if (error.response?.status === 403) {
+      // Rimosso il controllo per l'errore 'utente possiede già questa ricompensa'
+      // per permettere l'assegnazione multipla dello stesso template premio
+      
+      // Caso 1: Problema di autorizzazione (403 Forbidden)
+      if (error.response?.status === 403) {
         safeNotify.error(
           `Non hai i permessi necessari per assegnare il premio "${template.title}" a questo studente.`,
           'Errore di autorizzazione'
