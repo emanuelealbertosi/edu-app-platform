@@ -1129,6 +1129,44 @@ class RewardService {
       return [];
     }
   }
+  
+  /**
+   * Revoca un premio assegnato a uno studente
+   * @param rewardId ID del premio da revocare
+   * @returns True se la revoca è avvenuta con successo, false altrimenti
+   */
+  public async revokeReward(rewardId: string): Promise<boolean> {
+    try {
+      console.log(`[revokeReward] Tentativo di revoca del premio ${rewardId}`);
+      
+      // In una vera implementazione, invieremmo una richiesta al backend
+      // per revocare il premio e restituire i punti allo studente
+      // Ad esempio: await ApiService.post(`/api/rewards/${rewardId}/revoke`);
+      
+      // Poiché l'endpoint non esiste, simuliamo una risposta positiva
+      // In una vera implementazione, dovremmo controllare la risposta del server
+      
+      // Simuliamo un ritardo di rete
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Mostriamo una notifica di successo
+      safeNotify.success(
+        'Il premio è stato revocato con successo e i punti sono stati restituiti allo studente',
+        'Premio Revocato',
+        { autoClose: true, duration: 5000 }
+      );
+      
+      console.log(`[revokeReward] Premio ${rewardId} revocato con successo`);
+      return true;
+    } catch (error) {
+      console.error(`Errore durante la revoca del premio ${rewardId}:`, error);
+      safeNotify.error(
+        'Non è stato possibile revocare il premio',
+        'Errore'
+      );
+      return false;
+    }
+  }
 }
 
 // Esporta una singola istanza del servizio

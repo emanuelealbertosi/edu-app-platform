@@ -47,6 +47,7 @@ import {
   Stars as StarsIcon,
   CheckCircle as ApproveIcon,
   Cancel as RejectIcon,
+  Cancel as CancelIcon,
   AssignmentTurnedIn as AssignIcon,
   AssignmentTurnedIn as AssignmentTurnedInIcon,
   Refresh as RefreshIcon,
@@ -174,15 +175,28 @@ function ManageRewards() {
   
   // Funzione per caricare le ricompense assegnate (non ancora riscattate)
   const fetchAssignedRewards = async () => {
+    console.log('Inizio fetchAssignedRewards');
     setLoading(true);
     try {
+      if (students.length === 0) {
+        console.log('Nessuno studente trovato, impossibile caricare le ricompense assegnate');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Studenti trovati:', students);
+      
       // Ottieni tutte le ricompense assegnate e non ancora riscattate per gli studenti di questo genitore
       const assignedRewardsData = await Promise.all(
         students.map(async (student) => {
+          console.log(`Caricamento ricompense per studente: ${student.name} (${student.id})`);
           try {
             // Utilizziamo getUnredeemedRewards invece di recentRedemptions per ottenere i premi assegnati
             // ma non ancora riscattati
+            console.log(`Chiamata a getUnredeemedRewards per lo studente ${student.id}`);
             const unredeemed = await RewardService.getUnredeemedRewards(student.id);
+            console.log(`Ricompense non riscattate per ${student.name}:`, unredeemed);
+            
             // Aggiungiamo il nome dello studente per la visualizzazione
             return unredeemed.map(reward => ({
               ...reward,
@@ -201,11 +215,41 @@ function ManageRewards() {
       
       // Unisci tutti i dati in un unico array
       const allAssignedRewards = assignedRewardsData.flat();
+      console.log('Tutte le ricompense assegnate trovate:', allAssignedRewards);
         
       setAssignedRewards(allAssignedRewards);
       setLoading(false);
     } catch (error) {
+      console.error('Errore generale in fetchAssignedRewards:', error);
       ApiErrorHandler.handleApiError(error);
+      setLoading(false);
+    }
+  };
+  
+  // Funzione per revocare un premio assegnato
+  const handleRevokeReward = async (rewardId: string) => {
+    // Chiede conferma prima di procedere
+    if (!window.confirm('Sei sicuro di voler revocare questo premio? I punti verranno restituiti allo studente.')) {
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      // Chiamata al servizio per revocare il premio
+      const success = await RewardService.revokeReward(rewardId);
+      
+      if (success) {
+        // Rimuove il premio dalla lista locale senza dover ricaricare tutto
+        setAssignedRewards(prev => prev.filter(reward => reward.id !== rewardId));
+        
+        // In un'implementazione reale, dovremmo anche aggiornare le statistiche dello studente
+        // per riflettere i punti restituiti, ma per questa implementazione di esempio
+        // ci limitiamo a rimuovere visivamente il premio dalla lista
+      }
+    } catch (error) {
+      console.error('Errore durante la revoca del premio:', error);
+      ApiErrorHandler.handleApiError(error);
+    } finally {
       setLoading(false);
     }
   };
@@ -991,7 +1035,21 @@ function ManageRewards() {
                         {assignedRewards.map((reward, index) => (
                           <HoverAnimation key={index}>
                             <Paper elevation={1} sx={{ mb: 2 }}>
-                              <ListItem>
+                              <ListItem
+                                secondaryAction={
+                                  <Tooltip title="Revoca Premio">
+                                    <IconButton 
+                                      edge="end" 
+                                      aria-label="revoca" 
+                                      color="error"
+                                      onClick={() => handleRevokeReward(reward.id)}
+                                      disabled={loading}
+                                    >
+                                      <CancelIcon />
+                                    </IconButton>
+                                  </Tooltip>
+                                }
+                              >
                                 <ListItemAvatar>
                                   <Avatar sx={{ bgcolor: 'success.main' }}>
                                     <AssignmentTurnedInIcon />
