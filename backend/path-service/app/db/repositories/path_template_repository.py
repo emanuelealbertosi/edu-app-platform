@@ -134,15 +134,33 @@ class PathTemplateRepository:
     @staticmethod
     def add_node(db: Session, path_template_id: int, node_create: PathNodeTemplateCreate) -> PathNodeTemplate:
         """Aggiunge un nodo a un template di percorso."""
-        node_data = node_create.model_dump()
+        import logging
+        logger = logging.getLogger(__name__)
         
-        # Crea il nodo
-        db_node = PathNodeTemplate(**node_data, path_template_id=path_template_id)
-        db.add(db_node)
-        db.commit()
-        db.refresh(db_node)
+        logger.info(f"PathTemplateRepository.add_node - Inizio creazione nodo per template {path_template_id}")
+        logger.info(f"PathTemplateRepository.add_node - Dati ricevuti: {node_create}")
         
-        return db_node
+        try:
+            node_data = node_create.model_dump()
+            logger.info(f"PathTemplateRepository.add_node - Dati dopo model_dump: {node_data}")
+            
+            # Crea il nodo
+            logger.info(f"PathTemplateRepository.add_node - Creazione dell'oggetto PathNodeTemplate")
+            db_node = PathNodeTemplate(**node_data, path_template_id=path_template_id)
+            logger.info(f"PathTemplateRepository.add_node - Oggetto creato: {db_node}")
+            
+            # Salva nel database
+            logger.info(f"PathTemplateRepository.add_node - Salvataggio nel database")
+            db.add(db_node)
+            db.commit()
+            db.refresh(db_node)
+            
+            logger.info(f"PathTemplateRepository.add_node - Nodo salvato con successo. ID: {db_node.id}, UUID: {db_node.uuid}")
+            return db_node
+        except Exception as e:
+            logger.error(f"PathTemplateRepository.add_node - Errore durante la creazione del nodo: {str(e)}")
+            db.rollback()
+            raise
     
     @staticmethod
     def update_node(db: Session, node: PathNodeTemplate, node_update: PathNodeTemplateUpdate) -> PathNodeTemplate:

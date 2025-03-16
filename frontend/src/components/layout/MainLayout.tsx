@@ -84,7 +84,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({ children, title }) => {
       { text: 'Dashboard', icon: <DashboardIcon />, path: '/parent' },
       { text: 'Studenti', icon: <SchoolIcon />, path: '/parent/students' },
       { text: 'Gestione Percorsi', icon: <RouteIcon />, path: '/parent/paths' },
-      { text: 'Assegna Percorsi', icon: <QuizIcon />, path: '/parent/assign-paths' },
       { text: 'Gestione Ricompense', icon: <EmojiEventsIcon />, path: '/parent/manage-rewards' },
       { text: 'Assegna Quiz', icon: <QuizIcon />, path: '/parent/quizzes' },
     ];

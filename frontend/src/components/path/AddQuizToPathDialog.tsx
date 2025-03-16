@@ -85,16 +85,35 @@ const AddQuizToPathDialog: React.FC<AddQuizToPathDialogProps> = ({
       return;
     }
     
+    // Log dei dati che stiamo per inviare
+    console.log(`%c[DEBUG] Aggiunta quiz ${selectedQuizId} al template ${selectedTemplate.id}`, 'background: #0066cc; color: #fff;');
+    console.log('Quiz selezionato:', selectedQuizId);
+    console.log('Dati nodo quiz:', quizNodeData);
+    
+    // Assicuriamoci che il nodo abbia il tipo 'quiz' esplicito
+    const enhancedNodeData = {
+      ...quizNodeData,
+      // Specifichiamo il tipo esatto come richiesto
+      node_type: 'quiz' as 'quiz' | 'content' | 'task' | 'milestone' | 'reward',
+      // Assicuriamoci che i campi numerici siano effettivamente numeri
+      points: typeof quizNodeData.points === 'string' ? parseInt(quizNodeData.points, 10) : (quizNodeData.points || 10),
+      order: typeof quizNodeData.order === 'string' ? parseInt(quizNodeData.order, 10) : (quizNodeData.order || 1),
+      estimated_time: typeof quizNodeData.estimated_time === 'string' ? parseInt(quizNodeData.estimated_time, 10) : (quizNodeData.estimated_time || 30)
+    };
+    
+    console.log('Dati nodo quiz migliorati:', enhancedNodeData);
+    
     try {
       await onAddQuiz(
         selectedTemplate.id,
         selectedQuizId,
-        quizNodeData
+        enhancedNodeData
       );
       
+      console.log('%c[DEBUG] Quiz aggiunto con successo!', 'background: #0c0; color: #000;');
       onClose();
     } catch (error) {
-      console.error("Error adding quiz to path:", error);
+      console.error("%c[DEBUG] Errore nell'aggiunta del quiz al percorso:", 'background: #f00; color: #fff;', error);
     }
   };
 

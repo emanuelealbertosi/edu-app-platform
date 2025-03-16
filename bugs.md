@@ -14,6 +14,23 @@
 
 ---
 
+## Servizio Auth
+
+### Bug Aperti
+
+#### AU-001 - 🔴 P1 - Assenza di un'interfaccia per assegnare uno studente ad un genitore
+
+**Descrizione**  
+Attualmente non esiste un modo per assegnare uno studente ad un genitore attraverso l'interfaccia utente. Questa funzionalità è fondamentale per permettere ai genitori di gestire i percorsi educativi e i progressi dei propri figli.
+
+**Impatto**  
+I genitori non possono essere associati ai propri figli, limitando gravemente la funzionalità di monitoraggio e gestione dell'apprendimento.
+
+**Possibile Soluzione**  
+Implementare un'interfaccia nella sezione admin che permetta di associare studenti a genitori e viceversa. In alternativa, aggiungere questa funzionalità nella sezione di gestione profilo genitore.
+
+---
+
 ## Servizio Reward
 
 ### Bug Risolti

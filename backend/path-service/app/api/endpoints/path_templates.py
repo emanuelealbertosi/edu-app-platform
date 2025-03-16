@@ -333,6 +333,12 @@ async def get_template_nodes(
     
     return PathTemplateRepository.get_nodes(db, template_id)
 
+import logging
+
+# Configurazione logger
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 @router.post("/{template_id}/nodes", response_model=PathNodeTemplateSchema, status_code=status.HTTP_201_CREATED)
 async def create_template_node(
     template_id: int,
@@ -341,25 +347,45 @@ async def create_template_node(
     current_user: Dict = Depends(get_admin_or_parent_user)
 ):
     """Aggiunge un nodo a un template di percorso (admin o proprietario)."""
-    # Verifica che il template esista
-    template = PathTemplateRepository.get(db, path_template_id=template_id)
-    if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Template di percorso con ID {template_id} non trovato"
-        )
+    logger.info(f"Richiesta di creazione nodo per template_id: {template_id}")
+    logger.info(f"Dati nodo ricevuti: {node}")
+    logger.info(f"Utente corrente: {current_user}")
     
-    # Verifica che l'utente sia il proprietario o un admin
-    user_role = current_user.get("role")
-    user_id = current_user.get("user_id")
-    
-    if user_role != "admin" and template.created_by != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Non hai i permessi per modificare questo template"
-        )
-    
-    return PathTemplateRepository.add_node(db, template_id, node)
+    try:
+        # Verifica che il template esista
+        template = PathTemplateRepository.get(db, path_template_id=template_id)
+        if not template:
+            logger.error(f"Template di percorso con ID {template_id} non trovato")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Template di percorso con ID {template_id} non trovato"
+            )
+        
+        logger.info(f"Template trovato: {template.id} - {template.title}")
+        
+        # Verifica che l'utente sia il proprietario o un admin
+        user_role = current_user.get("role")
+        user_id = current_user.get("user_id")
+        
+        if user_role != "admin" and template.created_by != user_id:
+            logger.error(f"Utente {user_id} con ruolo {user_role} non autorizzato a modificare il template {template.id}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Non hai i permessi per modificare questo template"
+            )
+        
+        # Log prima di aggiungere il nodo
+        logger.info(f"Creazione nodo in corso per template {template_id}. Tipo nodo: {node.node_type}")
+        
+        # Aggiunge il nodo
+        result = PathTemplateRepository.add_node(db, template_id, node)
+        
+        # Log dopo l'aggiunta
+        logger.info(f"Nodo creato con successo: ID={result.id}, UUID={result.uuid}")
+        return result
+    except Exception as e:
+        logger.error(f"Errore durante la creazione del nodo: {str(e)}")
+        raise
 
 @router.put("/nodes/{node_id}", response_model=PathNodeTemplateSchema)
 async def update_template_node(

@@ -22,7 +22,9 @@ import {
   Psychology as PsychologyIcon,
   Public as PublicIcon,
   AssignmentInd as AssignIcon,
-  Quiz as QuizIcon
+  Quiz as QuizIcon,
+  Info as InfoIcon,
+  Refresh as RefreshIcon
 } from '@mui/icons-material';
 
 // TabPanel component
@@ -143,16 +145,295 @@ const ManagePaths: React.FC = () => {
     }
   }, [openQuizDialog]);
 
+  // Funzione per visualizzare i dati di debug in una finestra modale
+  const showDebugModal = (data: any, title = 'Debug Data') => {
+    // Crea un div per il debug
+    const debugModal = document.createElement('div');
+    debugModal.id = 'debug-modal';
+    debugModal.style.position = 'fixed';
+    debugModal.style.top = '50%';
+    debugModal.style.left = '50%';
+    debugModal.style.transform = 'translate(-50%, -50%)';
+    debugModal.style.width = '80%';
+    debugModal.style.maxHeight = '80vh';
+    debugModal.style.backgroundColor = 'rgba(0,0,0,0.9)';
+    debugModal.style.zIndex = '9999';
+    debugModal.style.padding = '20px';
+    debugModal.style.borderRadius = '10px';
+    debugModal.style.boxShadow = '0 0 20px rgba(0,255,0,0.5)';
+    debugModal.style.color = '#0f0';
+    debugModal.style.fontFamily = 'monospace';
+    debugModal.style.fontSize = '14px';
+    debugModal.style.overflow = 'auto';
+    
+    // Intestazione
+    const header = document.createElement('div');
+    header.style.display = 'flex';
+    header.style.justifyContent = 'space-between';
+    header.style.marginBottom = '15px';
+    header.style.borderBottom = '1px solid #0f0';
+    header.style.paddingBottom = '10px';
+    
+    const titleEl = document.createElement('h2');
+    titleEl.textContent = title;
+    titleEl.style.margin = '0';
+    titleEl.style.color = '#0f0';
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'X';
+    closeBtn.style.backgroundColor = '#f00';
+    closeBtn.style.color = 'white';
+    closeBtn.style.border = 'none';
+    closeBtn.style.borderRadius = '50%';
+    closeBtn.style.width = '30px';
+    closeBtn.style.height = '30px';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.fontWeight = 'bold';
+    closeBtn.onclick = () => document.body.removeChild(debugModal);
+    
+    header.appendChild(titleEl);
+    header.appendChild(closeBtn);
+    debugModal.appendChild(header);
+    
+    // Contenuto
+    const content = document.createElement('pre');
+    content.textContent = JSON.stringify(data, null, 2);
+    content.style.whiteSpace = 'pre-wrap';
+    debugModal.appendChild(content);
+    
+    // Rimuovi modali di debug esistenti
+    const existingModal = document.getElementById('debug-modal');
+    if (existingModal) {
+      document.body.removeChild(existingModal);
+    }
+    
+    document.body.appendChild(debugModal);
+  };
+  
+  // Forza il caricamento diretto dei nodi di un template specifico, saltando PathService
+  const forceLoadTemplateNodes = async (templateId: number | string, showNotification = true) => {
+    try {
+      // Ottieni i nodi direttamente dall'API
+      const apiUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/path-templates/${templateId}/nodes`;
+      
+      // Token di autenticazione
+      const token = localStorage.getItem('accessToken');
+      const requestHeaders: Record<string, string> = {};
+      if (token) {
+        requestHeaders['Authorization'] = `Bearer ${token}`;
+      }
+      
+      // Eseguiamo la fetch diretta
+      const response = await fetch(apiUrl, { headers: requestHeaders });
+      if (!response.ok) {
+        throw new Error(`Errore API: ${response.status}`);
+      }
+      
+      const jsonResponse = await response.json();
+      
+      // Aggiorna il template nella lista dei template
+      setPathTemplates(prevTemplates => {
+        return prevTemplates.map(template => {
+          if (template.id?.toString() === templateId.toString()) {
+            // Usa SOLO la risposta JSON diretta, ignorando completamente PathService
+            return { ...template, nodes: jsonResponse };
+          }
+          return template;
+        });
+      });
+      
+      // Mostra notifica solo se richiesto
+      if (showNotification) {
+        NotificationsService.success(
+          'Nodi caricati', 
+          `Caricati ${jsonResponse?.length || 0} nodi per il template`
+        );
+      }
+      
+      return jsonResponse;
+    } catch (error) {
+      console.error(`Errore nel caricamento dei nodi:`, error);
+      if (showNotification) {
+        NotificationsService.error('Errore', 'Impossibile caricare i nodi del template');
+      }
+      return [];
+    }
+  };
+
   // Funzione per caricare i template di percorsi
   const loadPathTemplates = async () => {
     setLoading(true);
     setError(null);
     try {
+      // Ottieni tutti i template
       const templates = await PathService.getAllPathTemplates();
+      
+      // Salviamo i templates
       setPathTemplates(templates);
+      
+      // Carichiamo anche i nodi direttamente per ogni template
+      templates.forEach(template => {
+        if (template.id !== undefined && template.id !== null) {
+          // Utilizziamo setTimeout per non sovraccaricare l'API
+          setTimeout(() => {
+            forceLoadTemplateNodes(template.id!, false); // Non mostrare notifiche per il caricamento iniziale
+          }, 300 * Math.random()); // Leggero delay casuale per ridurre il carico
+        }
+      });
+      
+      // Per ogni template, carica i nodi (inclusi i quiz)
+      const templatesWithNodes = await Promise.all(
+        templates.map(async (template) => {
+          if (template.id) {
+            try {
+              const nodes = await PathService.getTemplateNodes(template.id);
+              
+              // Assicuriamoci che i nodi vengano correttamente formattati
+              if (nodes.length > 0) {
+                // Correggi i valori degli ID per evitare problemi di rendering e assicurati che node_type sia in minuscolo
+                const formattedNodes = nodes.map(n => {
+                  // Cerca di rilevare nodi quiz anche tramite il contenuto
+                  let nodeType = (n.node_type || '').toLowerCase();
+                  
+                  // Se il contenuto contiene informazioni su un quiz ma il tipo non è 'quiz', forziamolo a 'quiz'
+                  if (nodeType !== 'quiz' && n.content) {
+                    const hasQuizId = n.content.quiz_id || n.content.quiz_template_id;
+                    const contentString = JSON.stringify(n.content).toLowerCase();
+                    const mentionsQuiz = contentString.includes('quiz');
+                    
+                    if (hasQuizId || mentionsQuiz) {
+                      console.log(`%c[DEBUG] Rilevato nodo quiz tramite contenuto anziché tipo:`, 'background: #ff0; color: #000;', n);
+                      nodeType = 'quiz';
+                    }
+                  }
+                  
+                  return {
+                    ...n,
+                    id: n.id?.toString() || n.uuid || `temp-${Math.random().toString(36).substring(2, 9)}`, // Assicura che l'id sia una stringa
+                    node_type: nodeType, // Normalizza il tipo di nodo in minuscolo
+                    title: n.title || 'Nodo senza titolo',
+                    description: n.description || '',
+                    content: n.content || {},
+                    // Mantieni gli altri campi invariati
+                  };
+                });
+                
+                // Log visivo migliorato
+                console.log(`%c[DEBUG] Dettagli nodi per ${template.title}:`, 'color: #0066cc;');
+                formattedNodes.forEach((n, index) => {
+                  console.log(`Nodo #${index+1}: ${n.title} (${n.node_type})`, n);
+                });
+                
+                // Verifica quanti quiz ci sono con criteri estesi di rilevamento
+                const quizNodes = formattedNodes.filter(node => 
+                  node.node_type === 'quiz' || // Tipo esplicito
+                  (node.content && (node.content.quiz_id || node.content.quiz_template_id)) // Rilevamento dal contenuto
+                );
+                
+                // Debug migliorato per i quiz
+                if (quizNodes.length > 0) {
+                  console.log(`%c[DEBUG] ${quizNodes.length} QUIZ TROVATI per ${template.title}:`, 'background: #0c0; color: #000; font-size: 14px;');
+                  quizNodes.forEach((quiz, idx) => {
+                    console.log(`Quiz #${idx+1}: ${quiz.title}`, {
+                      id: quiz.id,
+                      type: quiz.node_type,
+                      content: quiz.content
+                    });
+                  });
+                } else {
+                  console.log(`%c[DEBUG] NESSUN QUIZ trovato per ${template.title}`, 'color: #f00;');
+                }
+                
+                // Log del numero di quiz trovati ma senza alterare la struttura dati
+                if (quizNodes.length > 0) {
+                  console.log(`%c[DEBUG] ${quizNodes.length} quiz registrati per ${template.title}`, 'background: #0c0; color: #000;');
+                }
+                
+                // Manteniamo la struttura originale di PathTemplate senza estensioni
+                return { 
+                  ...template, 
+                  nodes: formattedNodes.map(node => ({
+                    ...node,
+                    // Forzare il tipo corretto per node_type per non alterare il tipo PathNodeTemplate
+                    node_type: (node.node_type === 'quiz' ? 'quiz' : 
+                               node.node_type === 'content' ? 'content' : 
+                               node.node_type === 'task' ? 'task' : 
+                               node.node_type === 'milestone' ? 'milestone' : 
+                               node.node_type === 'reward' ? 'reward' : 'content') as 'quiz' | 'content' | 'task' | 'milestone' | 'reward'
+                  }))
+                };
+              }
+              
+              // CORREZIONE CRITICA: Assicuriamoci che i nodi siano correttamente assegnati al template
+              const templateWithNodes = {
+                ...template,
+                nodes: nodes || [] // Usa un array vuoto se nodes è null/undefined
+              };
+              console.log(`%c[DEBUG] Template con nodi assegnati: ${templateWithNodes.title}`, 'background: #0066cc; color: #fff;');
+              console.log(`Nodi totali: ${templateWithNodes.nodes.length}, Node count dal DB: ${template.node_count || 0}`);
+              return templateWithNodes;
+            } catch (nodeErr) {
+              console.error(`[DEBUG] Errore nel caricamento dei nodi per il template ${template.id}:`, nodeErr);
+              return template; // Restituisci il template anche senza nodi in caso di errore
+            }
+          }
+          return template;
+        })
+      );
+      
+      console.log('%c[DEBUG] RIEPILOGO TEMPLATES CON NODI:', 'background: #333; color: #fff; font-size: 14px;');
+      templatesWithNodes.forEach((t, idx) => {
+        const totalNodes = t.nodes?.length || 0;
+        
+        // Conteggio sicuro dei quiz usando reduce per evitare problemi di tipo
+        let quizNodes = 0;
+        const quizNodesList: PathNodeTemplate[] = [];
+        
+        if (t.nodes && t.nodes.length > 0) {
+          // Identifichiamo i quiz con criteri multipli
+          t.nodes.forEach(node => {
+            let isQuiz = false;
+            
+            // Criterio 1: Tipo nodo è 'quiz' (case insensitive)
+            if (typeof node.node_type === 'string' && node.node_type.toLowerCase() === 'quiz') {
+              isQuiz = true;
+            } 
+            // Criterio 2: Contenuto ha riferimenti a quiz
+            else if (node.content) {
+              if (node.content.quiz_id || node.content.quiz_template_id) {
+                isQuiz = true;
+              } else {
+                // Criterio 3: Il contenuto menziona quiz come stringa
+                const contentString = JSON.stringify(node.content).toLowerCase();
+                if (contentString.includes('quiz')) {
+                  isQuiz = true;
+                }
+              }
+            }
+            
+            if (isQuiz) {
+              quizNodes++;
+              quizNodesList.push(node);
+            }
+          });
+        }
+        
+        const color = quizNodes > 0 ? '#0c0' : '#f66';
+        console.log(`%cTemplate #${idx+1}: ${t.title}`, `color: ${color}; font-weight: bold;`, {
+          id: t.id,
+          nodi: totalNodes,
+          quiz: quizNodes
+        });
+      });
+      
+      setPathTemplates(templatesWithNodes);
     } catch (err) {
-      console.error('Errore nel caricamento dei template di percorsi:', err);
+      console.error('%c[DEBUG] Errore nel caricamento dei template di percorsi:', 'background: #f00; color: #fff;', err);
       setError('Si è verificato un errore nel caricamento dei template di percorsi. Riprova più tardi.');
+      NotificationsService.error(
+        'Impossibile caricare i template di percorsi. Riprova più tardi.',
+        'Errore'
+      );
     } finally {
       setLoading(false);
     }
@@ -502,15 +783,28 @@ const ManagePaths: React.FC = () => {
   const handleAddQuizToPath = async (templateId: string, quizId: string, nodeData: Partial<PathNodeTemplate>) => {
     try {
       // Chiama il metodo del PathService per aggiungere il quiz al percorso
-      await PathService.addQuizToPathTemplate(templateId, quizId, nodeData);
+      const response = await PathService.addQuizToPathTemplate(templateId, quizId, nodeData);
+      console.log('Risposta addQuizToPathTemplate:', response);
       
+      // Mostriamo una notifica di successo
       NotificationsService.success(
-        `Quiz aggiunto con successo al percorso`,
+        `Quiz aggiunto al percorso. I cambiamenti saranno visibili dopo il ricaricamento.`,
         'Operazione completata'
       );
       
-      // Ricarica i template aggiornati
-      loadPathTemplates();
+      // Attendiamo un breve momento e poi ricarichiamo i dati
+      setTimeout(() => {
+        // Ricarica completa dei template
+        loadPathTemplates();
+        
+        // Mostriamo una seconda notifica dopo il ricaricamento
+        setTimeout(() => {
+          NotificationsService.info(
+            `I dati sono stati ricaricati. Verifica che il quiz sia visibile nel percorso.`,
+            'Aggiornamento completato'
+          );
+        }, 1000);
+      }, 1500);
     } catch (err) {
       console.error('Errore nell\'aggiunta del quiz al percorso:', err);
       NotificationsService.error(
@@ -597,8 +891,112 @@ const ManagePaths: React.FC = () => {
     }
   };
 
+  // Gestisce la rimozione di un quiz da un template di percorso
+  const handleRemoveQuizFromPath = async (templateId: string, nodeId: string) => {
+    try {
+      console.log(`[DEBUG] Rimozione quiz: templateId=${templateId}, nodeId=${nodeId}`);
+      
+      // Conferma prima di rimuovere
+      if (window.confirm('Sei sicuro di voler rimuovere questo quiz dal percorso? Questa azione non può essere annullata.')) {
+        // Assicuriamoci che nodeId sia una stringa
+        const normalizedNodeId = String(nodeId);
+        
+        console.log(`[DEBUG] Chiamata a removeQuizFromPathTemplate con nodeId: ${normalizedNodeId}`);
+        await PathService.removeQuizFromPathTemplate(normalizedNodeId);
+        
+        // Mostriamo una notifica di successo
+        NotificationsService.success(
+          `Quiz rimosso dal percorso.`,
+          'Operazione completata'
+        );
+        
+        // Ricarichiamo i dati dei template
+        console.log(`[DEBUG] Ricaricamento template dopo rimozione quiz`);
+        // Ricarica immediatamente
+        loadPathTemplates();
+      }
+    } catch (err) {
+      console.error('[DEBUG] Errore nella rimozione del quiz dal percorso:', err);
+      NotificationsService.error(
+        'Impossibile rimuovere il quiz dal percorso. Riprova più tardi.',
+        'Errore'
+      );
+    }
+  };
+
   // Renderizza una card per un template
   const renderTemplateCard = (template: PathTemplate) => {
+    // Assicuriamoci che template.nodes sia sempre definito
+    if (!template.nodes) {
+      template.nodes = [];
+    }
+    
+    // Applica un titolo con un formato più chiaro
+    const templateTitle = template.title || 'Template senza titolo';
+    
+    // Filtriamo i nodi di tipo quiz dal template con criteri ancora più estesi
+    const quizNodes = template.nodes.filter(node => {
+      // Verifica esplicita per il tipo 'QUIZ' in maiuscolo dal DB
+      if (typeof node.node_type === 'string') {
+        const nodeTypeUppercase = node.node_type.toUpperCase();
+        if (nodeTypeUppercase === 'QUIZ') {
+          console.log(`%c[DEBUG] Trovato nodo QUIZ con node_type in MAIUSCOLO`, 'background: #f0f; color: #fff;', node);
+          return true;
+        }
+      }
+      
+      // Verifica case-insensitive per 'quiz' (già normalizzato)
+      if (node.node_type && node.node_type.toLowerCase() === 'quiz') {
+        console.log(`%c[DEBUG] Trovato nodo quiz con node_type normalizzato`, 'background: #0c0; color: #000;', node);
+        return true;
+      }
+      
+      // Verifica che il contenuto abbia riferimenti a quiz
+      if (node.content) {
+        if (node.content.quiz_id || node.content.quiz_template_id) {
+          console.log(`%c[DEBUG] Trovato nodo quiz tramite content.quiz_template_id`, 'background: #00f; color: #fff;', node);
+          return true;
+        }
+        
+        // Cerca altre possibili proprietà relative ai quiz
+        const contentStr = JSON.stringify(node.content).toLowerCase();
+        if (contentStr.includes('quiz')) {
+          console.log(`%c[DEBUG] Trovato nodo quiz tramite content (stringa)`, 'background: #ff0; color: #000;', node);
+          return true;
+        }
+      }
+      
+      return false;
+    });
+    
+    // Debug completo con stile
+    console.log(`%c[DEBUG] Rendering template: ${templateTitle}`, 'color: #0066cc; font-weight: bold;');
+    console.log(`[DEBUG] Template ha nodi?`, template.nodes.length > 0 ? 'Sì' : 'No');
+    console.log(`[DEBUG] Numero totale nodi:`, template.nodes.length);
+    
+    // Visualizziamo tutti i tipi di nodi presenti
+    const nodeTypes = template.nodes.map(n => n.node_type).filter((type, index, self) => 
+      self.indexOf(type) === index
+    );
+    console.log(`[DEBUG] Tipi nodi presenti:`, nodeTypes);
+    
+    // Debug quiz nodes con stile migliorato
+    const quizCount = quizNodes.length;
+    const logStyle = quizCount > 0 ? 'background: #0c0; color: #000;' : 'color: #f00;';
+    console.log(`%c[DEBUG] Quiz nodes trovati: ${quizCount}`, logStyle);
+    
+    if (quizCount > 0) {
+      console.log('%c[DEBUG] Dettagli quiz nodes:', 'background: #0c0; color: #000;');
+      quizNodes.forEach((q, idx) => {
+        console.log(`Quiz #${idx+1}: ${q.title || 'Senza titolo'}`, {
+          id: q.id,
+          type: q.node_type,
+          title: q.title,
+          content: q.content
+        });
+      });
+    }
+    
     return (
       <Card 
         sx={{ 
@@ -609,9 +1007,11 @@ const ManagePaths: React.FC = () => {
           '&:hover': {
             transform: 'translateY(-5px)',
             boxShadow: 6
-          }
+          },
+          position: 'relative'
         }}
       >
+        {/* Rimossi pulsanti di debug */}
         <CardContent sx={{ flexGrow: 1 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
             <Typography variant="h6" component="div" gutterBottom>
@@ -647,6 +1047,66 @@ const ManagePaths: React.FC = () => {
               Durata stimata: {template.estimated_days} giorni
             </Typography>
           </Box>
+          
+          {/* Sezione Quiz - Mostra stile di debug temporaneo se non ci sono quiz */}
+          {quizNodes.length > 0 ? (
+            <Box sx={{ mt: 2, mb: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                <QuizIcon fontSize="small" sx={{ mr: 1, verticalAlign: 'middle', color: 'primary.main' }} />
+                Quiz assegnati ({quizNodes.length}):
+              </Typography>
+              <Box sx={{ pl: 1 }}>
+                {quizNodes.map((node) => {
+                  // Assicuriamoci che node.id sia sempre definito
+                  const nodeId = node.id?.toString() || node.uuid || 'unknown';
+                  const nodeTitle = node.title || 'Quiz senza titolo';
+                  const quizContent = node.content && typeof node.content === 'object' ? 
+                    Object.entries(node.content).map(([k,v]) => `${k}: ${v}`).join(', ') : 'Nessun contenuto';
+                  
+                  return (
+                    <Box 
+                      key={nodeId} 
+                      sx={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        mb: 0.5,
+                        p: 1,
+                        bgcolor: 'rgba(66, 165, 245, 0.08)',
+                        borderRadius: 1,
+                        '&:hover': {
+                          bgcolor: 'rgba(66, 165, 245, 0.15)'
+                        } 
+                      }}
+                    >
+                      <Typography variant="body2" sx={{ flexGrow: 1 }}>
+                        {nodeTitle}
+                        <Typography variant="caption" display="block" color="text.secondary">
+                          ID: {nodeId} | Contenuto: {quizContent}
+                        </Typography>
+                      </Typography>
+                      <Tooltip title="Rimuovi quiz">
+                        <IconButton 
+                          size="small" 
+                          color="error"
+                          onClick={() => handleRemoveQuizFromPath(template.id || '', nodeId)}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  );
+                })}
+              </Box>
+            </Box>
+          ) : (
+            /* Indicatore visivo temporaneo per debug */
+            <Box sx={{ mt: 2, p: 1, border: '1px dashed #ccc', borderRadius: 1, bgcolor: 'rgba(255, 0, 0, 0.05)' }}>
+              <Typography variant="caption" color="error" sx={{ display: 'flex', alignItems: 'center' }}>
+                <InfoIcon fontSize="small" sx={{ mr: 0.5 }} />
+                Nessun quiz assegnato a questo percorso
+              </Typography>
+            </Box>
+          )}
           
           <Box sx={{ mt: 2 }}>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>

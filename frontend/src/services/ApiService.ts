@@ -80,18 +80,20 @@ class ApiService {
           // Lista di pattern URL per cui ignorare silenziosamente errori 404
           const silentlyIgnorePatterns = [
             '/api/rewards', 
-            '/api/templates', 
             '/reward/',
             '/rewards/',
-            '/template',
             '/parent/',
             '/points'
           ];
           
-          // Escludiamo esplicitamente l'endpoint dei quiz templates 
+          // Escludiamo esplicitamente gli endpoint importanti
+          // Nota: rimuoviamo '/api/templates' e '/template' dalla lista di ignore
+          // perché bloccava la richiesta dei nodi di template
           const excludePatterns = [
             '/quiz/templates',
-            '/api/quiz/templates'
+            '/api/quiz/templates',
+            '/api/path-templates',  // Escludiamo esplicitamente gli endpoint dei path templates
+            '/nodes'               // Escludiamo esplicitamente gli endpoint dei nodi
           ];
           
           // Verifica se l'URL contiene uno dei pattern da ignorare silenziosamente
