@@ -15,6 +15,7 @@ from app.db.models.user import User as UserModel
 from app.schemas.user import User
 from app.schemas.parent_profile import ParentProfile
 from app.schemas.student_profile import StudentProfile, StudentProfileCreate
+from app.schemas.user import ParentProfileCreate
 
 router = APIRouter(tags=["parent"])
 
@@ -327,3 +328,59 @@ async def associate_student_to_parent(
     profile = StudentProfileRepo.create(db, target_user, student_data)
     
     return profile
+
+@router.post("/profile", response_model=Dict[str, Any])
+async def create_or_get_parent_profile(
+    profile_data: ParentProfileCreate = Body(None),
+    current_user: UserModel = Depends(get_current_user_with_role(["parent"])),
+    db: Session = Depends(get_db)
+) -> Any:
+    """
+    Crea un profilo genitore per l'utente corrente se non esiste già,
+    oppure restituisce il profilo esistente.
+    
+    Questa API è utile per garantire che ogni utente con ruolo 'parent' abbia un profilo associato.
+    """
+    # Cerca un profilo genitore esistente
+    existing_profile = ParentProfileRepo.get_by_user_id(db, current_user.id)
+    
+    if existing_profile:
+        return {
+            "status": "existing",
+            "message": "Profilo genitore già esistente",
+            "profile": {
+                "id": existing_profile.id,
+                "user_id": existing_profile.user_id,
+                "phone_number": existing_profile.phone_number,
+                "address": existing_profile.address
+            }
+        }
+    
+    # Se non esiste, crea un nuovo profilo genitore
+    try:
+        # Se non sono stati forniti dati, usa valori predefiniti
+        if not profile_data:
+            profile_data = ParentProfileCreate(
+                phone_number="",
+                address=""
+            )
+        
+        # Crea il profilo genitore
+        new_profile = ParentProfileRepo.create(db, current_user, profile_data)
+        
+        return {
+            "status": "created",
+            "message": "Profilo genitore creato con successo",
+            "profile": {
+                "id": new_profile.id,
+                "user_id": new_profile.user_id,
+                "phone_number": new_profile.phone_number,
+                "address": new_profile.address
+            }
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Errore nella creazione del profilo genitore: {str(e)}"
+        )

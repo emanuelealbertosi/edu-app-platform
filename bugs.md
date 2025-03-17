@@ -16,9 +16,11 @@
 
 ## Servizio Auth
 
-### Bug Aperti
+### Bug Risolti
 
-#### AU-001 - 🟡 P1 - Assenza di un'interfaccia per assegnare uno studente ad un genitore
+#### AU-001 - 🟢 P1 - Assenza di un'interfaccia per assegnare uno studente ad un genitore
+- **Stato**: 🟢 Risolto
+- **Data**: 2025-03-17
 
 **Descrizione**  
 Attualmente non esiste un modo per assegnare uno studente ad un genitore attraverso l'interfaccia utente. Questa funzionalità è fondamentale per permettere ai genitori di gestire i percorsi educativi e i progressi dei propri figli.
@@ -26,10 +28,15 @@ Attualmente non esiste un modo per assegnare uno studente ad un genitore attrave
 **Impatto**  
 I genitori non possono essere associati ai propri figli, limitando gravemente la funzionalità di monitoraggio e gestione dell'apprendimento.
 
-**Possibile Soluzione**  
-Implementare un'interfaccia nella sezione admin che permetta di associare studenti a genitori e viceversa. In alternativa, aggiungere questa funzionalità nella sezione di gestione profilo genitore.
+**Soluzione Implementata**  
+Implementato un meccanismo automatico che crea un profilo genitore quando:
+1. Un utente si registra con il ruolo "parent"
+2. Prima di recuperare gli studenti associati al genitore
+3. Prima di creare un nuovo studente
 
-**Stato**: Backend implementato, manca interfaccia.
+Inoltre, aggiunto un endpoint `/api/auth/parent/profile` che verifica ed eventualmente crea il profilo genitore se non esiste.
+
+### Bug Aperti
 
 #### AU-002 - 🔴 P1 - Creazione interfaccia genitore per gestione studenti associati
 
@@ -50,18 +57,18 @@ Nell'interfaccia di creazione utenti dell'admin, manca la possibilità di selezi
 **Impatto**  
 Gli amministratori non possono associare direttamente uno studente a un genitore durante la fase di creazione dell'account.
 
-#### AU-004 - 🔴 P1 - Incompatibilità tra frontend e backend nell'endpoint per la creazione di studenti
+#### AU-004 - 🟢 P1 - Incompatibilità tra frontend e backend nell'endpoint per la creazione di studenti
+- **Stato**: 🟢 Risolto
+- **Data**: 2025-03-17
 
 **Descrizione**  
-Il frontend tenta di creare nuovi studenti attraverso l'endpoint `/api/auth/parent/students` con una richiesta POST, ma il backend è configurato per gestire l'endpoint `/auth/parent/students` (senza il prefisso `/api`). Questo causa un errore 404 Not Found quando si tenta di creare un nuovo studente.
+Il frontend tenta di creare nuovi studenti attraverso l'endpoint `/api/auth/parent/students` con una richiesta POST, ma il backend era configurato per gestire l'endpoint `/auth/parent/students` (senza il prefisso `/api`). Questo causava un errore 404 Not Found quando si tentava di creare un nuovo studente.
 
 **Impatto**  
-I genitori non possono creare nuovi account per i propri figli attraverso l'interfaccia utente, nonostante la funzionalità sia stata implementata sia nel frontend che nel backend.
+I genitori non potevano creare nuovi account per i propri figli attraverso l'interfaccia utente, nonostante la funzionalità fosse stata implementata sia nel frontend che nel backend.
 
-**Possibile Soluzione**  
-La soluzione prevede due modifiche:
-1. Modificare il prefisso del router nel file `main.py` dell'auth-service da `/auth/parent` a `/api/auth/parent` per renderlo compatibile con le richieste del frontend.
-2. Rimuovere la voce `/auth/parent` dalla mappatura `SERVICE_ROUTES` nel file di configurazione dell'API Gateway (`/backend/api-gateway/app/core/config.py`) poiché ora utilizziamo esclusivamente il percorso `/api/auth/parent`.
+**Soluzione Implementata**  
+Il prefisso della route nell'auth-service è ora correttamente impostato come `/api/auth/parent` nel file `main.py`, in linea con le richieste provenienti dal frontend. Inoltre, è stato risolto un problema correlato in cui gli utenti con ruolo "parent" non avevano un profilo genitore nella tabella `parent_profiles`, il che causava errori durante la creazione degli studenti.
 
 **Possibile Soluzione**  
 Aggiungere nella form di creazione utente dell'admin, quando viene selezionato il ruolo "student", un campo dropdown con funzione di ricerca per selezionare il genitore a cui associare lo studente.

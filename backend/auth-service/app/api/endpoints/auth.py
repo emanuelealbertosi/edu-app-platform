@@ -10,7 +10,8 @@ from app.core.config import settings
 from app.core.security import create_access_token, create_refresh_token, decode_token
 from app.db.repositories.user_repository import UserRepository
 from app.db.repositories.role_repository import RoleRepository
-from app.schemas.user import Token, RefreshToken, UserCreate, User, SystemStats, AdminActivity, UserInList
+from app.db.repositories.profile_repository import ParentProfileRepository
+from app.schemas.user import Token, RefreshToken, UserCreate, User, SystemStats, AdminActivity, UserInList, ParentProfileCreate
 from app.api.dependencies.auth import get_current_user, get_current_admin_user
 
 router = APIRouter()
@@ -220,6 +221,22 @@ async def register(
     
     # Crea l'utente con il ruolo selezionato
     user = UserRepository.create(db, user_data, [selected_role])
+    
+    # Se il ruolo è parent, crea automaticamente un profilo genitore
+    if selected_role.name == "parent":
+        try:
+            # Crea un profilo genitore vuoto (i dettagli possono essere aggiunti in seguito)
+            parent_profile_data = ParentProfileCreate(
+                phone_number="",  # Campo vuoto, da compilare in seguito
+                address=""  # Campo vuoto, da compilare in seguito
+            )
+            
+            # Crea il profilo genitore
+            ParentProfileRepository.create(db, user, parent_profile_data)
+            print(f"Profilo genitore creato automaticamente per l'utente {user.username}")
+        except Exception as e:
+            print(f"Errore nella creazione del profilo genitore: {str(e)}")
+            # Non solleviamo un'eccezione qui per non interrompere la registrazione
     
     return user
 

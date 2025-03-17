@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import MainLayout from '../../components/layout/MainLayout';
 import StudentService, { Student } from '../../services/StudentService';
+import ParentService from '../../services/ParentService';
 import { NotificationsService } from '../../services/NotificationsService';
 import { 
   Typography, Box, Paper, Alert, CircularProgress, Grid, Card, CardContent, 
@@ -62,11 +63,25 @@ const ManageStudents: React.FC = () => {
   });
 
   useEffect(() => {
-    fetchStudents();
+    initializeAndFetchStudents();
   }, []);
 
-  const fetchStudents = async () => {
+  // Inizializza il profilo genitore se necessario e poi recupera gli studenti
+  const initializeAndFetchStudents = async () => {
     setLoading(true);
+    try {
+      // Assicurati che esista un profilo genitore prima di recuperare gli studenti
+      await ParentService.ensureParentProfileExists();
+      // Ora recupera gli studenti
+      await fetchStudents();
+    } catch (err) {
+      console.error('Errore nell\'inizializzazione:', err);
+      setError('Si è verificato un problema con il tuo profilo genitore. Riprova più tardi.');
+      setLoading(false);
+    }
+  };
+
+  const fetchStudents = async () => {
     try {
       const fetchedStudents = await StudentService.getStudentsByParent();
       setStudents(fetchedStudents);
@@ -201,6 +216,9 @@ const ManageStudents: React.FC = () => {
         await StudentService.updateStudent(editingStudentId, data);
         NotificationsService.success(`Studente ${formData.name} aggiornato con successo`);
       } else {
+        // Prima di creare un nuovo studente, assicurati che esista un profilo genitore
+        await ParentService.ensureParentProfileExists();
+        
         // Create new student
         await StudentService.createStudent({
           name: formData.name,
@@ -215,6 +233,7 @@ const ManageStudents: React.FC = () => {
       handleCloseDialog();
     } catch (err) {
       console.error('Errore durante il salvataggio dello studente:', err);
+      NotificationsService.error('Si è verificato un errore durante il salvataggio dello studente');
     }
   };
 

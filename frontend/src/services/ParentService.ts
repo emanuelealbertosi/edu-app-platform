@@ -10,7 +10,7 @@ declare const process: {
 };
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-const AUTH_API_URL = `${API_URL}/auth`;
+const AUTH_API_URL = `${API_URL}/api/auth`;
 
 /**
  * Interfaccia per i dati del profilo genitore
@@ -30,9 +30,37 @@ export interface ParentProfile {
 }
 
 /**
+ * Interfaccia per la risposta della creazione del profilo
+ */
+export interface ParentProfileResponse {
+  status: 'created' | 'existing';
+  message: string;
+  profile: {
+    id: number;
+    user_id: number;
+    phone_number: string;
+    address: string;
+  };
+}
+
+/**
  * Classe per la gestione dei servizi relativi ai genitori
  */
 class ParentService {
+  /**
+   * Verifica ed assicura che esista un profilo genitore per l'utente corrente
+   * Se non esiste, lo crea automaticamente
+   */
+  public async ensureParentProfileExists(): Promise<ParentProfileResponse> {
+    try {
+      const response = await ApiService.post<ParentProfileResponse>('/api/auth/parent/profile', {});
+      return response;
+    } catch (error) {
+      NotificationsService.error('Errore nella verifica del profilo genitore', 'Errore');
+      throw error;
+    }
+  }
+
   /**
    * Ottiene tutti i profili dei genitori (solo per admin)
    */
