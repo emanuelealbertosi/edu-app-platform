@@ -32,7 +32,6 @@ class Settings(BaseSettings):
     SERVICE_ROUTES: Dict[str, str] = {
         "/api/auth": AUTH_SERVICE_URL,
         "/api/users": AUTH_SERVICE_URL,  # Aggiungiamo il percorso per gli endpoint utente
-        "/auth/parent": AUTH_SERVICE_URL,  # Endpoint per attività genitore
         "/api/quiz": QUIZ_SERVICE_URL,
         "/api/paths": PATH_SERVICE_URL,
         "/api/path-templates": PATH_SERVICE_URL,

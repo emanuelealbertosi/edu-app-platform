@@ -59,7 +59,9 @@ Il frontend tenta di creare nuovi studenti attraverso l'endpoint `/api/auth/pare
 I genitori non possono creare nuovi account per i propri figli attraverso l'interfaccia utente, nonostante la funzionalità sia stata implementata sia nel frontend che nel backend.
 
 **Possibile Soluzione**  
-La soluzione è modificare il prefisso del router nel file `main.py` dell'auth-service da `/auth/parent` a `/api/auth/parent` per renderlo compatibile con le richieste del frontend. In alternativa, si potrebbero adattare le chiamate nel frontend per rimuovere il prefisso `/api`.
+La soluzione prevede due modifiche:
+1. Modificare il prefisso del router nel file `main.py` dell'auth-service da `/auth/parent` a `/api/auth/parent` per renderlo compatibile con le richieste del frontend.
+2. Rimuovere la voce `/auth/parent` dalla mappatura `SERVICE_ROUTES` nel file di configurazione dell'API Gateway (`/backend/api-gateway/app/core/config.py`) poiché ora utilizziamo esclusivamente il percorso `/api/auth/parent`.
 
 **Possibile Soluzione**  
 Aggiungere nella form di creazione utente dell'admin, quando viene selezionato il ruolo "student", un campo dropdown con funzione di ricerca per selezionare il genitore a cui associare lo studente.
