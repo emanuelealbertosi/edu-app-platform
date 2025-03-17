@@ -9,34 +9,41 @@ from app.schemas.user import UserCreate
 class ParentProfileRepository:
     """Repository per gestire i profili dei genitori"""
 
-    def __init__(self, db: Session):
-        self.db = db
-
-    def get_by_user_id(self, user_id: int) -> Optional[ParentProfile]:
+    @staticmethod
+    def get_by_user_id(db: Session, user_id: int) -> Optional[ParentProfile]:
         """Recupera il profilo genitore per l'ID utente specificato"""
-        return self.db.query(ParentProfile).filter(ParentProfile.user_id == user_id).first()
+        return db.query(ParentProfile).filter(ParentProfile.user_id == user_id).first()
     
-    def create(self, user_id: int) -> ParentProfile:
+    @staticmethod
+    def create(db: Session, user_id: int) -> ParentProfile:
         """Crea un nuovo profilo genitore"""
         profile = ParentProfile(user_id=user_id)
-        self.db.add(profile)
-        self.db.commit()
-        self.db.refresh(profile)
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
         return profile
     
-    def update(self, profile: ParentProfile) -> ParentProfile:
+    @staticmethod
+    def update(db: Session, profile: ParentProfile) -> ParentProfile:
         """Aggiorna un profilo genitore esistente"""
-        self.db.add(profile)
-        self.db.commit()
-        self.db.refresh(profile)
+        db.add(profile)
+        db.commit()
+        db.refresh(profile)
         return profile
         
-    def link_student(self, parent_id: int, student_id: int) -> bool:
+    @staticmethod
+    def link_student(db: Session, parent_id: int, student_id: int) -> bool:
         """Collega uno studente a un genitore"""
         try:
-            # Questa funzione dovrà essere implementata con la relazione many-to-many
-            # tra genitori e studenti quando sarà definita la tabella di relazione
-            return True
+            # Recupera lo studente dal database e collega al genitore
+            from app.db.models.user import StudentProfile
+            student = db.query(StudentProfile).filter(StudentProfile.id == student_id).first()
+            if student:
+                student.parent_id = parent_id
+                db.add(student)
+                db.commit()
+                return True
+            return False
         except SQLAlchemyError:
-            self.db.rollback()
+            db.rollback()
             return False

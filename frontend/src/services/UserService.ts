@@ -99,6 +99,19 @@ class UserService {
   }
 
   /**
+   * Ottiene tutti gli utenti filtrati per ruolo (solo admin)
+   * @param role - Ruolo per cui filtrare gli utenti (admin, parent, student)
+   */
+  public async getUsersByRole(role: 'admin' | 'parent' | 'student'): Promise<User[]> {
+    try {
+      return await ApiService.get<User[]>(`/api/auth/users?role=${role}`);
+    } catch (error) {
+      NotificationsService.error(`Errore nel recupero degli utenti con ruolo ${role}`, 'Errore');
+      throw error;
+    }
+  }
+
+  /**
    * Ottiene un utente specifico per ID (solo admin)
    */
   public async getUserById(userId: string): Promise<User> {
@@ -126,6 +139,37 @@ class UserService {
       return user;
     } catch (error) {
       NotificationsService.error('Errore nella creazione dell\'utente', 'Errore');
+      throw error;
+    }
+  }
+
+  /**
+   * Crea un nuovo account studente associato a un genitore
+   * @param studentData Dati dello studente con l'ID del genitore associato
+   */
+  public async createStudentWithParent(studentData: {
+    email: string;
+    password: string;
+    firstName: string;
+    lastName: string;
+    username: string;
+    role: 'student';
+    parentId: number;
+  }): Promise<User> {
+    try {
+      // Se l'utente ha ruolo student e ha un parentId, usiamo l'endpoint specifico
+      const user = await ApiService.post<User>('/api/auth/parent/students', {
+        email: studentData.email,
+        password: studentData.password,
+        firstName: studentData.firstName,
+        lastName: studentData.lastName,
+        username: studentData.username,
+        parentId: studentData.parentId
+      });
+      NotificationsService.success('Account studente creato con successo');
+      return user;
+    } catch (error) {
+      NotificationsService.error('Errore nella creazione dell\'account studente', 'Errore');
       throw error;
     }
   }

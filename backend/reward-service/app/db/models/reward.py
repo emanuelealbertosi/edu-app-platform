@@ -104,3 +104,28 @@ class RewardProgress(Base):
     
     # Relazioni
     reward = relationship("Reward", back_populates="progress_records")
+
+
+class RewardRequestStatus(str, enum.Enum):
+    """Stati possibili delle richieste di ricompensa"""
+    PENDING = "pending"       # In attesa di approvazione
+    APPROVED = "approved"     # Approvata
+    REJECTED = "rejected"     # Rifiutata
+    FULFILLED = "fulfilled"   # Soddisfatta (ricompensa consegnata)
+
+
+class RewardRequest(Base):
+    """Modello per le richieste di ricompensa che richiedono approvazione da parte dei genitori"""
+    __tablename__ = "reward_requests"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    student_id = Column(String, nullable=False)  # ID dello studente che richiede la ricompensa
+    parent_id = Column(String, nullable=False)   # ID del genitore che deve approvare
+    reward_id = Column(String, ForeignKey("rewards.id"))
+    status = Column(SQLEnum(RewardRequestStatus), nullable=False, default=RewardRequestStatus.PENDING)
+    requested_at = Column(DateTime, default=datetime.utcnow)
+    processed_at = Column(DateTime, nullable=True)  # Data di approvazione o rifiuto
+    notes = Column(Text, nullable=True)  # Note aggiuntive (come motivo del rifiuto)
+    
+    # Relazioni
+    reward = relationship("Reward")

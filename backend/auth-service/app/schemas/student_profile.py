@@ -12,7 +12,8 @@ class StudentProfileBase(BaseModel):
 
 class StudentProfileCreate(StudentProfileBase):
     """Schema per la creazione di un profilo studente"""
-    pass
+    user_id: Optional[int] = None  # ID dell'utente per cui creare il profilo studente
+    parent_id: Optional[int] = None  # ID del profilo genitore a cui associare lo studente
 
 
 class StudentProfileUpdate(StudentProfileBase):

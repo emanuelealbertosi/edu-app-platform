@@ -20,7 +20,13 @@ import {
   DialogContentText,
   DialogTitle,
   CircularProgress,
-  Chip
+  Chip,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  FormHelperText,
+  Autocomplete
 } from '@mui/material';
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon, Search as SearchIcon } from '@mui/icons-material';
 import MainLayout from '../../components/layouts/MainLayout';
@@ -28,12 +34,19 @@ import HoverAnimation from '../../components/animations/HoverAnimation';
 import { ApiErrorHandler } from '../../services/ApiErrorHandler';
 import { NotificationsService } from '../../services/NotificationsService';
 import UserService, { User } from '../../services/UserService';
+import ParentService from '../../services/ParentService';
 
 // Utilizzo l'interfaccia User dal UserService, con alcune personalizzazioni per la UI
 interface UserDisplay extends Omit<User, 'lastLogin' | 'active' | 'createdAt' | 'role'> {
   lastLogin?: string;
   status: 'active' | 'inactive' | 'pending';
   role: string; // Permettiamo qualsiasi valore di ruolo che verrà poi convertito nella visualizzazione
+}
+
+interface ParentOption {
+  id: number;
+  label: string; // Nome completo del genitore
+  value: number; // ID del genitore
 }
 
 const AdminUsers: React.FC = () => {
@@ -54,6 +67,27 @@ const AdminUsers: React.FC = () => {
     role: 'student',
     status: 'active' as 'active' | 'inactive' | 'pending'
   });
+  
+  // Stato per il dialog di creazione nuovo utente
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [createFormData, setCreateFormData] = useState({
+    firstName: '',
+    lastName: '',
+    username: '',
+    email: '',
+    password: '',
+    confirmPassword: '',
+    role: 'student' as 'admin' | 'parent' | 'student',
+    parentId: null as number | null
+  });
+  const [formErrors, setFormErrors] = useState({
+    username: '',
+    email: '',
+    password: '',
+    confirmPassword: ''
+  });
+  const [parents, setParents] = useState<ParentOption[]>([]);
+  const [loadingParents, setLoadingParents] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -147,6 +181,139 @@ const AdminUsers: React.FC = () => {
   const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(event.target.value);
     setPage(0);
+  };
+
+  // Caricamento dei genitori per la selezione
+  const fetchParents = async () => {
+    setLoadingParents(true);
+    try {
+      const response = await UserService.getUsersByRole('parent');
+      const parentOptions: ParentOption[] = response.map((parent: User) => ({
+        id: Number(parent.id), // Converti in numero se necessario
+        label: `${parent.firstName || ''} ${parent.lastName || ''} (${parent.email})`,
+        value: Number(parent.id) // Converti in numero se necessario
+      }));
+      setParents(parentOptions);
+    } catch (error) {
+      ApiErrorHandler.handleApiError(error);
+      NotificationsService.error('Impossibile caricare la lista dei genitori');
+    } finally {
+      setLoadingParents(false);
+    }
+  };
+
+  // Apre il dialog per creare un nuovo utente
+  const handleOpenCreateDialog = () => {
+    setCreateFormData({
+      firstName: '',
+      lastName: '',
+      username: '',
+      email: '',
+      password: '',
+      confirmPassword: '',
+      role: 'student',
+      parentId: null
+    });
+    setFormErrors({
+      username: '',
+      email: '',
+      password: '',
+      confirmPassword: ''
+    });
+    // Carica la lista dei genitori per la selezione
+    fetchParents();
+    setCreateDialogOpen(true);
+  };
+
+  // Chiude il dialog di creazione
+  const handleCloseCreateDialog = () => {
+    setCreateDialogOpen(false);
+  };
+
+  // Validazione del form
+  const validateForm = () => {
+    let valid = true;
+    const errors = {
+      username: '',
+      email: '',
+      password: '',
+      confirmPassword: ''
+    };
+
+    if (!createFormData.username) {
+      errors.username = 'Il nome utente è obbligatorio';
+      valid = false;
+    }
+
+    if (!createFormData.email) {
+      errors.email = "L'email è obbligatoria";
+      valid = false;
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(createFormData.email)) {
+      errors.email = 'Inserisci un indirizzo email valido';
+      valid = false;
+    }
+
+    if (!createFormData.password) {
+      errors.password = 'La password è obbligatoria';
+      valid = false;
+    } else if (createFormData.password.length < 8) {
+      errors.password = 'La password deve essere di almeno 8 caratteri';
+      valid = false;
+    }
+
+    if (createFormData.password !== createFormData.confirmPassword) {
+      errors.confirmPassword = 'Le password non corrispondono';
+      valid = false;
+    }
+
+    setFormErrors(errors);
+    return valid;
+  };
+
+  // Gestisce la creazione di un nuovo utente
+  const handleCreateUser = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    try {
+      // Dati base per la creazione dell'utente
+      const userData = {
+        firstName: createFormData.firstName,
+        lastName: createFormData.lastName,
+        username: createFormData.username,
+        email: createFormData.email,
+        password: createFormData.password,
+        role: createFormData.role
+      };
+
+      // Se stiamo creando uno studente e un genitore è stato selezionato
+      if (createFormData.role === 'student' && createFormData.parentId) {
+        // Creiamo un oggetto specifico per la creazione di uno studente
+        const studentData = {
+          email: createFormData.email,
+          password: createFormData.password,
+          firstName: createFormData.firstName,
+          lastName: createFormData.lastName,
+          username: createFormData.username,
+          role: 'student' as const,  // Specifichiamo esplicitamente il tipo
+          parentId: createFormData.parentId
+        };
+        
+        await UserService.createStudentWithParent(studentData);
+        NotificationsService.success('Studente creato con successo');
+      } else {
+        // Creazione utente standard
+        await UserService.createUser(userData);
+        NotificationsService.success('Utente creato con successo');
+      }
+
+      // Aggiorna la lista utenti
+      await fetchUsers();
+      handleCloseCreateDialog();
+    } catch (error) {
+      ApiErrorHandler.handleApiError(error, 'Errore nella creazione dell\'utente');
+    }
   };
 
   const handleDeleteClick = (user: UserDisplay) => {
@@ -340,6 +507,7 @@ const AdminUsers: React.FC = () => {
               variant="contained" 
               startIcon={<AddIcon />}
               color="primary"
+              onClick={handleOpenCreateDialog}
             >
               Nuovo Utente
             </Button>
@@ -560,6 +728,125 @@ const AdminUsers: React.FC = () => {
           </DialogActions>
         </Dialog>
       </Container>
+          {/* Dialogo per la creazione di un nuovo utente */}
+      <Dialog open={createDialogOpen} onClose={handleCloseCreateDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>Crea Nuovo Utente</DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <TextField
+              label="Nome"
+              fullWidth
+              margin="normal"
+              value={createFormData.firstName}
+              onChange={(e) => setCreateFormData({...createFormData, firstName: e.target.value})}
+            />
+            <TextField
+              label="Cognome"
+              fullWidth
+              margin="normal"
+              value={createFormData.lastName}
+              onChange={(e) => setCreateFormData({...createFormData, lastName: e.target.value})}
+            />
+            <TextField
+              label="Nome utente"
+              fullWidth
+              margin="normal"
+              value={createFormData.username}
+              onChange={(e) => setCreateFormData({...createFormData, username: e.target.value})}
+              error={!!formErrors.username}
+              helperText={formErrors.username}
+              required
+            />
+            <TextField
+              label="Email"
+              fullWidth
+              margin="normal"
+              type="email"
+              value={createFormData.email}
+              onChange={(e) => setCreateFormData({...createFormData, email: e.target.value})}
+              error={!!formErrors.email}
+              helperText={formErrors.email}
+              required
+            />
+            <TextField
+              label="Password"
+              fullWidth
+              margin="normal"
+              type="password"
+              value={createFormData.password}
+              onChange={(e) => setCreateFormData({...createFormData, password: e.target.value})}
+              error={!!formErrors.password}
+              helperText={formErrors.password}
+              required
+            />
+            <TextField
+              label="Conferma Password"
+              fullWidth
+              margin="normal"
+              type="password"
+              value={createFormData.confirmPassword}
+              onChange={(e) => setCreateFormData({...createFormData, confirmPassword: e.target.value})}
+              error={!!formErrors.confirmPassword}
+              helperText={formErrors.confirmPassword}
+              required
+            />
+            <FormControl fullWidth margin="normal">
+              <InputLabel id="role-select-label">Ruolo</InputLabel>
+              <Select
+                labelId="role-select-label"
+                value={createFormData.role}
+                label="Ruolo"
+                onChange={(e) => setCreateFormData({...createFormData, role: e.target.value as 'admin' | 'parent' | 'student'})}
+              >
+                <MenuItem value="admin">Amministratore</MenuItem>
+                <MenuItem value="parent">Genitore</MenuItem>
+                <MenuItem value="student">Studente</MenuItem>
+              </Select>
+            </FormControl>
+
+            {/* Campo per selezionare un genitore quando si crea uno studente */}
+            {createFormData.role === 'student' && (
+              <FormControl fullWidth margin="normal">
+                <Autocomplete
+                  id="parent-select"
+                  options={parents}
+                  loading={loadingParents}
+                  getOptionLabel={(option) => option.label}
+                  onChange={(_, newValue) => {
+                    setCreateFormData({
+                      ...createFormData,
+                      parentId: newValue ? newValue.value : null
+                    });
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Genitore associato"
+                      variant="outlined"
+                      helperText="Seleziona il genitore a cui associare lo studente"
+                      InputProps={{
+                        ...params.InputProps,
+                        endAdornment: (
+                          <React.Fragment>
+                            {loadingParents ? <CircularProgress color="inherit" size={20} /> : null}
+                            {params.InputProps.endAdornment}
+                          </React.Fragment>
+                        ),
+                      }}
+                    />
+                  )}
+                />
+              </FormControl>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCreateDialog}>Annulla</Button>
+          <Button onClick={handleCreateUser} color="primary" variant="contained">
+            Crea Utente
+          </Button>
+        </DialogActions>
+      </Dialog>
     </MainLayout>
   );
 };

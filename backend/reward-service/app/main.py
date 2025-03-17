@@ -30,7 +30,7 @@ app.add_middleware(
 # Include API routers
 app.include_router(rewards.router, prefix="/api/rewards", tags=["Rewards"])
 app.include_router(user_rewards.router, prefix="/api/user-rewards", tags=["User Rewards"])
-app.include_router(parent.router, prefix="/reward/parent", tags=["Parent Rewards"])
+app.include_router(parent.router, prefix="/api/rewards/parent", tags=["Parent Rewards"])
 app.include_router(templates.router, prefix="/api/templates", tags=["Templates"])
 
 @app.get("/")

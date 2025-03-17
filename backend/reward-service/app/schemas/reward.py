@@ -3,7 +3,7 @@ from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 import uuid
 
-from app.db.models.reward import RewardType, RewardRarity
+from app.db.models.reward import RewardType, RewardRarity, RewardRequestStatus
 
 
 class RewardCategoryBase(BaseModel):
@@ -208,14 +208,54 @@ class RewardTemplate(RewardBase):
     }
 
 
+class RewardRequestBase(BaseModel):
+    """Schema base per le richieste di ricompensa"""
+    student_id: str
+    parent_id: str
+    reward_id: str
+    notes: Optional[str] = None
+
+
+class RewardRequestCreate(RewardRequestBase):
+    """Schema per la creazione di una richiesta di ricompensa"""
+    pass
+
+
+class RewardRequestUpdate(BaseModel):
+    """Schema per l'aggiornamento di una richiesta di ricompensa"""
+    status: RewardRequestStatus
+    notes: Optional[str] = None
+
+
+class RewardRequestInDB(RewardRequestBase):
+    """Schema per le richieste di ricompensa nel database"""
+    id: str
+    status: RewardRequestStatus
+    requested_at: datetime
+    processed_at: Optional[datetime] = None
+    
+    model_config = {
+        "from_attributes": True
+    }
+
+
+class RewardRequestWithReward(RewardRequestInDB):
+    """Schema per le richieste di ricompensa con i dettagli della ricompensa"""
+    reward: RewardInDB
+    
+    model_config = {
+        "from_attributes": True
+    }
+
+
 class PendingReward(BaseModel):
-    """Schema per le ricompense in attesa di approvazione"""
+    """Schema per le ricompense in attesa di approvazione (per compatibilità)"""
     id: str
     reward_id: str
-    user_id: str
     student_id: str
-    created_at: datetime
-    status: str = "pending"  # pending, approved, rejected
+    parent_id: str
+    requested_at: datetime
+    status: RewardRequestStatus = RewardRequestStatus.PENDING
     notes: Optional[str] = None
     reward: Optional[RewardInDB] = None
     

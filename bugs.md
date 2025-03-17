@@ -18,7 +18,7 @@
 
 ### Bug Aperti
 
-#### AU-001 - 🔴 P1 - Assenza di un'interfaccia per assegnare uno studente ad un genitore
+#### AU-001 - 🟡 P1 - Assenza di un'interfaccia per assegnare uno studente ad un genitore
 
 **Descrizione**  
 Attualmente non esiste un modo per assegnare uno studente ad un genitore attraverso l'interfaccia utente. Questa funzionalità è fondamentale per permettere ai genitori di gestire i percorsi educativi e i progressi dei propri figli.
@@ -28,6 +28,41 @@ I genitori non possono essere associati ai propri figli, limitando gravemente la
 
 **Possibile Soluzione**  
 Implementare un'interfaccia nella sezione admin che permetta di associare studenti a genitori e viceversa. In alternativa, aggiungere questa funzionalità nella sezione di gestione profilo genitore.
+
+**Stato**: Backend implementato, manca interfaccia.
+
+#### AU-002 - 🔴 P1 - Creazione interfaccia genitore per gestione studenti associati
+
+**Descrizione**  
+Per i profili genitore, è necessaria un'interfaccia dedicata nel menu principale che mostri tutti gli studenti associati al genitore e permetta di crearne di nuovi. I nuovi studenti creati dovranno essere automaticamente associati al parent_id del genitore corrente.
+
+**Impatto**  
+I genitori non possono vedere l'elenco dei propri studenti né aggiungerne di nuovi attraverso l'interfaccia utente.
+
+**Possibile Soluzione**  
+Creare una nuova pagina nel menu principale del genitore che mostri una tabella con gli studenti associati e un pulsante per aggiungerne di nuovi.
+
+#### AU-003 - 🔴 P1 - Miglioramento interfaccia admin per l'associazione studenti-genitori
+
+**Descrizione**  
+Nell'interfaccia di creazione utenti dell'admin, manca la possibilità di selezionare un genitore quando si crea un nuovo utente con ruolo "student". È necessario aggiungere un selettore con una funzione di ricerca integrata.
+
+**Impatto**  
+Gli amministratori non possono associare direttamente uno studente a un genitore durante la fase di creazione dell'account.
+
+#### AU-004 - 🔴 P1 - Incompatibilità tra frontend e backend nell'endpoint per la creazione di studenti
+
+**Descrizione**  
+Il frontend tenta di creare nuovi studenti attraverso l'endpoint `/api/auth/parent/students` con una richiesta POST, ma il backend è configurato per gestire l'endpoint `/auth/parent/students` (senza il prefisso `/api`). Questo causa un errore 404 Not Found quando si tenta di creare un nuovo studente.
+
+**Impatto**  
+I genitori non possono creare nuovi account per i propri figli attraverso l'interfaccia utente, nonostante la funzionalità sia stata implementata sia nel frontend che nel backend.
+
+**Possibile Soluzione**  
+La soluzione è modificare il prefisso del router nel file `main.py` dell'auth-service da `/auth/parent` a `/api/auth/parent` per renderlo compatibile con le richieste del frontend. In alternativa, si potrebbero adattare le chiamate nel frontend per rimuovere il prefisso `/api`.
+
+**Possibile Soluzione**  
+Aggiungere nella form di creazione utente dell'admin, quando viene selezionato il ruolo "student", un campo dropdown con funzione di ricerca per selezionare il genitore a cui associare lo studente.
 
 ---
 

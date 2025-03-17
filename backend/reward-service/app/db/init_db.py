@@ -3,7 +3,7 @@ import logging
 from datetime import datetime, timedelta
 
 from app.db.base import Base, engine
-from app.db.models.reward import RewardCategory, Reward, RewardType, RewardRarity
+from app.db.models.reward import RewardCategory, Reward, RewardType, RewardRarity, RewardRequest
 from app.db.repositories.reward_repository import RewardCategoryRepository, RewardRepository
 
 logging.basicConfig(level=logging.INFO)
@@ -90,10 +90,11 @@ def init_db(db: Session) -> None:
     
     try:
         # Elimina le tabelle in ordine inverso delle dipendenze
-        from app.db.models.reward import UserReward, RewardProgress
+        from app.db.models.reward import UserReward, RewardProgress, RewardRequest
         Base.metadata.drop_all(bind=engine, tables=[
             UserReward.__table__,
             RewardProgress.__table__,
+            RewardRequest.__table__,
             Reward.__table__,
             RewardCategory.__table__
         ])

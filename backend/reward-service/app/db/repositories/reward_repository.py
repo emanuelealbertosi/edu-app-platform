@@ -1,9 +1,10 @@
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from fastapi import HTTPException, status
+from datetime import datetime
 
-from app.db.models.reward import Reward, RewardCategory, UserReward, RewardProgress
-from app.schemas.reward import RewardCreate, RewardUpdate, RewardCategoryCreate, RewardCategoryUpdate
+from app.db.models.reward import Reward, RewardCategory, UserReward, RewardProgress, RewardRequest, RewardRequestStatus
+from app.schemas.reward import RewardCreate, RewardUpdate, RewardCategoryCreate, RewardCategoryUpdate, RewardRequestCreate, RewardRequestUpdate
 
 
 class RewardCategoryRepository:
@@ -308,5 +309,78 @@ class RewardProgressRepository:
             return False
 
         db.delete(db_progress)
+        db.commit()
+        return True
+
+
+class RewardRequestRepository:
+    """Repository per le operazioni sulle richieste di ricompensa"""
+
+    @staticmethod
+    def get_by_id(db: Session, request_id: str) -> Optional[RewardRequest]:
+        """Ottiene una richiesta di ricompensa per ID"""
+        return db.query(RewardRequest).filter(RewardRequest.id == request_id).first()
+
+    @staticmethod
+    def get_by_parent_id(db: Session, parent_id: str, status: Optional[RewardRequestStatus] = None) -> List[RewardRequest]:
+        """Ottiene tutte le richieste di ricompensa per ID genitore con filtro opzionale per stato"""
+        query = db.query(RewardRequest).filter(RewardRequest.parent_id == parent_id)
+        if status:
+            query = query.filter(RewardRequest.status == status)
+        return query.all()
+
+    @staticmethod
+    def get_by_student_id(db: Session, student_id: str, status: Optional[RewardRequestStatus] = None) -> List[RewardRequest]:
+        """Ottiene tutte le richieste di ricompensa per ID studente con filtro opzionale per stato"""
+        query = db.query(RewardRequest).filter(RewardRequest.student_id == student_id)
+        if status:
+            query = query.filter(RewardRequest.status == status)
+        return query.all()
+
+    @staticmethod
+    def get_pending_by_parent_id(db: Session, parent_id: str) -> List[RewardRequest]:
+        """Ottiene tutte le richieste di ricompensa in attesa per un dato genitore"""
+        return db.query(RewardRequest).\
+                filter(RewardRequest.parent_id == parent_id).\
+                filter(RewardRequest.status == RewardRequestStatus.PENDING).\
+                all()
+
+    @staticmethod
+    def create(db: Session, request_data: RewardRequestCreate) -> RewardRequest:
+        """Crea una nuova richiesta di ricompensa"""
+        db_request = RewardRequest(**request_data.model_dump(), status=RewardRequestStatus.PENDING)
+        db.add(db_request)
+        db.commit()
+        db.refresh(db_request)
+        return db_request
+
+    @staticmethod
+    def update(db: Session, request_id: str, request_data: RewardRequestUpdate) -> Optional[RewardRequest]:
+        """Aggiorna una richiesta di ricompensa esistente"""
+        db_request = RewardRequestRepository.get_by_id(db, request_id)
+        if not db_request:
+            return None
+
+        # Aggiorna solo i campi forniti
+        update_data = request_data.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(db_request, key, value)
+
+        # Se lo stato è cambiato, aggiorna la data di elaborazione
+        if 'status' in update_data and update_data['status'] != RewardRequestStatus.PENDING:
+            db_request.processed_at = datetime.utcnow()
+
+        db.commit()
+        db.refresh(db_request)
+        return db_request
+
+    @staticmethod
+    def delete(db: Session, request_id: str) -> bool:
+        """Elimina una richiesta di ricompensa"""
+        db_request = RewardRequestRepository.get_by_id(db, request_id)
+        if not db_request:
+            return False
+
+        db.delete(db_request)
         db.commit()
         return True
