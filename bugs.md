@@ -38,7 +38,9 @@ Inoltre, aggiunto un endpoint `/api/auth/parent/profile` che verifica ed eventua
 
 ### Bug Aperti
 
-#### AU-002 - 🔴 P1 - Creazione interfaccia genitore per gestione studenti associati
+#### AU-002 - 🟢 P1 - Creazione interfaccia genitore per gestione studenti associati
+- **Stato**: 🟢 Risolto
+- **Data**: 2025-03-17
 
 **Descrizione**  
 Per i profili genitore, è necessaria un'interfaccia dedicata nel menu principale che mostri tutti gli studenti associati al genitore e permetta di crearne di nuovi. I nuovi studenti creati dovranno essere automaticamente associati al parent_id del genitore corrente.
@@ -46,8 +48,11 @@ Per i profili genitore, è necessaria un'interfaccia dedicata nel menu principal
 **Impatto**  
 I genitori non possono vedere l'elenco dei propri studenti né aggiungerne di nuovi attraverso l'interfaccia utente.
 
-**Possibile Soluzione**  
-Creare una nuova pagina nel menu principale del genitore che mostri una tabella con gli studenti associati e un pulsante per aggiungerne di nuovi.
+**Soluzione Implementata**  
+Implementato il componente `ManageStudents.tsx` che fornisce un'interfaccia completa per la gestione degli studenti associati al genitore. Questo componente:
+1. Visualizza tutti gli studenti associati al genitore corrente
+2. Permette di creare nuovi studenti che vengono automaticamente associati al genitore
+3. Garantisce che esista un profilo genitore prima di tentare qualsiasi operazione
 
 #### AU-003 - 🔴 P1 - Miglioramento interfaccia admin per l'associazione studenti-genitori
 
