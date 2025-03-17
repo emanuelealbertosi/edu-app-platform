@@ -46,7 +46,18 @@ declare const process: {
   };
 };
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+// Determina l'URL dell'API in base all'ambiente
+const getApiUrl = () => {
+  // Usa l'URL configurato in .env se disponibile
+  const configuredUrl = process.env.REACT_APP_API_URL;
+  if (configuredUrl) return configuredUrl;
+  
+  // Altrimenti, usa l'host corrente con la porta 8000
+  const currentHost = window.location.hostname;
+  return `http://${currentHost}:8000`;
+};
+
+const API_URL = getApiUrl();
 const REWARD_API_URL = `${API_URL}/reward`;
 
 // Configura l'interceptor per debug comunicazione HTTP
@@ -492,7 +503,7 @@ class RewardService {
       // 2. AGGIORNAMENTO DATI SUL BACKEND
       console.log(`Invio richiesta PUT a /api/templates/${id}...`);
       try {
-        // Utilizza ApiService, che gestisce già token e intestazioni
+        // Utilizziamo ApiService, che gestisce già token e intestazioni
         await ApiService.put(`/api/templates/${id}`, backendData);
         console.log('PUT completata con successo');
         
@@ -561,10 +572,10 @@ class RewardService {
       // Stampiamo l'URL completo prima della chiamata
       const apiUrl = '/api/rewards/?is_active=true';
       // Non abbiamo accesso diretto alla baseURL quindi lo registriamo manualmente
-      console.log('URL completo (stimato):', 'http://localhost:8000' + apiUrl);
+      console.log('URL completo (stimato):', API_URL + apiUrl);
       
       // Stampiamo l'URL diretto del servizio di ricompense per debug
-      console.log('URL diretto del servizio (per debug):', 'http://localhost:8004/api/rewards/?is_active=true');
+      console.log('URL diretto del servizio (per debug):', `http://${window.location.hostname}:8004/api/rewards/?is_active=true`);
       
       // Facciamo la chiamata e misuriamo il tempo
       const startTime = performance.now();
@@ -617,7 +628,7 @@ class RewardService {
         // Usa Axios direttamente invece di ApiService
         // Nota: questo è solo per debug, in produzione dovresti usare sempre ApiService
         const axios = require('axios');
-        const directResponse = await axios.get('http://localhost:8004/api/rewards/?is_active=true');
+        const directResponse = await axios.get(`http://${window.location.hostname}:8004/api/rewards/?is_active=true`);
         console.log('Risposta diretta ricevuta:', directResponse.status);
         console.log('Dati diretti:', directResponse.data);
       } catch (directError: any) {
@@ -658,18 +669,24 @@ class RewardService {
 
   /**
    * Ottiene tutte le ricompense riscattate dallo studente corrente
+   * 
+   * Poiché non esiste un endpoint specifico per i premi riscattati,
+   * questa funzione semplicemente restituisce un array vuoto per ora.
+   * In futuro, si potrebbe implementare la logica per ottenere i premi riscattati
+   * filtrando quelli con campo redeemed_at non nullo.
    */
   public async getRedeemedRewards(): Promise<Reward[]> {
     try {
-      return await ApiService.get<Reward[]>(`/api/rewards/redeemed`);
+      // In alternativa, potremmo ottenere tutti i premi e filtrare quelli riscattati
+      // const allRewards = await ApiService.get<Reward[]>('/api/rewards');
+      // return allRewards.filter(reward => reward.redeemed_at !== null);
+      
+      // Per ora, restituiamo semplicemente un array vuoto
+      console.log('Funzione getRedeemedRewards chiamata - restituito array vuoto (funzionalità non implementata)');
+      return [];
     } catch (error: any) {
-      // Se l'endpoint non esiste (404), restituiamo un array vuoto invece di lanciare un errore
-      if (error.response?.status === 404) {
-        console.log('Endpoint /api/rewards/redeemed non disponibile (404). Restituito array vuoto.');
-        return [];
-      }
       console.error('Errore nel recupero delle ricompense riscattate:', error);
-      throw error;
+      return [];
     }
   }
 
@@ -769,7 +786,7 @@ class RewardService {
       }
     }
     
-    // Altrimenti, convertiamo dal formato del backend
+    // Altrimenti, convertiamo dal formato API al formato frontend
     // Esempio di conversione dal formato API al formato frontend
     return {
       studentId: studentId,
@@ -1005,9 +1022,9 @@ class RewardService {
    * @param studentId ID dello studente a cui assegnare il premio
    * @returns Il premio assegnato (una copia del template con un nuovo ID)
    */
-  public async assignRewardToStudent(templateId: string, studentId: string): Promise<Reward> {
+  public async assignRewardToStudent(studentId: string, template: RewardTemplate): Promise<Reward | null> {
     // Prima otteniamo il template per avere tutti i dettagli
-    const template = await this.getRewardTemplate(templateId);
+    const templateId = template.id;
     
     // Normalizzazione: se il template proviene dal backend, potrebbe avere cost invece di pointsCost
     // Assicuriamo la presenza di entrambi per evitare problemi nell'interfaccia di chiamata
@@ -1020,7 +1037,7 @@ class RewardService {
     // Creiamo un payload conforme allo schema UserRewardCreate atteso dal backend
     const assignRequest = {
       user_id: studentId,           // ID dello studente (usando snake_case per il backend)
-      reward_id: template.id,       // ID del template come reward_id
+      reward_id: templateId,       // ID del template come reward_id
       is_displayed: true            // Il premio sarà visibile di default
     };
     
@@ -1037,26 +1054,16 @@ class RewardService {
     } catch (error: any) {
       console.error('Errore durante l\'assegnazione del premio:', error);
       
-      // Gestiamo i diversi tipi di errore in modo specifico
-      // Rimosso il controllo per l'errore 'utente possiede già questa ricompensa'
-      // per permettere l'assegnazione multipla dello stesso template premio
-      
-      // Caso 1: Problema di autorizzazione (403 Forbidden)
-      if (error.response?.status === 403) {
-        safeNotify.error(
-          `Non hai i permessi necessari per assegnare il premio "${template.title}" a questo studente.`,
-          'Errore di autorizzazione'
-        );
-      }
-      // Caso 3: Altri errori
-      else {
-        safeNotify.error(
-          `Si è verificato un errore durante l'assegnazione del premio "${template.title}": ${error.response?.data?.detail || error.message || 'Errore sconosciuto'}`,
-          'Errore'
-        );
-      }
-      
-      throw error; // Rilanciamo l'errore per consentire alla UI di gestirlo
+      // Estrazione del messaggio di errore per una notifica più informativa
+      const errorMessage = error.response?.data?.detail || 
+                          error.message || 
+                          'Si è verificato un errore sconosciuto';
+                          
+      safeNotify.error(
+        `Non è stato possibile assegnare il premio: ${errorMessage}`,
+        'Errore'
+      );
+      return null;
     }
   }
 

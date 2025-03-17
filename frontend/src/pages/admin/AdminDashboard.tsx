@@ -90,9 +90,9 @@ const AdminDashboard: React.FC = () => {
 
         // Recupero dei template dei quiz
         try {
-          const quizzesData = await QuizService.getAllQuizTemplates();
+          const quizzesData: QuizTemplate[] = await QuizService.getAllQuizTemplates();
           setQuizTemplates(quizzesData);
-        } catch (err) {
+        } catch (err: any) {
           console.error('Errore nel recupero dei template dei quiz:', err);
         } finally {
           setLoading(prev => ({ ...prev, quizTemplates: false }));

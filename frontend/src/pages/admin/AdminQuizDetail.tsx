@@ -63,7 +63,7 @@ const AdminQuizDetail: React.FC = () => {
       }
 
       try {
-        const data = await QuizService.getQuizTemplateById(id);
+        const data: QuizTemplate = await QuizService.getQuizTemplateById(id);
         setQuizTemplate(data);
         
         // Mostra coriandoli se il quiz è stato creato di recente (ultimi 5 secondi)
@@ -76,7 +76,7 @@ const AdminQuizDetail: React.FC = () => {
             setTimeout(() => setShowConfetti(false), 3000);
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('Errore nel recupero del template del quiz:', error);
         setError('Errore nel recupero del template del quiz');
         NotificationsService.error('Errore nel recupero del template del quiz');
@@ -99,7 +99,7 @@ const AdminQuizDetail: React.FC = () => {
       await QuizService.deleteQuizTemplate(id);
       NotificationsService.success('Template quiz eliminato con successo');
       navigate('/admin/quizzes');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Errore durante l\'eliminazione del template:', error);
       NotificationsService.error('Errore durante l\'eliminazione del template');
     } finally {

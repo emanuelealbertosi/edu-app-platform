@@ -54,6 +54,27 @@ Implementato il componente `ManageStudents.tsx` che fornisce un'interfaccia comp
 2. Permette di creare nuovi studenti che vengono automaticamente associati al genitore
 3. Garantisce che esista un profilo genitore prima di tentare qualsiasi operazione
 
+#### AU-005 - 🟢 P1 - Percorsi educativi non visibili nell'interfaccia studente
+- **Stato**: 🟢 Risolto
+- **Data**: 2025-03-17
+
+**Descrizione**  
+Gli studenti (come l'utente "mariaelena") non riescono a visualizzare i percorsi educativi loro assegnati nell'interfaccia studente. Questo impedisce agli studenti di accedere ai loro percorsi formativi e completare le attività assegnate.
+
+**Impatto**  
+Gli studenti non possono seguire i percorsi educativi loro assegnati, compromettendo l'esperienza di apprendimento.
+
+**Soluzione Implementata**  
+1. Corretti i percorsi API nei servizi frontend:
+   - In `PathService.ts`: modificato `PATH_API_URL` da `/path` a `/api/paths`
+   - In `QuizService.ts`: modificato `QUIZ_API_URL` da `/quiz` a `/api/quiz`
+
+2. Corretta l'API chiamata dal frontend per recuperare i percorsi assegnati. Il metodo `getAssignedPaths()` in `PathService.ts` chiamava erroneamente l'endpoint `/api/paths/assigned` che non esiste nel backend. L'implementazione corretta utilizza l'endpoint base del servizio che filtra automaticamente i percorsi in base all'utente corrente.
+
+3. Riscontrata anche una seconda problematica: lo studente non aveva percorsi assegnati. È stato assegnato un percorso di tipo "Lettura per Principianti" allo studente mariaelena utilizzando l'endpoint `/api/paths/assign`.
+
+4. Risolto un ulteriore problema nella chiamata API in cui `ApiService.get()` era usato invece del corretto `this.api.get()`, e la gestione della risposta è stata migliorata per accedere correttamente a `response.data`.
+
 #### AU-003 - 🔴 P1 - Miglioramento interfaccia admin per l'associazione studenti-genitori
 
 **Descrizione**  
@@ -137,51 +158,6 @@ Il problema sembra riguardare specificamente l'aggiornamento di proprietà come 
 
 ---
 
-## Servizio Quiz
-
-### Bug Risolti
-
-#### QZ-001 - Quiz template non visualizzati nel frontend
-- **Stato**: 🟢 Risolto
-- **Priorità**: P1
-- **Componente**: Backend
-- **Interfaccia**: Tutti gli utenti
-- **Data**: 2025-03-14
-- **Risolto il**: 2025-03-14
-
-**Descrizione**
-I quiz template esistenti nel database non venivano visualizzati nell'interfaccia, nonostante le chiamate API restituissero status 200 (quindi senza errori). Tuttavia, le liste restituite erano vuote per gli utenti non-admin.
-
-**Causa**
-Tutti i quiz template nel database avevano il parametro `is_active: false`. L'API del backend è progettata per filtrare automaticamente i template inattivi quando l'utente che effettua la richiesta non ha il ruolo di amministratore.
-
-**Soluzione**
-Attivati tutti i quiz template esistenti nel database (id: 1, 2, 24) impostando `is_active: true` tramite chiamate API autenticate con account admin.
-
-**Percorsi file coinvolti**
-- `backend/quiz-service/app/api/endpoints/quiz_templates.py`
-- `frontend/src/services/QuizService.ts`
-
-**Note Aggiuntive**
-È necessario rivedere il processo di creazione dei quiz template per assicurarsi che vengano creati come attivi di default, o implementare un controllo più chiaro nell'interfaccia admin per gestire lo stato di attivazione dei template.
-
-**Descrizione**
-Nella pagina Gestione Percorsi, quando si clicca sull'icona di assegnamento quiz al template del percorso, i quiz inseriti dall'admin non vengono visualizzati.
-
-**Errore**
-"GET /api/quiz/v1/templates HTTP/1.1" 404 Not Found
-
-**Soluzione**
-Aggiunto il supporto per l'endpoint `/api/quiz/v1/templates` nel quiz-service, registrando il router con questo prefisso. Il frontend tentava di accedere a questo endpoint ma non era configurato nel backend. È stata anche migliorata la generazione degli ID delle operazioni per evitare avvisi di duplicazione nei log.
-
-**File modificati**
-`/backend/quiz-service/app/main.py`
-
-**URL**
-http://localhost:3000/parent/paths
-
----
-
 ### Bug Aperti
 
 #### PH-002 - Percorsi pubblici non visualizzati correttamente
@@ -196,8 +172,6 @@ Nel Tab percorsi pubblici non vengono visualizzati tutti i percorsi resi pubblic
 
 **URL**
 http://localhost:3000/parent/paths
-
----
 
 #### PH-003 - Percorsi creati dai genitori non visualizzati nella dashboard admin
 - **Stato**: 🔴 Aperto
@@ -215,8 +189,6 @@ In questa pagina dovrebbero essere visualizzati e filtrabili tutti i percorsi, i
 **URL**
 http://localhost:3000/admin/paths
 
----
-
 #### PH-004 - Pulsante "Nuovo Percorso" non funzionante
 - **Stato**: 🔴 Aperto
 - **Priorità**: P2
@@ -232,6 +204,36 @@ Dovrebbe creare un template percorso esattamente come quello del genitore ma imp
 
 **URL**
 http://localhost:3000/admin/paths
+
+#### PH-005 - Pulsante "Inizia" nei percorsi assegnati non funziona correttamente
+- **Stato**: 🔴 Aperto
+- **Priorità**: P1
+- **Componente**: Frontend/Backend
+- **Interfaccia**: Student
+- **Data**: 2025-03-17
+
+**Descrizione**
+Quando uno studente clicca sul pulsante "Inizia" nella scheda percorsi sotto "I Tuoi Percorsi Assegnati", viene visualizzato un errore "pagina non trovata" invece di aprire la pagina con i quiz disponibili e la possibilità di iniziare a rispondere alle domande.
+
+**Impatto**
+Gli studenti non possono accedere ai quiz assegnati all'interno dei percorsi educativi, impedendo loro di completare le attività di apprendimento assegnate.
+
+**URL**
+http://localhost:3000/student/path/5
+
+**Note Aggiuntive**
+Il problema potrebbe essere relativo al routing lato frontend o a un endpoint mancante nel backend per la visualizzazione e l'accesso ai quiz all'interno di un percorso assegnato.
+
+#### PH-006 - Percorso "Lettura per Principianti" visibile nel pannello studente ma non nel pannello genitore
+- **Stato**: 🟢 Risolto
+- **Priorità**: P1
+- **Componente**: Frontend
+- **Interfaccia**: Parent/Student
+- **Data**: 2025-03-17
+- **Risolto**: 2025-03-17
+- **Descrizione**: Il percorso "Lettura per Principianti" era visibile nel pannello studente (mariaelena) ma non compariva nel pannello genitore quando si visualizzavano i percorsi dello stesso studente.
+- **Causa**: Discrepanza nella logica di normalizzazione tra `PathService.getAssignedPaths()` usato nel pannello studente e `StudentService.getStudentPaths()` usato nel pannello genitore. Entrambi chiamavano lo stesso endpoint API ma applicavano una logica di mappatura diversa.
+- **Soluzione**: Armonizzata la logica di normalizzazione tra i due servizi, garantendo che i dati restituiti dall'API vengano elaborati in modo coerente sia nel pannello studente che in quello genitore. Implementati controlli più robusti sui tipi di dati e sulla gestione degli stati dei percorsi.
 
 ---
 
@@ -259,11 +261,11 @@ http://localhost:3000/parent/students
 
 ## Statistiche
 
-- **Totale Bug**: 7
-- **Bug Aperti**: 5
+- **Totale Bug**: 9
+- **Bug Aperti**: 7
 - **Bug In Progress**: 0
 - **Bug Risolti**: 2
-- **Frontend**: 5
+- **Frontend**: 7
 - **Backend**: 2
 
-Ultimo aggiornamento: 2025-03-14
+Ultimo aggiornamento: 2025-03-17

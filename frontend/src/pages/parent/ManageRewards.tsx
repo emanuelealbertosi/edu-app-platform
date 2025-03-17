@@ -499,7 +499,7 @@ function ManageRewards() {
     }
     
     try {
-      await RewardService.assignRewardToStudent(selectedTemplate.id, selectedStudentId);
+      await RewardService.assignRewardToStudent(selectedStudentId, selectedTemplate);
       
       // Aggiorniamo le statistiche dello studente
       fetchStudentStats(selectedStudentId);

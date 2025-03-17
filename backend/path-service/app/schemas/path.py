@@ -258,10 +258,21 @@ class PathInDBBase(PathBase):
     }
 
 class PathSummary(BaseModel):
-    template_title: str
+    id: int
+    uuid: str
+    template_id: int
+    status: CompletionStatus
+    current_score: int = 0
+    max_score: int = 0
+    completion_percentage: float = 0.0
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    template_title: str = "Unknown Template"
     node_count: int = 0
     completed_nodes: int = 0
-    created_at: Optional[datetime] = None
+    description: Optional[str] = ""  # Aggiungiamo il campo description
     
     model_config = {
         "from_attributes": True

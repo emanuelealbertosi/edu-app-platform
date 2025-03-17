@@ -43,6 +43,7 @@ const ManageRewards = React.lazy(() => import('./pages/parent/ManageRewards'));
 // Pagine studente con caricamento lazy
 const StudentDashboard = React.lazy(() => import('./pages/student/StudentDashboard'));
 const AssignedPaths = React.lazy(() => import('./pages/student/AssignedPaths'));
+const PathDetail = React.lazy(() => import('./pages/student/PathDetail'));
 const TakeQuiz = React.lazy(() => import('./pages/student/TakeQuiz'));
 const RewardsStore = React.lazy(() => import('./pages/student/RewardsStore'));
 
@@ -150,6 +151,16 @@ function App() {
                 <Route path="/student/paths" element={
                   <ProtectedRoute requiredRole="student">
                     <AssignedPaths />
+                  </ProtectedRoute>
+                } />
+                <Route path="/student/path/:pathId" element={
+                  <ProtectedRoute requiredRole="student">
+                    <PathDetail />
+                  </ProtectedRoute>
+                } />
+                <Route path="/student/path/:pathId/quiz/:quizId" element={
+                  <ProtectedRoute requiredRole="student">
+                    <TakeQuiz />
                   </ProtectedRoute>
                 } />
                 <Route path="/student/quiz/:quizId" element={

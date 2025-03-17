@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     REWARD_SERVICE_URL: str = os.getenv("REWARD_SERVICE_URL", "http://localhost:8004")
     
     # Configurazioni CORS
-    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
+    CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000", "*"]
     CORS_ORIGINS_REGEX: Optional[str] = None
     CORS_METHODS: List[str] = ["*"]
     CORS_HEADERS: List[str] = ["*"]

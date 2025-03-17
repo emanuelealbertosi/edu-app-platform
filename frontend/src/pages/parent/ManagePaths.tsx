@@ -214,7 +214,15 @@ const ManagePaths: React.FC = () => {
   const forceLoadTemplateNodes = async (templateId: number | string, showNotification = true) => {
     try {
       // Ottieni i nodi direttamente dall'API
-      const apiUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/path-templates/${templateId}/nodes`;
+      const getApiUrl = () => {
+        const configuredUrl = process.env.REACT_APP_API_URL;
+        if (configuredUrl) return configuredUrl;
+        
+        const currentHost = window.location.hostname;
+        return `http://${currentHost}:8000`;
+      };
+      
+      const apiUrl = `${getApiUrl()}/api/path-templates/${templateId}/nodes`;
       
       // Token di autenticazione
       const token = localStorage.getItem('accessToken');

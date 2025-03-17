@@ -66,23 +66,44 @@ async def get_paths(
         status=status
     )
     
-    # Aggiungi informazioni aggiuntive per ciascun percorso
+    # Usa un approccio più semplice per evitare errori di validazione
     result = []
     for path in paths:
-        # Ottieni il template
-        template = PathTemplateRepository.get(db, path_template_id=path.template_id)
-        
-        # Conta i nodi e quelli completati
-        node_count = PathRepository.count_nodes(db, path.id)
-        completed_nodes = PathRepository.count_completed_nodes(db, path.id)
-        
-        # Crea il DTO di risposta
-        path_dict = PathSummary.model_validate(path).model_dump()
-        path_dict["template_title"] = template.title if template else "Unknown Template"
-        path_dict["node_count"] = node_count
-        path_dict["completed_nodes"] = completed_nodes
-        
-        result.append(PathSummary(**path_dict))
+        try:
+            # Ottieni il template
+            template = PathTemplateRepository.get(db, path_template_id=path.template_id)
+            
+            # Conta i nodi e quelli completati
+            node_count = PathRepository.count_nodes(db, path.id)
+            completed_nodes = PathRepository.count_completed_nodes(db, path.id)
+            
+            # Crea un dizionario con solo i campi necessari per il modello PathSummary
+            path_dict = {
+                "id": path.id,
+                "uuid": path.uuid,
+                "template_id": path.template_id,
+                "status": path.status,
+                "current_score": path.current_score,
+                "max_score": path.max_score,
+                "completion_percentage": path.completion_percentage,
+                "started_at": path.started_at,
+                "completed_at": path.completed_at,
+                "created_at": path.created_at,
+                "updated_at": path.updated_at,
+                "template_title": template.title if template else path.title if path.title else "Unknown Template",
+                "node_count": node_count,
+                "completed_nodes": completed_nodes,
+                "description": template.description if template and template.description else path.description if path.description else ""
+            }
+            
+            # Aggiungi al risultato direttamente il dizionario
+            result.append(path_dict)
+            
+        except Exception as e:
+            import logging
+            logger = logging.getLogger("path-service")
+            logger.error(f"Errore nel processare il percorso {path.id}: {str(e)}")
+            # Continua con il prossimo percorso senza aggiungere questo
     
     return result
 

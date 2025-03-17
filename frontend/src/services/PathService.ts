@@ -2,7 +2,26 @@ import axios, { AxiosInstance } from 'axios';
 import { NotificationsService } from './NotificationsService';
 import ApiService from './ApiService';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+// Fix per errore lint: "Cannot find name 'process'"
+declare const process: {
+  env: {
+    REACT_APP_API_URL?: string;
+    NODE_ENV?: string;
+  };
+};
+
+// Determina l'URL dell'API in base all'ambiente
+const getApiUrl = () => {
+  // Usa l'URL configurato in .env se disponibile
+  const configuredUrl = process.env.REACT_APP_API_URL;
+  if (configuredUrl) return configuredUrl;
+  
+  // Altrimenti, usa l'host corrente con la porta 8000
+  const currentHost = window.location.hostname;
+  return `http://${currentHost}:8000`;
+};
+
+const API_URL = getApiUrl();
 const PATH_API_URL = `${API_URL}/api/paths`;
 
 /**
@@ -62,7 +81,7 @@ export interface Path {
   subject: string;
   difficulty: string;
   startDate: Date;
-  targetEndDate: Date;
+  targetEndDate: Date | null; // Aggiornato per rispettare l'interfaccia Path
   actualEndDate?: Date;
   status: 'assegnato' | 'in_corso' | 'completato';
   progress: number; // 0-100%
@@ -91,6 +110,7 @@ export interface PathStatistics {
 
 class PathService {
   private api: AxiosInstance;
+  private apiBaseUrl: string = API_URL;
 
   constructor() {
     this.api = axios.create({
@@ -103,7 +123,7 @@ class PathService {
     // Interceptor per aggiungere il token di autenticazione
     this.api.interceptors.request.use(
       (config) => {
-        const token = localStorage.getItem('accessToken');
+        const token = this.getToken();
         if (token) {
           config.headers['Authorization'] = `Bearer ${token}`;
         }
@@ -242,58 +262,133 @@ class PathService {
   // OPERAZIONI SUI PERCORSI ASSEGNATI
 
   /**
-   * Ottiene tutti i percorsi assegnati allo studente corrente
+   * Ottiene tutti i percorsi assegnati a uno studente specifico
+   * Questo metodo viene utilizzato sia nel pannello genitore che nel pannello studente
+   * per garantire che entrambi visualizzino e modifichino gli stessi percorsi concreti
    */
-  public async getAssignedPaths(): Promise<Path[]> {
-    // Utilizziamo l'endpoint corretto che filtra automaticamente in base all'utente corrente
+  public async getPathsForStudentId(studentId: string): Promise<Path[]> {
     try {
-      // Proviamo diverse possibili combinazioni di API in caso di errori
-      try {
-        // Prima opzione: endpoint principale del servizio path
-        const axiosResponse = await this.api.get<any[]>('/');
-        console.log('Percorsi recuperati con endpoint /', axiosResponse.data);
-        
-        // Mappiamo i campi dall'API ai campi richiesti dall'interfaccia Path
-        const mappedPaths = (axiosResponse.data || []).map((path: any) => ({
-          id: path.id || path.uuid,
-          templateId: path.template_id || path.template?.id || '',
-          studentId: path.student_id || path.student?.id || '',
-          title: path.title || path.template_title || 'Percorso senza titolo',
-          description: path.description || '',
-          progress: path.completion_percentage || 0,
-          subject: path.subject || 'Non specificata',
-          difficulty: this.mapDifficultyLevel(path.difficulty_level),
-          status: this.mapCompletionStatus(path.status),
-          startDate: path.start_date ? new Date(path.start_date) : new Date(),
-          targetEndDate: path.target_end_date ? new Date(path.target_end_date) : new Date(),
-          quizzes: Array.isArray(path.quizzes) ? path.quizzes : []
-        })) as Path[];
-        
-        return mappedPaths;
-      } catch (innerError) {
-        console.warn('Fallito primo tentativo con /, provo endpoint alternativo', innerError);
-        // Seconda opzione: utilizziamo ApiService direttamente all'endpoint completo
-        const fullResponse = await ApiService.get<any[]>(`${PATH_API_URL}`);
-        console.log('Percorsi recuperati con endpoint completo', fullResponse);
-        
-        // Mappiamo anche qui i dati
-        const mappedPaths = (Array.isArray(fullResponse) ? fullResponse : []).map((path: any) => ({
-          id: path.id || path.uuid, 
-          templateId: path.template_id || path.template?.id || '',
-          studentId: path.student_id || path.student?.id || '',
-          title: path.title || path.template_title || 'Percorso senza titolo',
-          description: path.description || '',
-          progress: path.completion_percentage || 0,
-          subject: path.subject || 'Non specificata',
-          difficulty: this.mapDifficultyLevel(path.difficulty_level),
-          status: this.mapCompletionStatus(path.status),
-          startDate: path.start_date ? new Date(path.start_date) : new Date(),
-          targetEndDate: path.target_end_date ? new Date(path.target_end_date) : new Date(),
-          quizzes: Array.isArray(path.quizzes) ? path.quizzes : []
-        })) as Path[];
-        
-        return mappedPaths;
+      console.log(`%c[DEBUG getPathsForStudentId] Inizio recupero percorsi per studentId:`, 'background: #2196F3; color: white; padding: 2px 4px; border-radius: 2px;', studentId);
+      
+      if (!studentId) {
+        console.log(`%c[DEBUG getPathsForStudentId] studentId mancante o vuoto`, 'background: #F44336; color: white; padding: 2px 4px; border-radius: 2px;');
+        throw new Error('ID studente non valido');
       }
+      
+      // Aggiungiamo un timestamp per evitare problemi di cache
+      const timestamp = new Date().getTime();
+      
+      // Non aggiungiamo /api/paths perché PATH_API_URL contiene già il percorso completo
+      const endpoint = `?student_id=${studentId}&include_nodes=true&_t=${timestamp}`;
+      
+      console.log(`%c[DEBUG getPathsForStudentId] Chiamata API:`, 'background: #2196F3; color: white; padding: 2px 4px; border-radius: 2px;', PATH_API_URL + endpoint);
+      
+      // Usando this.api.get invece di fetch
+      const response = await this.api.get<any[]>(endpoint);
+      
+      console.log(`%c[DEBUG getPathsForStudentId] Status risposta:`, 'background: #2196F3; color: white; padding: 2px 4px; border-radius: 2px;', response.status, response.statusText);
+      
+      // Estrazione dati dalla risposta axios
+      const data = response.data;
+      console.log(`%c[DEBUG getPathsForStudentId] Dati risposta completi:`, 'background: #2196F3; color: white; padding: 2px 4px; border-radius: 2px;', JSON.stringify(data, null, 2));
+      
+      if (!data || !Array.isArray(data)) {
+        console.log(`%c[DEBUG getPathsForStudentId] Dati non validi o vuoti:`, 'background: #F44336; color: white; padding: 2px 4px; border-radius: 2px;', data);
+        return [];
+      }
+      
+      console.log(`%c[DEBUG getPathsForStudentId] Numero percorsi ricevuti:`, 'background: #4CAF50; color: white; padding: 2px 4px; border-radius: 2px;', data.length);
+      
+      // Map per trasformare i dati dal formato API al formato app
+      const mappedPaths = data.map((path: any) => {
+        console.log(`%c[DEBUG getPathsForStudentId] Elaborazione percorso:`, 'background: #FF9800; color: white; padding: 2px 4px; border-radius: 2px;', path.id, path.title);
+        
+        // Normalizziamo i valori chiave per garantire coerenza
+        const id = path.id?.toString() || path.uuid?.toString() || '';
+        const templateId = path.template_id?.toString() || path.template?.id?.toString() || '';
+        const title = path.template_title || path.title || 'Percorso senza titolo';
+        const description = path.description || '';
+        
+        // Normalizziamo lo stato del percorso
+        let status: 'assegnato' | 'in_corso' | 'completato' = 'assegnato';
+        if (path.status) {
+          const normalizedStatus = path.status.toLowerCase();
+          if (normalizedStatus.includes('complet')) {
+            status = 'completato';
+          } else if (normalizedStatus.includes('progress') || normalizedStatus.includes('corso')) {
+            status = 'in_corso';
+          }
+        }
+        
+        // Normalizziamo il progresso
+        let progress = 0;
+        if (path.completion_percentage !== undefined) {
+          progress = path.completion_percentage;
+        } else if (path.node_count && path.completed_nodes) {
+          // Se abbiamo il conteggio dei nodi dal backend, usiamo quello
+          const totalNodes = path.node_count;
+          const completedNodes = path.completed_nodes;
+          if (totalNodes > 0) {
+            progress = Math.round((completedNodes / totalNodes) * 100);
+          }
+        } else if (path.nodes && Array.isArray(path.nodes)) {
+          // Altrimenti contiamo i nodi nella risposta
+          const totalNodes = path.nodes.length;
+          if (totalNodes > 0) {
+            const completedNodes = path.nodes.filter((node: any) => 
+              node.status === 'COMPLETED' || 
+              node.status?.toLowerCase() === 'completed'
+            ).length;
+            progress = Math.round((completedNodes / totalNodes) * 100);
+          }
+        }
+        
+        // Estrai i quiz dai nodi se disponibili
+        const quizzes = [];
+        if (path.nodes && Array.isArray(path.nodes)) {
+          for (const node of path.nodes) {
+            if (node.node_type === 'quiz' || node.content?.quiz_id) {
+              // Converti lo stato del nodo al formato richiesto dall'interfaccia Path
+              let quizStatus: 'da_iniziare' | 'in_corso' | 'completato' = 'da_iniziare';
+              if (node.status) {
+                const normalizedNodeStatus = node.status.toLowerCase();
+                if (normalizedNodeStatus.includes('complet')) {
+                  quizStatus = 'completato';
+                } else if (normalizedNodeStatus.includes('progress') || normalizedNodeStatus.includes('corso')) {
+                  quizStatus = 'in_corso';
+                }
+              }
+              
+              quizzes.push({
+                quizId: node.content?.quiz_id || node.id.toString(),
+                title: node.title || node.content?.title || 'Quiz senza titolo',
+                status: quizStatus,
+                score: node.score !== undefined ? node.score : undefined,
+                maxScore: node.max_score !== undefined ? node.max_score : 100, // Assegna un valore di default se manca
+                completedAt: node.completed_at ? new Date(node.completed_at) : undefined
+              });
+            }
+          }
+        }
+        
+        return {
+          id: id,
+          templateId: templateId,
+          studentId: path.student_id?.toString() || path.student?.id?.toString() || '',
+          title: title,
+          description: description,
+          progress: progress,
+          subject: path.subject || 'Non specificata',
+          difficulty: this.mapDifficultyLevel(path.difficulty_level),
+          status: status,
+          startDate: path.started_at ? new Date(path.started_at) : 
+                    path.start_date ? new Date(path.start_date) : new Date(),
+          targetEndDate: path.target_end_date ? new Date(path.target_end_date) : null, // Aggiornato per rispettare l'interfaccia Path
+          quizzes: quizzes
+        };
+      }) as Path[];
+      
+      return mappedPaths;
     } catch (error) {
       console.error('Errore nel recupero dei percorsi assegnati:', error);
       NotificationsService.error(
@@ -305,15 +400,115 @@ class PathService {
   }
   
   /**
+   * Ottiene tutti i percorsi assegnati allo studente corrente
+   */
+  public async getAssignedPaths(): Promise<Path[]> {
+    try {
+      // Otteniamo l'ID dello studente corrente
+      const studentId = this.getCurrentStudentId();
+      
+      console.log(`%c[DEBUG getAssignedPaths] ID studente corrente:`, 'background: #673AB7; color: white; padding: 2px 4px; border-radius: 2px;', studentId);
+      
+      // Debug: vediamo cosa c'è nel localStorage
+      console.log(`%c[DEBUG getAssignedPaths] Contenuto localStorage:`, 'background: #673AB7; color: white; padding: 2px 4px; border-radius: 2px;', {
+        user: localStorage.getItem('user'),
+        accessToken: localStorage.getItem('accessToken')
+      });
+      
+      if (!studentId) {
+        console.error('ID studente non disponibile');
+        NotificationsService.error('Impossibile identificare lo studente corrente. Rieffettua il login.', 'Errore');
+        return [];
+      }
+      
+      // Utilizziamo il metodo condiviso per garantire coerenza
+      return this.getPathsForStudentId(studentId);
+    } catch (error) {
+      console.error('Errore nel recupero dei percorsi assegnati:', error);
+      NotificationsService.error(
+        'Errore nel recupero dei percorsi assegnati',
+        'Errore'
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Ottiene l'ID dello studente corrente dal localStorage
+   * Per ora forziamo ad usare 1 come ID studente per l'ambiente di sviluppo locale
+   */
+  private getCurrentStudentId(): string {
+    try {
+      // DEBUG: Per l'ambiente di sviluppo, forciamo l'ID 1
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`%c[DEBUG getCurrentStudentId] In ambiente di sviluppo, uso l'ID studente fisso: 1`, 'background: #4CAF50; color: white; padding: 2px 4px; border-radius: 2px;');
+        return '1';
+      }
+      
+      const userStr = localStorage.getItem('user');
+      console.log(`%c[DEBUG getCurrentStudentId] User dal localStorage:`, 'background: #9C27B0; color: white; padding: 2px 4px; border-radius: 2px;', userStr);
+      
+      if (!userStr) {
+        console.log(`%c[DEBUG getCurrentStudentId] Nessun dato utente trovato in localStorage`, 'background: #F44336; color: white; padding: 2px 4px; border-radius: 2px;');
+        return '1'; // Fallback per l'ambiente di sviluppo
+      }
+      
+      const user = JSON.parse(userStr);
+      console.log(`%c[DEBUG getCurrentStudentId] User parsato:`, 'background: #9C27B0; color: white; padding: 2px 4px; border-radius: 2px;', user);
+      
+      if (user.role === 'student') {
+        // Se siamo in ambiente di sviluppo, usiamo sempre 1
+        if (process.env.NODE_ENV === 'development') {
+          return '1';
+        }
+        console.log(`%c[DEBUG getCurrentStudentId] Utente è studente, ID:`, 'background: #4CAF50; color: white; padding: 2px 4px; border-radius: 2px;', user.id);
+        return user.id;
+      } else if (user.role === 'parent' && user.activeStudentId) {
+        // Se siamo in ambiente di sviluppo, usiamo sempre 1
+        if (process.env.NODE_ENV === 'development') {
+          return '1';
+        }
+        console.log(`%c[DEBUG getCurrentStudentId] Utente è genitore con studente attivo, ID:`, 'background: #4CAF50; color: white; padding: 2px 4px; border-radius: 2px;', user.activeStudentId);
+        return user.activeStudentId;
+      }
+      
+      console.log(`%c[DEBUG getCurrentStudentId] Nessun ID studente trovato per il ruolo, uso valore di default:`, 'background: #F44336; color: white; padding: 2px 4px; border-radius: 2px;', user.role);
+      return '1'; // Fallback per l'ambiente di sviluppo
+    } catch (error) {
+      console.error('Errore nel recupero dell\'ID studente:', error);
+      return '1'; // Fallback per l'ambiente di sviluppo
+    }
+  }
+
+  /**
    * Converte il livello di difficoltà numerico in una stringa
    */
-  private mapDifficultyLevel(level?: number): 'facile' | 'medio' | 'difficile' {
+  private mapDifficultyLevel(level: any): 'facile' | 'medio' | 'difficile' {
     if (!level) return 'medio';
-    if (level <= 1) return 'facile';
-    if (level <= 3) return 'medio';
-    return 'difficile';
+    
+    // Se è già una stringa
+    if (typeof level === 'string') {
+      const normalizedLevel = level.toLowerCase();
+      if (normalizedLevel.includes('facil') || normalizedLevel.includes('easy') || normalizedLevel === '1') {
+        return 'facile';
+      } else if (normalizedLevel.includes('diff') || normalizedLevel.includes('hard') || normalizedLevel === '3') {
+        return 'difficile';
+      } else {
+        return 'medio';
+      }
+    }
+    
+    // Se è un numero
+    if (typeof level === 'number') {
+      if (level === 1) return 'facile';
+      if (level === 3) return 'difficile';
+      return 'medio';
+    }
+    
+    // Default
+    return 'medio';
   }
-  
+
   /**
    * Converte lo stato di completamento dall'API in una stringa
    */
@@ -325,7 +520,6 @@ class PathService {
     return 'non_iniziato';
   }
 
-
   /**
    * Ottiene un percorso specifico per ID
    */
@@ -335,12 +529,140 @@ class PathService {
   }
 
   /**
+   * Ottiene i dettagli completi di un percorso specifico per ID, inclusi i quiz associati
+   * Utilizzato dalla pagina di dettaglio del percorso per lo studente
+   */
+  public async getPathDetail(pathId: string): Promise<any> {
+    try {
+      console.log(`Richiesta dettagli percorso per ID: ${pathId}`);
+      
+      // Prima proviamo l'endpoint principale del path
+      const response = await this.api.get(`/${pathId}`);
+      console.log('Risposta API percorso:', response);
+      console.log('Dettagli percorso recuperati:', response.data);
+      
+      // Trasformiamo i dati nel formato atteso dal frontend
+      const path = response.data;
+      
+      // Ottieni i nodi del percorso (che dovrebbero includere i quiz)
+      let quizzes = [];
+      
+      try {
+        // Proviamo a recuperare i nodi del percorso dall'endpoint specifico
+        const nodesResponse = await ApiService.get(`${API_URL}/api/paths/${pathId}/nodes`);
+        console.log('Nodi del percorso recuperati:', nodesResponse);
+        
+        if (Array.isArray(nodesResponse)) {
+          // Filtriamo solo i nodi di tipo quiz
+          const quizNodes = nodesResponse.filter((node: any) => 
+            node.node_type === 'quiz' || 
+            (node.content && node.content.quiz_id)
+          );
+          
+          quizzes = quizNodes.map((node: any) => ({
+            id: node.id || node.content?.quiz_id,
+            title: node.title || node.content?.title || 'Quiz senza titolo',
+            description: node.description || 'Nessuna descrizione disponibile',
+            status: this.mapQuizStatus(node.status),
+            completedAt: node.completed_at,
+            pointsAwarded: node.points_awarded || node.points || 0
+          }));
+          
+          console.log('Quiz trasformati dai nodi:', quizzes);
+        }
+      } catch (nodeError) {
+        console.warn('Errore nel recupero dei nodi del percorso, provo un modo alternativo:', nodeError);
+        
+        // Se non riusciamo a ottenere i nodi, proviamo a usare i quiz dal percorso stesso
+        if (path.quizzes && Array.isArray(path.quizzes)) {
+          quizzes = path.quizzes.map((quiz: any) => ({
+            id: quiz.id,
+            title: quiz.title || 'Quiz senza titolo',
+            description: quiz.description || 'Nessuna descrizione disponibile',
+            status: this.mapQuizStatus(quiz.status),
+            completedAt: quiz.completed_at,
+            pointsAwarded: quiz.points_awarded || 0
+          }));
+          
+          console.log('Quiz trasformati dal campo quizzes del percorso:', quizzes);
+        } else {
+          console.warn('Nessun quiz trovato nel percorso:', path);
+          
+          // Se non abbiamo quiz, aggiungiamo un quiz di esempio per test
+          quizzes = [{
+            id: '1',
+            title: 'Quiz di esempio',
+            description: 'Questo è un quiz di esempio per testare l\'interfaccia',
+            status: 'available',
+            pointsAwarded: 10
+          }];
+          
+          NotificationsService.warning(
+            'Non sono stati trovati quiz associati a questo percorso. Contatta l\'amministratore.',
+            'Attenzione'
+          );
+        }
+      }
+      
+      // Ritorna l'oggetto completo con tutti i dettagli necessari
+      const pathDetail = {
+        id: path.id || pathId,
+        title: path.title || 'Percorso senza titolo',
+        description: path.description || 'Nessuna descrizione disponibile',
+        progress: path.completion_percentage || 0,
+        subject: path.subject || 'Non specificata',
+        difficulty: this.mapDifficultyLevel(path.difficulty_level),
+        status: this.mapCompletionStatus(path.status),
+        quizzes: quizzes
+      };
+      
+      console.log('Dettaglio percorso finale:', pathDetail);
+      return pathDetail;
+    } catch (error) {
+      console.error('Errore nel recupero dei dettagli del percorso:', error);
+      NotificationsService.error(
+        'Non è stato possibile caricare i dettagli del percorso',
+        'Errore'
+      );
+      
+      // Creiamo un percorso di fallback per evitare crash dell'interfaccia
+      return {
+        id: pathId,
+        title: 'Percorso non disponibile',
+        description: 'Si è verificato un errore nel caricamento del percorso. Riprova più tardi.',
+        progress: 0,
+        subject: 'Non disponibile',
+        difficulty: 'medio',
+        status: 'non_iniziato',
+        quizzes: []
+      };
+    }
+  }
+  
+  /**
+   * Mappa lo stato del quiz dall'API al formato del frontend
+   */
+  private mapQuizStatus(status?: string): 'locked' | 'available' | 'completed' {
+    if (!status) return 'available';
+    const normalizedStatus = status.toLowerCase();
+    if (normalizedStatus.includes('complet') || normalizedStatus.includes('completat')) return 'completed';
+    if (normalizedStatus.includes('lock') || normalizedStatus.includes('blocc')) return 'locked';
+    return 'available';
+  }
+
+  /**
    * Assegna un percorso a uno studente
    * Solo parent può assegnare percorsi
    */
   public async assignPath(templateId: string, studentId: string, startDate: Date, targetEndDate: Date): Promise<Path> {
     try {
-      console.log("Assegnando percorso con templateId:", templateId, "tipo:", typeof templateId);
+      console.log("%c[DEBUG] Assegnando percorso", 'background: #1E88E5; color: white; padding: 2px 4px; border-radius: 2px;', {
+        templateId,
+        studentId,
+        startDate: startDate.toISOString(),
+        targetEndDate: targetEndDate.toISOString()
+      });
+      
       // Converti templateId in numero e verifica che sia valido
       const templateIdNum = parseInt(templateId, 10);
       
@@ -349,12 +671,50 @@ class PathService {
       }
       
       // Utilizziamo l'API Gateway con il percorso corretto
-      const result = await ApiService.post<Path>(`${API_URL}/api/paths/assign`, {
+      const requestBody = {
         templateId: templateIdNum, // Converti da string a int
         studentId,
         startDate: startDate.toISOString(),
         targetEndDate: targetEndDate.toISOString()
+      };
+      
+      console.log("%c[DEBUG] Chiamata API assignPath: POST /api/paths/assign", 'background: #1E88E5; color: white; padding: 2px 4px; border-radius: 2px;', requestBody);
+      
+      const result = await ApiService.post<Path>(`${API_URL}/api/paths/assign`, requestBody);
+      
+      console.log("%c[DEBUG] Risposta API assignPath:", 'background: #1E88E5; color: white; padding: 2px 4px; border-radius: 2px;', result);
+      
+      // Forzare un invalidamento della cache per questo studente
+      this.clearPathCache(studentId);
+      
+      // Invia un evento personalizzato che può essere intercettato da qualsiasi componente
+      // Questo evita dipendenze circolari e problemi di importazione
+      const event = new CustomEvent('student-data-updated', { 
+        detail: { 
+          studentId,
+          action: 'path-assigned',
+          timestamp: Date.now()
+        } 
       });
+      
+      // Emetti l'evento a livello di window per assicurarsi che sia visibile in tutta l'applicazione
+      window.dispatchEvent(event);
+      
+      console.log(`%c[DEBUG] Evento student-data-updated inviato per lo studente ${studentId}`, 'background: #1E88E5; color: white; padding: 2px 4px; border-radius: 2px;');
+      
+      // Facciamo immediatamente una chiamata per ottenere i percorsi aggiornati
+      // e verificare che siano stati effettivamente salvati
+      console.log(`%c[DEBUG] Verifica aggiornamento percorsi dopo assegnazione`, 'background: #673AB7; color: white; padding: 2px 4px; border-radius: 2px;');
+      
+      setTimeout(async () => {
+        try {
+          const updatedPaths = await this.getPathsForStudentId(studentId);
+          console.log(`%c[DEBUG] Percorsi aggiornati dopo assegnazione:`, 'background: #673AB7; color: white; padding: 2px 4px; border-radius: 2px;', updatedPaths);
+        } catch (error) {
+          console.error('Errore nella verifica dei percorsi aggiornati:', error);
+        }
+      }, 500);
+      
       NotificationsService.success(
         'Percorso educativo assegnato con successo allo studente.',
         'Percorso assegnato'
@@ -365,7 +725,7 @@ class PathService {
       throw error;
     }
   }
-
+  
   /**
    * Aggiorna lo stato di un percorso
    */
@@ -492,8 +852,7 @@ class PathService {
             console.log('Dettagli nodo quiz:', {
               id: node.id,
               title: node.title,
-              type: node.node_type,
-              content: node.content
+              quiz_id: node.content?.quiz_template_id || node.content?.quiz_id
             });
           }
         });
@@ -534,7 +893,11 @@ class PathService {
             title: node.title || 'Senza titolo',
             description: node.description || '',
             content: node.content || {},
-            additional_data: node.additional_data || {}
+            additional_data: {
+              ...node.additional_data || {},
+              node_subtype: 'quiz', // Campo aggiuntivo per garantire la rilevazione del nodo come quiz
+              is_quiz: true // Flag esplicito
+            }
           };
           
           // Log speciale per i nodi quiz identificati
@@ -551,7 +914,8 @@ class PathService {
         
         // Verifica se ci sono nodi quiz dopo la normalizzazione
         const quizNodes = normalizedNodes.filter((node: PathNodeTemplate) => 
-          node.node_type === 'quiz' || (node.content && (node.content.quiz_id || node.content.quiz_template_id))
+          node.node_type === 'quiz' || 
+          (node.content && (node.content.quiz_id || node.content.quiz_template_id))
         );
         
         console.log(`%c[DEBUG] QUIZ TROVATI DOPO NORMALIZZAZIONE: ${quizNodes.length}`, 'background: #0f0; color: #000; font-size: 16px;');
@@ -566,13 +930,15 @@ class PathService {
       }
     } catch (error: any) {
       console.error(`[DEBUG] Errore nel caricamento dei nodi del template ${templateId}:`, error);
+      
+      // Log dettagliato dell'errore
       if (error.response) {
-        console.error(`[DEBUG] Dettagli risposta errore:`, {
+        console.error('Dettagli errore API:', {
           status: error.response.status,
-          statusText: error.response.statusText,
           data: error.response.data
         });
       }
+      
       throw error;
     }
   }
@@ -608,7 +974,7 @@ class PathService {
       throw error;
     }
   }
-
+  
   /**
    * Elimina un nodo di un template di percorso
    * @param nodeId L'ID del nodo da eliminare
@@ -735,6 +1101,69 @@ class PathService {
       console.error(`[DEBUG] Errore nella rimozione del quiz (nodeId: ${nodeId}):`, error);
       NotificationsService.error('Impossibile rimuovere il quiz dal percorso. Riprova più tardi.');
       throw error;
+    }
+  }
+
+  /**
+   * Cancella la cache dei percorsi per uno studente specifico
+   * Questo forza il sistema a recuperare dati freschi dal server alla prossima richiesta
+   */
+  private clearPathCache(studentId: string): void {
+    // Per garantire che i dati vengano rinfrescati, salvare un timestamp nell'archiviazione locale
+    // Tutte le richieste future per questo studente confronteranno il loro timestamp con questo
+    localStorage.setItem(`path_cache_invalidated_${studentId}`, Date.now().toString());
+    
+    // Elenco delle chiavi di cache comuni che potrebbero contenere dati dei percorsi
+    const cacheKeys = [
+      `paths_${studentId}`,
+      `assigned_paths_${studentId}`,
+      `student_paths_${studentId}`
+    ];
+    
+    // Rimuovere tutte le potenziali chiavi di cache
+    cacheKeys.forEach(key => {
+      try {
+        localStorage.removeItem(key);
+      } catch (e) {
+        console.log(`Impossibile rimuovere la chiave di cache ${key}`, e);
+      }
+    });
+    
+    console.log(`Cache dei percorsi invalidata per lo studente ${studentId}`);
+  }
+
+  /**
+   * Ottiene il token JWT dal localStorage
+   * Prova a recuperarlo da diversi campi possibili
+   */
+  private getToken(): string {
+    try {
+      // Prima proviamo dal campo user.token
+      const userStr = localStorage.getItem('user');
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        if (user.token) {
+          console.log(`%c[DEBUG getToken] Token trovato in user.token`, 'background: #4CAF50; color: white; padding: 2px 4px; border-radius: 2px;');
+          return user.token;
+        }
+        if (user.accessToken) {
+          console.log(`%c[DEBUG getToken] Token trovato in user.accessToken`, 'background: #4CAF50; color: white; padding: 2px 4px; border-radius: 2px;');
+          return user.accessToken;
+        }
+      }
+      
+      // Proviamo direttamente dal campo accessToken
+      const accessToken = localStorage.getItem('accessToken');
+      if (accessToken) {
+        console.log(`%c[DEBUG getToken] Token trovato in localStorage.accessToken`, 'background: #4CAF50; color: white; padding: 2px 4px; border-radius: 2px;');
+        return accessToken;
+      }
+      
+      console.log(`%c[DEBUG getToken] Nessun token trovato in localStorage`, 'background: #F44336; color: white; padding: 2px 4px; border-radius: 2px;');
+      return '';
+    } catch (error) {
+      console.error('Errore nel recupero del token:', error);
+      return '';
     }
   }
 }

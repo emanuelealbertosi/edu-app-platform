@@ -1,7 +1,9 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 import uvicorn
+import os
+import socket
 
 # Import API routers
 from app.api.endpoints import auth, users, roles, debug, parent
@@ -14,18 +16,31 @@ app = FastAPI(
 )
 
 # CORS configuration
-origins = [
-    "http://localhost:3000",  # Frontend React
-    "http://localhost:8000",  # API Gateway
-]
-
+# Configurazione più semplice che funziona meglio per consentire qualsiasi origine
+# Utilizzo di allow_origins=["*"] ma con un middleware di supporto per le credenziali
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
+    allow_origins=["*"],  # Consente richieste da qualsiasi origine
+    allow_credentials=False,  # Disabilitato per permettere "*" nelle origini
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Middleware personalizzato per gestire l'header Access-Control-Allow-Origin dinamicamente
+# Questo è necessario perché allow_origins=["*"] e allow_credentials=True sono incompatibili
+@app.middleware("http")
+async def cors_middleware(request: Request, call_next):
+    # Esegue la richiesta
+    response = await call_next(request)
+    
+    # Estrae l'origine dalla richiesta
+    origin = request.headers.get("origin")
+    if origin:
+        # Imposta l'origine specifica invece di "*" per consentire le credenziali
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+    
+    return response
 
 # Include API routers
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])

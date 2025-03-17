@@ -9,7 +9,18 @@ declare const process: {
   };
 };
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+// Determina l'URL dell'API in base all'ambiente
+const getApiUrl = () => {
+  // Usa l'URL configurato in .env se disponibile
+  const configuredUrl = process.env.REACT_APP_API_URL;
+  if (configuredUrl) return configuredUrl;
+  
+  // Altrimenti, usa l'host corrente con la porta 8000
+  const currentHost = window.location.hostname;
+  return `http://${currentHost}:8000`;
+};
+
+const API_URL = getApiUrl();
 const AUTH_API_URL = `${API_URL}/api/auth`;
 
 /**

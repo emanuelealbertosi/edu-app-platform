@@ -8,8 +8,25 @@ declare const process: {
   };
 };
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-const AUTH_API_URL = `${API_URL}/api/auth`;
+// Determina l'URL dell'API in base all'ambiente
+const getApiUrl = () => {
+  // Usa l'URL configurato in .env se disponibile
+  const configuredUrl = process.env.REACT_APP_API_URL;
+  if (configuredUrl) return configuredUrl;
+  
+  // Altrimenti, usa l'host corrente con la porta 8000
+  const protocol = window.location.protocol;
+  const currentHost = window.location.hostname;
+  
+  // Per debug, mostriamo l'hostname rilevato
+  console.log('DEBUG AUTH - Hostname rilevato:', currentHost);
+  
+  return `${protocol}//${currentHost}:8000`;
+};
+
+const API_URL = getApiUrl();
+console.log('Auth Service API URL utilizzato:', API_URL);
+let AUTH_API_URL = `${API_URL}/api/auth`;
 
 /**
  * Servizio per gestire le operazioni di autenticazione
@@ -84,8 +101,13 @@ class AuthService {
   private refreshTokenTimeout?: ReturnType<typeof setTimeout>;
 
   constructor() {
-    // Reset forzato dei token all'avvio (per gestire incompatibilità formato token)
-    this.resetTokensIfNeeded();
+    console.log('[DEBUG AUTH_SERVICE] Inizializzazione AuthService');
+    
+    // Configurazione AUTH_API_URL: importante per accesso da dispositivi esterni
+    const hostname = window.location.hostname;
+    // Costruisci l'URL usando l'hostname corrente (non hardcoded)
+    AUTH_API_URL = `http://${hostname}:8000/api/auth`;
+    console.log(`[DEBUG AUTH_SERVICE] URL API configurato: ${AUTH_API_URL}`);
     
     this.api = axios.create({
       baseURL: AUTH_API_URL,
@@ -94,6 +116,12 @@ class AuthService {
       },
     });
 
+    // Abilita il withCredentials per tutte le richieste - fondamentale per CORS
+    this.api.defaults.withCredentials = true;
+
+    // Reset forzato dei token all'avvio (per gestire incompatibilità formato token)
+    this.resetTokensIfNeeded();
+    
     // Interceptor per aggiungere il token di autenticazione
     this.api.interceptors.request.use(
       (config) => {
@@ -387,6 +415,7 @@ class AuthService {
   public async login(credentials: LoginRequest): Promise<AuthResponse> {
     try {
       console.log('[DEBUG LOGIN] Inizio processo di login');
+      console.log('[DEBUG LOGIN] URL API utilizzato:', AUTH_API_URL);
       
       // Crea un FormData per conformarsi a OAuth2PasswordRequestForm
       const formData = new URLSearchParams();
@@ -394,12 +423,34 @@ class AuthService {
       formData.append('password', credentials.password);
       
       console.log('[DEBUG LOGIN] Invio richiesta login');
-      // Invia richiesta con Content-Type corretta per form data
-      const response = await this.api.post<AuthResponse>('/login', formData.toString(), {
+      
+      // Prepara URL e configurazione
+      const fullUrl = `${AUTH_API_URL}/login`;
+      console.log('[DEBUG LOGIN] URL completo:', fullUrl);
+      
+      const hostname = window.location.hostname;
+      const protocol = window.location.protocol;
+      const directAuthUrl = `${protocol}//${hostname}:8001/api/auth/login`;
+      console.log('[DEBUG LOGIN] URL alternativo auth-service diretto:', directAuthUrl);
+      
+      // Configurazione richiesta
+      const config = {
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      });
+        },
+        withCredentials: true
+      };
+      
+      // Prima prova connessione diretta a auth-service
+      let response;
+      try {
+        console.log('[DEBUG LOGIN] Tentativo connessione diretta auth-service...');
+        response = await axios.post<AuthResponse>(directAuthUrl, formData.toString(), config);
+        console.log('[DEBUG LOGIN] Connessione diretta riuscita!');
+      } catch (error) {
+        console.log('[DEBUG LOGIN] Connessione diretta fallita, tento via API Gateway');
+        response = await axios.post<AuthResponse>(fullUrl, formData.toString(), config);
+      }
       
       console.log('[DEBUG LOGIN] Login riuscito');
       console.log('[DEBUG LOGIN] STRUTTURA RISPOSTA COMPLETA:', JSON.stringify(response.data));

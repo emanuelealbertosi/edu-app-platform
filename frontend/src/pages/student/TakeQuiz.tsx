@@ -38,7 +38,7 @@ import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
 import StarsIcon from '@mui/icons-material/Stars';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import QuizService, { Quiz as ServiceQuiz, QuizResult, QuizAnswer } from '../../services/QuizService';
+import QuizService, { Quiz, QuizResult } from '../../services/QuizService';
 import { NotificationsService } from '../../services/NotificationsService';
 
 // Importazione componenti di animazione
@@ -56,6 +56,19 @@ import {
 } from '../../components/animations/LoadingAnimations';
 import { AnimatedPage, AnimatedList } from '../../components/animations/PageTransitions';
 
+// Interfaccia per la risposta di una singola domanda
+interface QuizAnswer {
+  questionId: string;
+  selectedOptionId?: string;
+  textAnswer?: string;
+}
+
+// Interfaccia per l'invio delle risposte di un quiz completo
+interface QuizSubmission {
+  answers: QuizAnswer[];
+  timeSpent: number;
+}
+
 // Interfacce TypeScript
 interface Question {
   id: string;
@@ -68,19 +81,9 @@ interface Question {
   points: number;
 }
 
-interface Quiz {
-  id: string;
-  title: string;
-  description: string;
-  pathId?: string;
-  pathTitle?: string;
-  timeLimit?: number; // in minuti
-  questions: Question[];
-  maxScore: number;
-}
-
 const TakeQuiz: React.FC = () => {
-  const { quizId } = useParams<{ quizId: string }>();
+  // Aggiungi pathId ai parametri dell'URL
+  const { quizId, pathId } = useParams<{ quizId: string; pathId?: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
   
@@ -88,7 +91,7 @@ const TakeQuiz: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [textAnswers, setTextAnswers] = useState<Record<string, string>>({});
   const [remainingTime, setRemainingTime] = useState<number | null>(null);
   const [quizCompleted, setQuizCompleted] = useState(false);
@@ -98,63 +101,96 @@ const TakeQuiz: React.FC = () => {
   const [timeWarning, setTimeWarning] = useState(false);
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [questionStartTime, setQuestionStartTime] = useState<Date>(new Date());
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<QuizResult | null>(null);
+  const [completed, setCompleted] = useState(false);
 
   useEffect(() => {
     const fetchQuiz = async () => {
-      if (!quizId) {
-        setError("ID quiz non valido");
-        setLoading(false);
-        return;
-      }
-
+      if (!quizId) return;
+      
       try {
         setLoading(true);
         setError(null);
-
-        // Recupero dei dati del quiz dal servizio
-        const quizData = await QuizService.getQuiz(quizId);
         
-        // Trasformazione del formato dati dal servizio al formato usato dal componente
-        const formattedQuiz: Quiz = {
-          id: quizData.id,
-          title: quizData.title,
-          description: quizData.description,
-          questions: quizData.questions.map(q => ({
-            id: q.id,
-            text: q.text,
-            type: q.options ? 'multiple_choice' : 'text',
-            options: q.options?.map(opt => ({
-              id: opt.id,
-              text: opt.text
-            })),
-            points: q.points
-          })),
-          maxScore: quizData.maxScore,
-          timeLimit: quizData.questions.reduce((total, q) => total + (q.timeLimit || 0), 0) / 60 || 10, // Convertito in minuti
-        };
+        let quizData;
         
-        setQuiz(formattedQuiz);
-        
-        // Imposta il timer
-        if (formattedQuiz.timeLimit) {
-          setRemainingTime(formattedQuiz.timeLimit * 60); // converti in secondi
+        // Se il quiz è stato avviato da un percorso, carica l'istanza specifica
+        if (pathId) {
+          console.log(`Caricamento quiz ${quizId} dal percorso ${pathId}`);
+          try {
+            quizData = await QuizService.getPathQuiz(pathId, quizId);
+          } catch (pathError) {
+            console.error('Errore nel caricamento quiz da percorso:', pathError);
+            // Fallback: prova a caricare il quiz come template
+            console.log('Tentativo fallback con template quiz');
+            quizData = await QuizService.getQuizTemplateById(quizId);
+            
+            // Adatta il formato del template al formato quiz
+            if (quizData) {
+              quizData = {
+                id: quizData.id,
+                templateId: quizData.id,
+                title: quizData.title,
+                description: quizData.description,
+                isCompleted: false,
+                score: 0,
+                maxScore: quizData.questions.reduce((total, q) => total + (q.points || 1), 0),
+                questions: quizData.questions,
+                timeLimit: quizData.timeLimit,
+                pathId: pathId
+              };
+            }
+          }
+          
+          // Aggiungi info sul percorso al quiz
+          if (quizData) {
+            quizData.pathId = pathId;
+          }
+        } else {
+          // Carica il quiz normale (template)
+          console.log(`Caricamento template quiz ${quizId}`);
+          quizData = await QuizService.getQuiz(quizId);
         }
         
-        // Avvia il quiz sul server
-        await QuizService.startQuiz(quizId);
-        setStartTime(new Date());
-        setQuestionStartTime(new Date());
-        
+        if (quizData) {
+          console.log('Quiz data caricato:', quizData);
+          // Normalizza il quiz secondo le convenzioni del frontend
+          setQuiz({
+            id: quizData.id,
+            title: quizData.title || 'Quiz senza titolo',
+            description: quizData.description || 'Nessuna descrizione disponibile',
+            pathId: quizData.pathId || pathId,
+            pathTitle: quizData.pathTitle,
+            timeLimit: quizData.timeLimit || 0,
+            questions: quizData.questions || [],
+            maxScore: quizData.maxScore || quizData.questions?.reduce((sum, q) => sum + (q.points || 1), 0) || 0,
+            templateId: quizData.templateId || '',
+            studentId: quizData.studentId || '',
+            isCompleted: quizData.isCompleted || false,
+            score: quizData.score || 0
+          });
+          
+          // Imposta il timer se c'è un limite di tempo
+          if (quizData.timeLimit && quizData.timeLimit > 0) {
+            setRemainingTime(quizData.timeLimit * 60); // converti in secondi
+            setStartTime(new Date());
+          }
+        }
       } catch (err) {
-        console.error('Errore nel caricamento del quiz:', err);
-        setError('Impossibile caricare il quiz. Riprova più tardi.');
+        console.error('Errore durante il caricamento del quiz:', err);
+        setError('Si è verificato un errore durante il caricamento del quiz. Riprova più tardi.');
+        NotificationsService.error(
+          'Non è stato possibile caricare il quiz',
+          'Errore di caricamento'
+        );
       } finally {
         setLoading(false);
       }
     };
 
     fetchQuiz();
-  }, [quizId]);
+  }, [quizId, pathId]);
 
   // Timer countdown
   useEffect(() => {
@@ -166,7 +202,7 @@ const TakeQuiz: React.FC = () => {
         
         if (prev <= 0) {
           clearInterval(timer);
-          handleSubmitQuiz();
+          handleSubmitAnswers();
           return 0;
         }
         
@@ -232,51 +268,89 @@ const TakeQuiz: React.FC = () => {
     setConfirmSubmit(false);
   };
 
-  const handleSubmitQuiz = async () => {
-    setConfirmSubmit(false);
-    
-    if (!quiz || !quizId) return;
-    
+  const handleSubmitAnswers = async () => {
     try {
-      setLoading(true);
+      if (!quiz) return;
+      
+      setSubmitting(true);
+      
+      console.log('Preparazione invio risposte:', answers);
+      
+      // Preparazione dei dati per l'invio
+      const submission: QuizSubmission = {
+        answers: Object.entries(answers).map(([questionId, answer]) => {
+          // Determiniamo il tipo di domanda per sapere come formattare la risposta
+          const question = quiz.questions.find(q => q.id === questionId);
+          
+          if (question && (question.type === 'text' || question.type === 'numeric')) {
+            return {
+              questionId,
+              textAnswer: typeof answer === 'string' ? answer : 
+                         Array.isArray(answer) && answer.length > 0 ? answer[0] : ''
+            };
+          } else {
+            return {
+              questionId,
+              selectedOptionId: typeof answer === 'string' ? answer : 
+                              Array.isArray(answer) && answer.length > 0 ? answer[0] : ''
+            };
+          }
+        }),
+        timeSpent: Math.floor((new Date().getTime() - startTime!.getTime()) / 1000) // Tempo impiegato in secondi
+      };
 
-      // Calcola il tempo trascorso sull'ultima domanda
-      const currentQuestion = quiz.questions[activeStep];
-      const endTime = new Date();
-      const finalTimeSpent = Math.floor((endTime.getTime() - questionStartTime.getTime()) / 1000);
+      console.log('Invio risposte:', submission);
       
-      // Prepara le risposte da inviare
-      const quizAnswers: QuizAnswer[] = Object.entries(answers).map(([questionId, optionId]) => ({
-        questionId,
-        selectedOptionId: optionId,
-        timeSpent: finalTimeSpent // Idealmente dovremmo tracciare il tempo per ogni domanda
-      }));
+      let result;
       
-      // Aggiungiamo le risposte testuali (il backend dovrà gestirle in modo diverso)
-      Object.entries(textAnswers).forEach(([questionId, textAnswer]) => {
-        quizAnswers.push({
-          questionId,
-          selectedOptionId: textAnswer, // Nel caso di risposta testuale, usiamo il testo come ID
-          timeSpent: finalTimeSpent
-        });
-      });
+      // Se il quiz è stato avviato in un percorso, usa l'endpoint specifico per i percorsi
+      if (pathId && quiz.pathId) {
+        console.log(`Invio risposte al quiz ${quiz.id} nel percorso ${pathId}`);
+        try {
+          result = await QuizService.submitPathQuiz(pathId, quiz.id, submission);
+        } catch (pathError) {
+          console.error('Errore invio risposte al percorso:', pathError);
+          
+          // Fallback: prova con l'endpoint standard
+          console.log('Tentativo invio con endpoint standard');
+          result = await QuizService.submitQuiz(quiz.id, submission);
+        }
+      } else {
+        console.log(`Invio risposte al quiz standard ${quiz.id}`);
+        result = await QuizService.submitQuiz(quiz.id, submission);
+      }
       
-      // Invia le risposte al server
-      const result = await QuizService.submitQuiz({
-        quizId,
-        answers: quizAnswers
-      });
+      console.log('Risultato sottomissione:', result);
       
-      // Aggiorna lo stato con i risultati
-      setScore(result.score);
-      setEarnedPoints(result.score);
-      setQuizCompleted(true);
+      // Aggiorna il risultato nella UI
+      setResult(result);
+      setCompleted(true);
       
-    } catch (err) {
-      console.error('Errore durante l\'invio del quiz:', err);
-      setError('Impossibile inviare il quiz. Riprova più tardi.');
+      // Messaggio di successo
+      NotificationsService.success(
+        `Quiz completato con successo! Punteggio: ${result.score}/${result.maxScore}`,
+        'Quiz Completato'
+      );
+      
+      // Reindirizzamento dopo un breve ritardo per mostrare il risultato
+      setTimeout(() => {
+        if (pathId) {
+          // Torna alla pagina del percorso
+          navigate(`/student/paths/${pathId}`);
+        } else {
+          // Torna all'elenco dei quiz
+          navigate('/student/quizzes');
+        }
+      }, 5000);
+    } catch (error) {
+      console.error('Errore durante l\'invio delle risposte:', error);
+      
+      NotificationsService.error(
+        'Si è verificato un errore durante l\'invio delle risposte',
+        'Errore'
+      );
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
@@ -302,6 +376,15 @@ const TakeQuiz: React.FC = () => {
       }
       return count;
     }, 0);
+  };
+
+  const handleFinish = () => {
+    // Naviga alla pagina appropriata in base alla provenienza
+    if (pathId) {
+      navigate(`/student/path/${pathId}`);
+    } else {
+      navigate('/student/paths');
+    }
   };
 
   if (loading && !quiz) {
@@ -342,7 +425,7 @@ const TakeQuiz: React.FC = () => {
     );
   }
 
-  if (quizCompleted) {
+  if (completed) {
     return (
       <AnimatedPage transitionType="fade">
         <MainLayout title="Quiz Completato">
@@ -354,11 +437,11 @@ const TakeQuiz: React.FC = () => {
                   Quiz completato!
                 </Typography>
                 <Typography variant="h5" color="primary" gutterBottom>
-                  Hai ottenuto: {score} / {quiz?.maxScore} punti
+                  Hai ottenuto: {result?.score}/{result?.maxScore} punti
                 </Typography>
                 <Typography variant="body1" paragraph>
-                  {earnedPoints !== null && (
-                    <>Hai guadagnato <strong>{earnedPoints}</strong> punti premio!</>
+                  {result?.pointsAwarded !== null && result?.pointsAwarded !== undefined && (
+                    <>Hai guadagnato <strong>{result?.pointsAwarded}</strong> punti premio!</>
                   )}
                 </Typography>
                 
@@ -367,7 +450,7 @@ const TakeQuiz: React.FC = () => {
                     <Button
                       variant="contained"
                       color="primary"
-                      onClick={() => navigate('/student')}
+                      onClick={handleFinish}
                     >
                       Torna alla Dashboard
                     </Button>
@@ -565,7 +648,7 @@ const TakeQuiz: React.FC = () => {
               <Button onClick={() => setConfirmSubmit(false)} color="primary">
                 Annulla
               </Button>
-              <Button onClick={handleSubmitQuiz} color="primary" variant="contained" autoFocus>
+              <Button onClick={handleSubmitAnswers} color="primary" variant="contained" autoFocus>
                 Conferma Invio
               </Button>
             </DialogActions>

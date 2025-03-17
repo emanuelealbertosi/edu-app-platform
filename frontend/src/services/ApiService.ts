@@ -9,7 +9,24 @@ declare const process: {
   };
 };
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+// Determina l'URL dell'API in base all'ambiente
+const getApiUrl = () => {
+  // Usa l'URL configurato in .env se disponibile
+  const configuredUrl = process.env.REACT_APP_API_URL;
+  if (configuredUrl) return configuredUrl;
+  
+  // Altrimenti, usa l'host corrente con la porta 8000
+  const protocol = window.location.protocol;
+  const currentHost = window.location.hostname;
+  
+  // Per debug, mostriamo l'hostname rilevato
+  console.log('DEBUG API - Hostname rilevato:', currentHost);
+  
+  return `${protocol}//${currentHost}:8000`;
+};
+
+const API_URL = getApiUrl();
+console.log('API URL utilizzato:', API_URL);
 
 /**
  * Servizio base per le chiamate API che gestisce automaticamente:

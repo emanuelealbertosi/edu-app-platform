@@ -21,6 +21,7 @@ import { Link } from 'react-router-dom';
 import MainLayout from '../../components/layout/MainLayout';
 import SearchIcon from '@mui/icons-material/Search';
 import PathService from '../../services/PathService';
+import { NotificationsService } from '../../services/NotificationsService';
 
 // Importazione componenti di animazione
 import { 
@@ -37,6 +38,7 @@ import {
 } from '../../components/animations/LoadingAnimations';
 import { AnimatedPage, AnimatedList } from '../../components/animations/PageTransitions';
 
+// Interfaccia per i percorsi assegnati
 interface Path {
   id: string;
   title: string;
@@ -44,8 +46,8 @@ interface Path {
   progress: number;
   subject: string;
   difficulty: 'facile' | 'medio' | 'difficile';
-  status: 'non_iniziato' | 'in_corso' | 'completato';
-  targetEndDate?: string;
+  status: 'assegnato' | 'in_corso' | 'completato'; 
+  targetEndDate?: Date | null; 
 }
 
 const AssignedPaths: React.FC = () => {
@@ -62,25 +64,88 @@ const AssignedPaths: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
+        
+        // Debug: inizio caricamento percorsi
+        console.log(`%c[DEBUG AssignedPaths] Inizio recupero percorsi assegnati`, 'background: #FF9800; color: white; padding: 2px 4px; border-radius: 2px;');
+        
+        // Puliamo i dati esistenti prima di caricare quelli nuovi
+        setPaths([]);
+        setFilteredPaths([]);
+        
+        // Forziamo un recupero fresco dei dati senza cache
         const response = await PathService.getAssignedPaths();
         
-        // Mappa i campi del servizio al formato richiesto dal componente
-        const mappedPaths = response.map((path) => ({
-          id: path.id,
-          title: path.title,
-          description: path.description,
-          progress: path.progress,
-          subject: path.subject || 'Non specificata',
-          difficulty: path.difficulty as 'facile' | 'medio' | 'difficile',
-          status: path.status as 'non_iniziato' | 'in_corso' | 'completato',
-          targetEndDate: path.targetEndDate ? path.targetEndDate.toISOString() : undefined,
-        }));
+        // Debug: risposta del servizio
+        console.log(`%c[DEBUG AssignedPaths] Risposta PathService.getAssignedPaths:`, 'background: #FF9800; color: white; padding: 2px 4px; border-radius: 2px;', response);
         
+        // Se non ci sono percorsi, mostriamo un messaggio
+        if (!response || response.length === 0) {
+          console.log(`%c[DEBUG AssignedPaths] Nessun percorso assegnato trovato`, 'background: #F44336; color: white; padding: 2px 4px; border-radius: 2px;');
+          
+          // Verifichiamo se l'utente è autenticato correttamente
+          const userStr = localStorage.getItem('user');
+          console.log(`%c[DEBUG AssignedPaths] Stato autenticazione:`, 'background: #673AB7; color: white; padding: 2px 4px; border-radius: 2px;', { 
+            userPresent: !!userStr,
+            userData: userStr ? JSON.parse(userStr) : null 
+          });
+          
+          // Per debug: se siamo in modalità sviluppo, creiamo un percorso fittizio per verificare che il rendering funzioni
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`%c[DEBUG AssignedPaths] Creazione percorso di test per debug`, 'background: #FF9800; color: white; padding: 2px 4px; border-radius: 2px;');
+            const testPath = {
+              id: 'test-path-1',
+              title: 'Percorso di Test',
+              description: 'Questo è un percorso di test per verificare il rendering',
+              progress: 30,
+              subject: 'Matematica',
+              difficulty: 'medio' as 'facile' | 'medio' | 'difficile',
+              status: 'assegnato' as 'assegnato' | 'in_corso' | 'completato',
+              targetEndDate: new Date('2025-04-30')
+            };
+            
+            setPaths([testPath]);
+            setFilteredPaths([testPath]);
+            setLoading(false);
+            return;
+          }
+          
+          NotificationsService.info('Non hai ancora percorsi assegnati.', 'Nessun percorso');
+          setPaths([]);
+          setFilteredPaths([]);
+          setLoading(false);
+          return;
+        }
+        
+        // Mappa i campi del servizio al formato richiesto dal componente
+        const mappedPaths = response.map((path) => {
+          // Debug: mapping singolo percorso
+          console.log(`%c[DEBUG AssignedPaths] Mapping percorso:`, 'background: #FF9800; color: white; padding: 2px 4px; border-radius: 2px;', path);
+          
+          const mappedPath = {
+            id: path.id || `temp-${Date.now()}`, // Garantiamo un ID anche se mancante
+            title: path.title || 'Percorso senza titolo',
+            description: path.description || 'Nessuna descrizione disponibile',
+            progress: typeof path.progress === 'number' ? path.progress : 0,
+            subject: path.subject || 'Non specificata',
+            difficulty: path.difficulty as 'facile' | 'medio' | 'difficile' || 'medio',
+            status: path.status as 'assegnato' | 'in_corso' | 'completato' || 'assegnato',
+            targetEndDate: path.targetEndDate,
+          };
+          
+          // Debug: risultato mappatura
+          console.log(`%c[DEBUG AssignedPaths] Percorso mappato:`, 'background: #FF9800; color: white; padding: 2px 4px; border-radius: 2px;', mappedPath);
+          
+          return mappedPath;
+        });
+        
+        console.log(`%c[DEBUG AssignedPaths] Percorsi caricati:`, 'background: #4CAF50; color: white; padding: 2px 4px; border-radius: 2px;', mappedPaths);
         setPaths(mappedPaths);
         setFilteredPaths(mappedPaths);
       } catch (err) {
         console.error('Errore durante il recupero dei percorsi:', err);
         setError('Si è verificato un errore durante il caricamento dei percorsi. Riprova più tardi.');
+        setPaths([]);
+        setFilteredPaths([]);
       } finally {
         setLoading(false);
       }
@@ -123,7 +188,7 @@ const AssignedPaths: React.FC = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'non_iniziato':
+      case 'assegnato':
         return 'default';
       case 'in_corso':
         return 'primary';
@@ -136,8 +201,8 @@ const AssignedPaths: React.FC = () => {
 
   const getStatusLabel = (status: string) => {
     switch (status) {
-      case 'non_iniziato':
-        return 'Non iniziato';
+      case 'assegnato':
+        return 'Assegnato';
       case 'in_corso':
         return 'In corso';
       case 'completato':
@@ -162,7 +227,7 @@ const AssignedPaths: React.FC = () => {
 
   const getActionButtonLabel = (status: string) => {
     switch (status) {
-      case 'non_iniziato':
+      case 'assegnato':
         return 'Inizia';
       case 'in_corso':
         return 'Continua';
@@ -232,7 +297,7 @@ const AssignedPaths: React.FC = () => {
                       onChange={(e) => setFilterStatus(e.target.value)}
                     >
                       <MenuItem value="">Tutti gli stati</MenuItem>
-                      <MenuItem value="non_iniziato">Non iniziato</MenuItem>
+                      <MenuItem value="assegnato">Assegnato</MenuItem>
                       <MenuItem value="in_corso">In corso</MenuItem>
                       <MenuItem value="completato">Completato</MenuItem>
                     </Select>

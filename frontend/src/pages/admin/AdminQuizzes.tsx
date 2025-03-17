@@ -70,7 +70,7 @@ const AdminQuizzes: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const templates = await QuizService.getAllQuizTemplates();
+      const templates: QuizTemplate[] = await QuizService.getAllQuizTemplates();
       
       // Debug: analizziamo la struttura dei dati ricevuti dal backend
       console.log('DATI QUIZ RICEVUTI:', templates);
@@ -98,7 +98,7 @@ const AdminQuizzes: React.FC = () => {
       });
       
       setQuizTemplates(templates);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Errore nel recupero dei template quiz:', error);
       setError('Si è verificato un errore durante il recupero dei template quiz.');
     } finally {
@@ -127,7 +127,7 @@ const AdminQuizzes: React.FC = () => {
       // Aggiorna la lista dei quiz rimuovendo quello cancellato
       setQuizTemplates(quizTemplates.filter(quiz => quiz.id !== quizToDelete.id));
       NotificationsService.success(`Quiz "${quizToDelete.title}" eliminato con successo`);
-    } catch (error) {
+    } catch (error: any) {
       ApiErrorHandler.handleApiError(error);
     } finally {
       setDeleteDialogOpen(false);
