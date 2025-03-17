@@ -3,7 +3,7 @@ import { NotificationsService } from './NotificationsService';
 import ApiService from './ApiService';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-const PATH_API_URL = `${API_URL}/path`;
+const PATH_API_URL = `${API_URL}/api/paths`;
 
 /**
  * Servizio per gestire le operazioni relative ai percorsi educativi
@@ -245,9 +245,86 @@ class PathService {
    * Ottiene tutti i percorsi assegnati allo studente corrente
    */
   public async getAssignedPaths(): Promise<Path[]> {
-    const response = await this.api.get<Path[]>('/assigned');
-    return response.data;
+    // Utilizziamo l'endpoint corretto che filtra automaticamente in base all'utente corrente
+    try {
+      // Proviamo diverse possibili combinazioni di API in caso di errori
+      try {
+        // Prima opzione: endpoint principale del servizio path
+        const axiosResponse = await this.api.get<any[]>('/');
+        console.log('Percorsi recuperati con endpoint /', axiosResponse.data);
+        
+        // Mappiamo i campi dall'API ai campi richiesti dall'interfaccia Path
+        const mappedPaths = (axiosResponse.data || []).map((path: any) => ({
+          id: path.id || path.uuid,
+          templateId: path.template_id || path.template?.id || '',
+          studentId: path.student_id || path.student?.id || '',
+          title: path.title || path.template_title || 'Percorso senza titolo',
+          description: path.description || '',
+          progress: path.completion_percentage || 0,
+          subject: path.subject || 'Non specificata',
+          difficulty: this.mapDifficultyLevel(path.difficulty_level),
+          status: this.mapCompletionStatus(path.status),
+          startDate: path.start_date ? new Date(path.start_date) : new Date(),
+          targetEndDate: path.target_end_date ? new Date(path.target_end_date) : new Date(),
+          quizzes: Array.isArray(path.quizzes) ? path.quizzes : []
+        })) as Path[];
+        
+        return mappedPaths;
+      } catch (innerError) {
+        console.warn('Fallito primo tentativo con /, provo endpoint alternativo', innerError);
+        // Seconda opzione: utilizziamo ApiService direttamente all'endpoint completo
+        const fullResponse = await ApiService.get<any[]>(`${PATH_API_URL}`);
+        console.log('Percorsi recuperati con endpoint completo', fullResponse);
+        
+        // Mappiamo anche qui i dati
+        const mappedPaths = (Array.isArray(fullResponse) ? fullResponse : []).map((path: any) => ({
+          id: path.id || path.uuid, 
+          templateId: path.template_id || path.template?.id || '',
+          studentId: path.student_id || path.student?.id || '',
+          title: path.title || path.template_title || 'Percorso senza titolo',
+          description: path.description || '',
+          progress: path.completion_percentage || 0,
+          subject: path.subject || 'Non specificata',
+          difficulty: this.mapDifficultyLevel(path.difficulty_level),
+          status: this.mapCompletionStatus(path.status),
+          startDate: path.start_date ? new Date(path.start_date) : new Date(),
+          targetEndDate: path.target_end_date ? new Date(path.target_end_date) : new Date(),
+          quizzes: Array.isArray(path.quizzes) ? path.quizzes : []
+        })) as Path[];
+        
+        return mappedPaths;
+      }
+    } catch (error) {
+      console.error('Errore nel recupero dei percorsi assegnati:', error);
+      NotificationsService.error(
+        'Errore nel recupero dei percorsi assegnati',
+        'Errore'
+      );
+      return [];
+    }
   }
+  
+  /**
+   * Converte il livello di difficoltà numerico in una stringa
+   */
+  private mapDifficultyLevel(level?: number): 'facile' | 'medio' | 'difficile' {
+    if (!level) return 'medio';
+    if (level <= 1) return 'facile';
+    if (level <= 3) return 'medio';
+    return 'difficile';
+  }
+  
+  /**
+   * Converte lo stato di completamento dall'API in una stringa
+   */
+  private mapCompletionStatus(status?: string): 'non_iniziato' | 'in_corso' | 'completato' {
+    if (!status) return 'non_iniziato';
+    const normalizedStatus = status.toLowerCase();
+    if (normalizedStatus.includes('complet')) return 'completato';
+    if (normalizedStatus.includes('progress') || normalizedStatus.includes('corso')) return 'in_corso';
+    return 'non_iniziato';
+  }
+
 
   /**
    * Ottiene un percorso specifico per ID

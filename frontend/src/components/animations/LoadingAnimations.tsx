@@ -239,24 +239,64 @@ export const TableSkeleton: React.FC<TableSkeletonProps> = ({
 /**
  * Componente che mostra una barra di progresso animata
  */
-export const ProgressBar: React.FC<{ progress: number }> = ({ progress }) => {
+export const ProgressBar: React.FC<{ 
+  progress: number;
+  height?: number;
+  showLabel?: boolean;
+  color?: string;
+}> = ({ 
+  progress, 
+  height = 8, 
+  showLabel = false,
+  color
+}) => {
+  const theme = useTheme();
+  const progressColor = color || theme.palette.primary.main;
+  
+  // Determina il colore in base al progresso
+  const getProgressColor = () => {
+    if (color) return color;
+    if (progress < 30) return theme.palette.warning.main;
+    if (progress < 70) return theme.palette.info.main;
+    return theme.palette.success.main;
+  };
+
   return (
-    <motion.div
-      initial={{ width: 0 }}
-      animate={{ width: `${progress}%` }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-    >
-      <LinearProgress 
-        variant="determinate" 
-        value={100} 
-        sx={{ 
-          height: 8, 
-          borderRadius: 4,
-          '& .MuiLinearProgress-bar': {
-            transition: 'none' // Disabilita l'animazione di MUI per usare quella di Framer Motion
-          }
-        }} 
-      />
-    </motion.div>
+    <Box sx={{ position: 'relative', width: '100%' }}>
+      {showLabel && (
+        <Box sx={{ 
+          position: 'absolute', 
+          right: 0, 
+          top: -20, 
+          zIndex: 1,
+          bgcolor: getProgressColor(),
+          color: '#fff',
+          px: 1,
+          py: 0.2,
+          borderRadius: 1,
+          fontSize: '0.75rem',
+          fontWeight: 'bold'
+        }}>
+          {progress}%
+        </Box>
+      )}
+      <Box sx={{ background: theme.palette.grey[200], borderRadius: height }}>
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${progress}%` }}
+          transition={{ duration: 0.5, ease: "easeOut" }}
+          style={{ borderRadius: height }}
+        >
+          <Box 
+            sx={{ 
+              height: height, 
+              borderRadius: height,
+              background: getProgressColor(),
+              boxShadow: `0px 0px 8px ${getProgressColor()}40`
+            }} 
+          />
+        </motion.div>
+      </Box>
+    </Box>
   );
 };

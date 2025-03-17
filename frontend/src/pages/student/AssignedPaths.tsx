@@ -99,7 +99,7 @@ const AssignedPaths: React.FC = () => {
       filtered = filtered.filter(
         (path) =>
           path.title.toLowerCase().includes(query) ||
-          path.description.toLowerCase().includes(query)
+          (path.description && path.description.toLowerCase().includes(query))
       );
     }
 
@@ -296,10 +296,10 @@ const AssignedPaths: React.FC = () => {
               </Box>
             </SlideInUp>
           ) : (
-            <Grid container spacing={3}>
+            <Grid container spacing={4} sx={{ mt: 2, px: 1 }}>
               <AnimatedList>
                 {filteredPaths.map((path, index) => (
-                  <Grid item xs={12} sm={6} md={4} key={path.id}>
+                  <Grid item xs={12} sm={12} md={8} lg={6} key={path.id}>
                     <HoverAnimation delay={index * 0.1}>
                       <Card 
                         elevation={3} 
@@ -308,7 +308,9 @@ const AssignedPaths: React.FC = () => {
                           display: 'flex', 
                           flexDirection: 'column',
                           position: 'relative',
-                          overflow: 'visible'
+                          overflow: 'visible',
+                          minHeight: '224px',
+                          minWidth: '375px'
                         }}
                       >
                         {path.status === 'completato' && (
@@ -330,8 +332,8 @@ const AssignedPaths: React.FC = () => {
                             Completato
                           </Box>
                         )}
-                        <CardContent sx={{ flexGrow: 1 }}>
-                          <Typography variant="h6" component="h2" gutterBottom>
+                        <CardContent sx={{ flexGrow: 1, p: 3 }}>
+                          <Typography variant="h5" component="h2" gutterBottom>
                             {path.title}
                           </Typography>
                           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
@@ -355,25 +357,32 @@ const AssignedPaths: React.FC = () => {
                               />
                             )}
                           </Box>
-                          <Typography variant="body2" color="text.secondary" paragraph>
-                            {path.description.length > 100
+                          <Typography variant="body1" color="text.secondary" paragraph>
+                            {path.description && (
+                              path.description.length > 100
                               ? `${path.description.substring(0, 100)}...`
-                              : path.description}
+                              : path.description
+                            )}
                           </Typography>
                           <Box sx={{ mb: 1 }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                              <Typography variant="body2">Progresso</Typography>
-                              <Typography variant="body2">{path.progress}%</Typography>
+                              <Typography variant="body2" fontWeight="medium">Progresso</Typography>
+                              <Typography variant="body2" fontWeight="medium">{path.progress}%</Typography>
                             </Box>
-                            <ProgressBar progress={path.progress} />
+                            <ProgressBar 
+                              progress={path.progress}
+                              height={12}
+                              showLabel={false}
+                            />
                           </Box>
                         </CardContent>
-                        <CardActions>
+                        <CardActions sx={{ p: 2 }}>
                           <Button 
                             component={Link} 
                             to={`/student/path/${path.id}`} 
                             variant="contained" 
                             fullWidth
+                            size="large"
                             disabled={path.status === 'completato'}
                           >
                             {getActionButtonLabel(path.status)}
