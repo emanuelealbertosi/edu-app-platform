@@ -35,7 +35,7 @@ app.include_router(question_templates.router, prefix="/api/question-templates", 
 app.include_router(quiz_attempts.router, prefix="/api/quiz-attempts", tags=["Quiz Attempts"])
 
 # Per compatibilità con il frontend
-# Utilizziamo generate_unique_id_function per evitare i warning di duplicate operation ID
+# Utilizziamo generate_unique_id_function per evitare i warnings di duplicate operation ID
 from fastapi.routing import APIRoute
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -50,6 +50,12 @@ app.include_router(frontend_router, prefix="/api/quiz/templates", tags=["Quiz Te
 frontend_v1_router = quiz_templates.router
 frontend_v1_router.routes[0].operation_id = None
 app.include_router(frontend_v1_router, prefix="/api/quiz/v1/templates", tags=["Quiz Templates Frontend v1"],
+                   generate_unique_id_function=custom_generate_unique_id)
+
+# Aggiungiamo il supporto per il percorso /api/quizzes/templates come richiesto dal frontend
+frontend_quizzes_router = quiz_templates.router
+frontend_quizzes_router.routes[0].operation_id = None
+app.include_router(frontend_quizzes_router, prefix="/api/quizzes/templates", tags=["Quiz Templates Frontend QuizzesPath"],
                    generate_unique_id_function=custom_generate_unique_id)
 
 # Supporto per il percorso /api/quiz/templates e /api/quiz/v1/templates

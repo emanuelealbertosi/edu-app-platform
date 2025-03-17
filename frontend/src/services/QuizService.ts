@@ -3,7 +3,12 @@ import { NotificationsService } from './NotificationsService';
 
 // API URLs
 const API_URL = process.env.REACT_APP_API_URL || '';
-const QUIZ_API_URL = `${API_URL}/api/quizzes`;
+// Modifica l'endpoint per utilizzare quiz-templates invece di quizzes/templates
+const QUIZ_API_URL = `${API_URL}/api/quiz-templates`;
+
+// Debug dell'URL usato
+console.log('QUIZ SERVICE - API URL:', API_URL);
+console.log('QUIZ SERVICE - QUIZ API URL:', QUIZ_API_URL);
 
 // Interfaces
 export interface Option {
@@ -206,7 +211,9 @@ class QuizService {
    */
   public static async getAllQuizTemplates(): Promise<QuizTemplate[]> {
     try {
-      const response = await ApiService.get<any[]>(`${QUIZ_API_URL}/templates`);
+      console.log('Chiamata API a:', QUIZ_API_URL);
+      // Rimuovo il percorso /templates poiché l'endpoint è già completo
+      const response = await ApiService.get<any[]>(`${QUIZ_API_URL}`);
       
       if (!response || !Array.isArray(response)) {
         console.error('Risposta API inattesa per getAllQuizTemplates:', response);
@@ -421,7 +428,10 @@ class QuizService {
    */
   public static async getAssignedQuizzes(): Promise<Quiz[]> {
     try {
-      const response = await ApiService.get<any[]>(`${QUIZ_API_URL}/assigned`);
+      console.log('Chiamata ai quiz assegnati, percorso completo:', `${API_URL}/api/quizzes/assigned`);
+      
+      // Usa l'endpoint corretto per i quiz assegnati (probabilmente sotto /api/quizzes invece di /api/quiz-templates)
+      const response = await ApiService.get<any[]>(`${API_URL}/api/quizzes/assigned`);
       
       if (!response || !Array.isArray(response)) {
         throw new Error('Formato risposta API non valido');
@@ -452,7 +462,9 @@ class QuizService {
    */
   public static async getQuiz(quizId: string): Promise<Quiz> {
     try {
-      const response = await ApiService.get<any>(`${QUIZ_API_URL}/${quizId}`);
+      console.log('Chiamata per ottenere quiz, percorso completo:', `${API_URL}/api/quizzes/${quizId}`);
+      // Modifica: usiamo il percorso /api/quizzes/ che è quello gestito dal backend
+      const response = await ApiService.get<any>(`${API_URL}/api/quizzes/${quizId}`);
       return this.normalizeQuizData(response);
     } catch (error) {
       console.error(`Errore nel caricamento del quiz ${quizId}:`, error);
