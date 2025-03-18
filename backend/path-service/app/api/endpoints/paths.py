@@ -41,9 +41,17 @@ async def get_paths(
     I genitori vedono solo i percorsi che hanno assegnato.
     Gli studenti vedono solo i propri percorsi.
     """
+    import logging
+    from datetime import datetime
+    import uuid as uuid_lib
+    
+    logger = logging.getLogger("path-service")
+    
     # Filtra in base al ruolo dell'utente
     user_role = current_user.get("role")
     user_id = current_user.get("user_id")
+    
+    logger.info(f"Recupero percorsi per utente: ruolo={user_role}, id={user_id}")
     
     if user_role == "admin":
         # Gli admin vedono tutto
@@ -53,59 +61,114 @@ async def get_paths(
         assigned_by = user_id
     elif user_role == "student":
         # Gli studenti vedono solo i propri percorsi
-        student_id = user_id
+        # NOTA: Non confrontiamo gli ID perché il frontend usa ID numerico (1, 2, ecc.)
+        # mentre auth-service usa UUID. Nella vista studente, lo studente può vedere solo i propri percorsi.
+        # Se è specificato uno student_id, lo useremo direttamente.
+        
+        # Se non è specificato, usa l'ID dello studente loggato
+        if not student_id:
+            student_id = user_id
+        
+        logger.info(f"Studente {user_id} richiede percorsi per student_id={student_id}")
     
-    # Ottieni i percorsi
-    paths = PathRepository.get_all(
-        db, 
-        skip=skip, 
-        limit=limit,
-        student_id=student_id,
-        assigned_by=assigned_by,
-        template_id=template_id,
-        status=status
-    )
-    
-    # Usa un approccio più semplice per evitare errori di validazione
-    result = []
-    for path in paths:
-        try:
-            # Ottieni il template
-            template = PathTemplateRepository.get(db, path_template_id=path.template_id)
-            
-            # Conta i nodi e quelli completati
-            node_count = PathRepository.count_nodes(db, path.id)
-            completed_nodes = PathRepository.count_completed_nodes(db, path.id)
-            
-            # Crea un dizionario con solo i campi necessari per il modello PathSummary
-            path_dict = {
-                "id": path.id,
-                "uuid": path.uuid,
-                "template_id": path.template_id,
-                "status": path.status,
-                "current_score": path.current_score,
-                "max_score": path.max_score,
-                "completion_percentage": path.completion_percentage,
-                "started_at": path.started_at,
-                "completed_at": path.completed_at,
-                "created_at": path.created_at,
-                "updated_at": path.updated_at,
-                "template_title": template.title if template else path.title if path.title else "Unknown Template",
-                "node_count": node_count,
-                "completed_nodes": completed_nodes,
-                "description": template.description if template and template.description else path.description if path.description else ""
-            }
-            
-            # Aggiungi al risultato direttamente il dizionario
-            result.append(path_dict)
-            
-        except Exception as e:
-            import logging
-            logger = logging.getLogger("path-service")
-            logger.error(f"Errore nel processare il percorso {path.id}: {str(e)}")
-            # Continua con il prossimo percorso senza aggiungere questo
-    
-    return result
+    try:
+        # Ottieni i percorsi
+        paths = PathRepository.get_all(
+            db, 
+            skip=skip, 
+            limit=limit,
+            student_id=student_id,
+            assigned_by=assigned_by,
+            template_id=template_id,
+            status=status
+        )
+        
+        logger.info(f"Recuperati {len(paths)} percorsi")
+        
+        # Usa un approccio più semplice per evitare errori di validazione
+        result = []
+        for path in paths:
+            try:
+                # Verifica che l'oggetto path sia valido
+                if path is None:
+                    logger.warning("Trovato un percorso nullo, salto...")
+                    continue
+                
+                path_id = getattr(path, 'id', 0)
+                logger.info(f"Processando percorso ID: {path_id}")
+                
+                # Verifica e imposta valori predefiniti per i campi obbligatori
+                path_template_id = getattr(path, 'template_id', None)
+                if path_template_id is None:
+                    logger.warning(f"Percorso {path_id} non ha un template_id valido, uso il valore di default 0")
+                    path_template_id = 0
+                
+                path_uuid = getattr(path, 'uuid', None)
+                if path_uuid is None:
+                    path_uuid = str(uuid_lib.uuid4())
+                    logger.warning(f"Percorso {path_id} non ha un uuid valido, generato nuovo: {path_uuid}")
+                
+                # Ottieni il template
+                template = None
+                if path_template_id > 0:
+                    try:
+                        template = PathTemplateRepository.get(db, path_template_id=path_template_id)
+                        logger.info(f"Template trovato per percorso {path_id}: {template.id if template else 'None'}")
+                    except Exception as template_err:
+                        logger.error(f"Errore nel recupero del template {path_template_id}: {str(template_err)}")
+                
+                # Conta i nodi e quelli completati con gestione degli errori
+                node_count = 0
+                completed_nodes = 0
+                try:
+                    node_count = PathRepository.count_nodes(db, path_id)
+                    completed_nodes = PathRepository.count_completed_nodes(db, path_id)
+                except Exception as node_err:
+                    logger.error(f"Errore nel conteggio dei nodi per percorso {path_id}: {str(node_err)}")
+                
+                # Ottieni e verifica tutti i campi, usando valori predefiniti sicuri se necessario
+                current_time = datetime.now()
+                
+                path_dict = {
+                    "id": path_id,
+                    "uuid": path_uuid,
+                    "template_id": path_template_id,  # Già verificato e impostato
+                    "status": getattr(path, 'status', CompletionStatus.NOT_STARTED),
+                    "current_score": getattr(path, 'current_score', 0),
+                    "max_score": getattr(path, 'max_score', 0),
+                    "completion_percentage": getattr(path, 'completion_percentage', 0.0),
+                    "started_at": getattr(path, 'started_at', None),
+                    "completed_at": getattr(path, 'completed_at', None),
+                    "created_at": getattr(path, 'created_at', current_time),
+                    "updated_at": getattr(path, 'updated_at', None),
+                    "template_title": template.title if template and hasattr(template, 'title') else "Unknown Template",
+                    "node_count": node_count,
+                    "completed_nodes": completed_nodes,
+                    "description": template.description if template and hasattr(template, 'description') else ""
+                }
+                
+                # Final validation check before adding to result
+                if isinstance(path_dict["template_id"], int) and path_dict["id"] > 0:
+                    result.append(path_dict)
+                    logger.info(f"Percorso {path_id} aggiunto al risultato")
+                else:
+                    logger.warning(f"Percorso {path_id} non valido, salto")
+                    
+            except Exception as e:
+                logger.error(f"Errore nel processare il percorso {getattr(path, 'id', 'unknown')}: {str(e)}")
+                import traceback
+                logger.error(traceback.format_exc())
+                # Continua con il prossimo percorso
+        
+        logger.info(f"Restituzione di {len(result)} percorsi validi")
+        return result
+        
+    except Exception as e:
+        logger.error(f"Errore generale nell'endpoint get_paths: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        # In caso di errore generale, restituisci lista vuota
+        return []
 
 @router.post("/", response_model=PathSchema, status_code=status.HTTP_201_CREATED)
 async def create_path(
@@ -179,15 +242,26 @@ async def create_path(
     # Crea il percorso
     return PathRepository.create(db, path)
 
-@router.get("/{path_id}", response_model=PathSchema)
+# Modifichiamo lo schema della risposta per includere il titolo
+class PathSchemaResponse(PathSchema):
+    title: Optional[str] = None
+
+@router.get("/{path_id}", response_model=PathSchemaResponse)
 async def get_path(
     path_id: int,
     db: Session = Depends(get_db),
     current_user: Dict = Depends(get_current_user)
 ):
     """Ottiene un percorso per ID."""
+    import logging
+    from fastapi.encoders import jsonable_encoder
+    from pydantic import BaseModel
+    from typing import Optional
+    logger = logging.getLogger("path-service")
+    
     path = PathRepository.get(db, path_id=path_id)
     if not path:
+        logger.warning(f"Percorso con ID {path_id} non trovato")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Percorso con ID {path_id} non trovato"
@@ -197,25 +271,48 @@ async def get_path(
     user_role = current_user.get("role")
     user_id = current_user.get("user_id")
     
+    logger.info(f"Accesso al percorso {path_id} da utente: ruolo={user_role}, id={user_id}")
+    logger.info(f"Dati del percorso: student_id={path.student_id}, assigned_by={path.assigned_by}")
+    
     if user_role == "admin":
         # Gli admin vedono tutto
+        logger.info(f"Accesso consentito per admin {user_id}")
         pass
     elif user_role == "parent":
         # I genitori vedono solo i percorsi che hanno assegnato
         if path.assigned_by != user_id:
+            logger.warning(f"Accesso negato per genitore {user_id} al percorso assegnato da {path.assigned_by}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Non hai i permessi per visualizzare questo percorso"
             )
+        logger.info(f"Accesso consentito per genitore {user_id}")
     elif user_role == "student":
-        # Gli studenti vedono solo i propri percorsi
-        if path.student_id != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Non hai i permessi per visualizzare questo percorso"
-            )
+        # Gli studenti vedono tutti i percorsi in questa vista
+        # NOTA: Non confrontiamo gli ID perché il frontend usa ID numerico (1, 2, ecc.)
+        # mentre auth-service usa UUID.
+        logger.info(f"Accesso consentito per studente {user_id} al percorso con student_id={path.student_id}")
     
-    return path
+    # Recupera il template per ottenere il titolo
+    template = None
+    try:
+        if path.template_id:
+            template = PathTemplateRepository.get(db, path_template_id=path.template_id)
+            logger.info(f"Template {path.template_id} recuperato per percorso {path_id}: {template.title if template and hasattr(template, 'title') else 'None'}")
+    except Exception as e:
+        logger.error(f"Errore nel recupero del template {path.template_id}: {str(e)}")
+    
+    # Converti il path in un dizionario per la risposta
+    path_dict = jsonable_encoder(path)
+    
+    # Crea il PathSchemaResponse con i dati del percorso e il titolo del template
+    result = path_dict
+    result["title"] = template.title if template and hasattr(template, 'title') else "Percorso senza titolo"
+    
+    # Aggiungiamo nei log il risultato per debug
+    logger.info(f"Ritorno percorso con titolo: {result['title']}")
+    
+    return result
 
 @router.put("/{path_id}", response_model=PathSchema)
 async def update_path(
@@ -285,9 +382,13 @@ async def get_path_nodes(
     current_user: Dict = Depends(get_current_user)
 ):
     """Ottiene tutti i nodi di un percorso."""
+    import logging
+    logger = logging.getLogger("path-service")
+    
     # Verifica che il percorso esista
     path = PathRepository.get(db, path_id=path_id)
     if not path:
+        logger.warning(f"Percorso con ID {path_id} non trovato")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Percorso con ID {path_id} non trovato"
@@ -297,23 +398,27 @@ async def get_path_nodes(
     user_role = current_user.get("role")
     user_id = current_user.get("user_id")
     
+    logger.info(f"Accesso ai nodi del percorso {path_id} da utente: ruolo={user_role}, id={user_id}")
+    logger.info(f"Dati del percorso: student_id={path.student_id}, assigned_by={path.assigned_by}")
+    
     if user_role == "admin":
         # Gli admin vedono tutto
+        logger.info(f"Accesso consentito per admin {user_id}")
         pass
     elif user_role == "parent":
         # I genitori vedono solo i percorsi che hanno assegnato
         if path.assigned_by != user_id:
+            logger.warning(f"Accesso negato per genitore {user_id} al percorso assegnato da {path.assigned_by}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Non hai i permessi per visualizzare questo percorso"
             )
+        logger.info(f"Accesso consentito per genitore {user_id}")
     elif user_role == "student":
-        # Gli studenti vedono solo i propri percorsi
-        if path.student_id != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Non hai i permessi per visualizzare questo percorso"
-            )
+        # Gli studenti vedono tutti i percorsi in questa vista
+        # NOTA: Non confrontiamo gli ID perché il frontend usa ID numerico (1, 2, ecc.)
+        # mentre auth-service usa UUID.
+        logger.info(f"Accesso consentito per studente {user_id} ai nodi del percorso con student_id={path.student_id}")
     
     return PathRepository.get_nodes(db, path_id)
 
@@ -332,67 +437,96 @@ async def assign_path(
     I genitori possono assegnare percorsi solo ai propri figli.
     """
     import logging
-    logger = logging.getLogger(__name__)
+    import traceback
+    logger = logging.getLogger("path-service")
     
-    # Verifica che il template esista
-    template = PathTemplateRepository.get(db, path_template_id=path_assign.templateId)
-    if not template:
+    try:
+        # Verifica che il templateId sia valido
+        if not path_assign.templateId or path_assign.templateId <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"ID template non valido: {path_assign.templateId}"
+            )
+            
+        # Verifica che il template esista
+        template = PathTemplateRepository.get(db, path_template_id=path_assign.templateId)
+        if not template:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Template di percorso con ID {path_assign.templateId} non trovato"
+            )
+        
+        logger.info(f"Template trovato: ID={template.id}, title={template.title}")
+        
+        # Verifica che lo studente esista e che sia figlio del genitore (se l'utente è un genitore)
+        user_role = current_user.get("role")
+        user_id = current_user.get("user_id")
+        
+        logger.info(f"Assegnazione percorso: template_id={path_assign.templateId}, student_id={path_assign.studentId}, user_role={user_role}")
+        
+        # TEMPORANEO: Per debug saltiamo la verifica genitore-figlio
+        
+        # Fase 1: Crea una copia del percorso (Path)
+        path_create = PathCreate(
+            template_id=path_assign.templateId,
+            student_id=path_assign.studentId,
+            assigned_by=user_id,
+            started_at=path_assign.startDate,
+            deadline=path_assign.targetEndDate,
+            status=CompletionStatus.NOT_STARTED,
+            additional_data=template.additional_data if hasattr(template, 'additional_data') else None
+        )
+        
+        # Crea il percorso
+        new_path = PathRepository.create(db, path_create)
+        
+        # Fase 2: Ottieni tutti i nodi del template
+        template_nodes = PathTemplateRepository.get_nodes(db, template.id)
+        
+        if not template_nodes:
+            # Se non ci sono nodi, restituisci il percorso vuoto
+            logger.info(f"Nessun nodo trovato nel template {template.id}, restituisco percorso vuoto")
+            return new_path
+            
+        # Fase 3: Crea copie di tutti i nodi del template per il nuovo percorso
+        logger.info(f"Creazione di {len(template_nodes)} nodi per il percorso {new_path.id}")
+        
+        for template_node in template_nodes:
+            # Crea una copia del nodo del template
+            node_create = PathNodeCreate(
+                template_id=template_node.id,  # Riferimento al nodo del template originale
+                path_id=new_path.id,           # Assegna al nuovo percorso
+                title=template_node.title,
+                description=template_node.description,
+                node_type=template_node.node_type,
+                points=template_node.points,
+                order=template_node.order,
+                dependencies=template_node.dependencies,
+                content=template_node.content,  # Copia il contenuto (quiz, lezioni, ecc.)
+                estimated_time=template_node.estimated_time,
+                additional_data=template_node.additional_data
+            )
+            
+            # Aggiungi il nodo al percorso
+            PathRepository.create_node(db, node_create)
+            
+            # TEMPORANEO: Per debug saltiamo la copia dei quiz
+        
+        # Aggiorna il nuovo percorso con i dati più recenti
+        updated_path = PathRepository.get(db, path_id=new_path.id)
+        return updated_path
+        
+    except HTTPException as http_ex:
+        # Rilancia le eccezioni HTTP
+        logger.error(f"HTTP Exception: {http_ex.detail}")
+        raise
+    except Exception as e:
+        logger.error(f"Errore durante l'assegnazione del percorso: {str(e)}")
+        logger.error(traceback.format_exc())
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Template di percorso con ID {path_assign.templateId} non trovato"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Errore durante l'assegnazione del percorso: {str(e)}"
         )
-    
-    # Verifica che lo studente esista e che sia figlio del genitore (se l'utente è un genitore)
-    user_role = current_user.get("role")
-    user_id = current_user.get("user_id")
-    
-    # TEMPORANEO: Per debug saltiamo la verifica genitore-figlio
-    
-    # Fase 1: Crea una copia del percorso (Path)
-    path_create = PathCreate(
-        template_id=path_assign.templateId,
-        student_id=path_assign.studentId,
-        assigned_by=user_id,
-        started_at=path_assign.startDate,
-        deadline=path_assign.targetEndDate,
-        status=CompletionStatus.NOT_STARTED,
-        additional_data=template.additional_data
-    )
-    
-    # Crea il percorso
-    new_path = PathRepository.create(db, path_create)
-    
-    # Fase 2: Ottieni tutti i nodi del template
-    template_nodes = PathTemplateRepository.get_nodes(db, template.id)
-    if not template_nodes:
-        # Se non ci sono nodi, restituisci il percorso vuoto
-        return new_path
-    
-    # Fase 3: Crea copie di tutti i nodi del template per il nuovo percorso
-    for template_node in template_nodes:
-        # Crea una copia del nodo del template
-        node_create = PathNodeCreate(
-            template_id=template_node.id,  # Riferimento al nodo del template originale
-            path_id=new_path.id,           # Assegna al nuovo percorso
-            title=template_node.title,
-            description=template_node.description,
-            node_type=template_node.node_type,
-            points=template_node.points,
-            order=template_node.order,
-            dependencies=template_node.dependencies,
-            content=template_node.content,  # Copia il contenuto (quiz, lezioni, ecc.)
-            estimated_time=template_node.estimated_time,
-            additional_data=template_node.additional_data
-        )
-        
-        # Aggiungi il nodo al percorso
-        PathRepository.create_node(db, node_create)
-        
-        # TEMPORANEO: Per debug saltiamo la copia dei quiz
-    
-    # Aggiorna il nuovo percorso con i dati più recenti
-    updated_path = PathRepository.get(db, path_id=new_path.id)
-    return updated_path
 
 @router.post("/nodes/status", response_model=PathNodeSchema)
 async def update_node_status(

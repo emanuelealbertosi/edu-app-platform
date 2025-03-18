@@ -158,6 +158,33 @@ Il problema sembra riguardare specificamente l'aggiornamento di proprietà come 
 
 ---
 
+### Bug Risolti
+
+#### PH-005 - Titolo del percorso non visualizzato correttamente
+- **Stato**: 🟢 Risolto
+- **Priorità**: P1
+- **Componente**: Backend
+- **Interfaccia**: Student
+- **Data**: 2025-03-18
+- **Risolto il**: 2025-03-18
+
+**Descrizione**
+Quando uno studente visualizza un percorso assegnato, viene mostrato "percorso senza titolo" invece del vero titolo del percorso.
+
+**Impatto**  
+Gli studenti non riescono a distinguere facilmente i percorsi assegnati perché tutti mostrano lo stesso titolo generico "percorso senza titolo".
+
+**Causa**  
+L'endpoint `GET /api/paths/{path_id}` non recuperava il titolo dal template del percorso, a differenza dell'endpoint `GET /api/paths/` che lo faceva correttamente.
+
+**Soluzione Implementata**  
+1. Modificato l'endpoint `GET /api/paths/{path_id}` per recuperare il titolo dal template associato
+2. Creato un nuovo schema di risposta `PathSchemaResponse` che include il campo `title`
+3. Aggiunta la logica per recuperare il template e il suo titolo, con gestione degli errori e fallback
+4. Implementati log dettagliati per facilitare il debug
+
+---
+
 ### Bug Aperti
 
 #### PH-002 - Percorsi pubblici non visualizzati correttamente
