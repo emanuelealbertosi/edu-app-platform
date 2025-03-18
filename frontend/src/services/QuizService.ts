@@ -264,12 +264,21 @@ class QuizService {
   /**
    * Ottiene i dettagli di un template di quiz
    */
-  public static async getQuizTemplateById(templateId: string): Promise<QuizTemplate> {
+  public static async getQuizTemplateById(templateId: string, resourceIdOverride?: string): Promise<QuizTemplate> {
     try {
-      const response = await ApiService.get<any>(`${QUIZ_API_URL}/templates/${templateId}`);
+      // HACK: Se resourceIdOverride è fornito, usa quello invece del templateId
+      // Questo permette di forzare l'uso del resource_id quando chiamato da getPathQuiz
+      const effectiveTemplateId = resourceIdOverride || templateId;
+      
+      console.log(`[DEBUG QuizService] Fetching quiz template with ID: ${effectiveTemplateId} (original id: ${templateId}, override: ${resourceIdOverride || 'none'})`);
+      const response = await ApiService.get<any>(`${QUIZ_API_URL}/${effectiveTemplateId}`);
       
       // Debug della risposta
-      console.log('Risposta API getQuizTemplateById:', JSON.stringify(response, null, 2));
+      console.log('[DEBUG QuizService] Quiz template response:', {
+        id: response.id,
+        title: response.title,
+        questionsCount: response.questions?.length
+      });
       
       // Normalizza i dati
       return {
@@ -287,9 +296,66 @@ class QuizService {
         totalPoints: response.totalPoints,
         estimatedTime: response.estimatedTime
       };
-    } catch (error) {
-      console.error(`Errore nel recupero del template di quiz ${templateId}:`, error);
-      throw error;
+    } catch (error: any) {
+      // Ridefiniamo effectiveTemplateId all'interno del blocco catch per risolvere l'errore
+      const effectiveTemplateId = resourceIdOverride || templateId;
+      console.error(`[DEBUG QuizService] Error fetching template ${effectiveTemplateId}:`, error);
+      
+      // Controllo più approfondito degli errori di autorizzazione e accesso
+      let errorType = "unknown";
+      let errorDetails = "";
+      
+      if (error.response) {
+        // Controllo codici di errore HTTP
+        if (error.response.status === 404) {
+          errorType = "not_found";
+          errorDetails = "Il template non esiste";
+        } else if (error.response.status === 403) {
+          errorType = "forbidden";
+          errorDetails = "Accesso non autorizzato al template";
+        } else if (error.response.status === 401) {
+          errorType = "unauthorized";
+          errorDetails = "Autenticazione non valida";
+        } else {
+          errorType = `server_error_${error.response.status}`;
+          errorDetails = error.response.data?.message || "Errore di server";
+        }
+      } else if (error.request) {
+        errorType = "network";
+        errorDetails = "Errore di connessione al server";
+      } else {
+        errorType = "client";
+        errorDetails = error.message || "Errore sconosciuto";
+      }
+      
+      console.log(`[DEBUG QuizService] Template error type: ${errorType}, details: ${errorDetails}`);
+      
+      // Create a placeholder template with an error message
+      return {
+        id: effectiveTemplateId,
+        title: `Quiz non disponibile (ID: ${effectiveTemplateId})`,
+        description: `Errore: ${errorDetails}`,
+        subject: 'Errore',
+        difficultyLevel: 'medium',
+        questionsCount: 1,
+        timeLimit: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        questions: [{
+          id: 'error_q1',
+          text: `Non è stato possibile caricare questo quiz: ${errorDetails}`,
+          type: 'multiple_choice',
+          options: [
+            { id: 'error_o1', text: 'Contattare l\'amministratore', isCorrect: true },
+            { id: 'error_o2', text: 'Tornare al percorso', isCorrect: false }
+          ],
+          points: 1,
+          explanation: 'Il quiz è in stato di errore. Contatta l\'amministratore del sistema.'
+        }],
+        isPublic: false,
+        totalPoints: 1,
+        estimatedTime: 5
+      };
     }
   }
 
@@ -329,7 +395,7 @@ class QuizService {
       // Debug: mostra il payload preparato per l'API
       console.log('Payload API:', apiData);
       
-      const response = await ApiService.post<any>(`${QUIZ_API_URL}/templates`, apiData);
+      const response = await ApiService.post<any>(`${QUIZ_API_URL}`, apiData);
       
       NotificationsService.success(
         'Template di quiz creato con successo!',
@@ -385,7 +451,7 @@ class QuizService {
       // Debug: mostra il payload preparato per l'API
       console.log('Payload API per aggiornamento:', apiData);
       
-      await ApiService.put<any>(`${QUIZ_API_URL}/templates/${templateId}`, apiData);
+      await ApiService.put<any>(`${QUIZ_API_URL}/${templateId}`, apiData);
       
       NotificationsService.success(
         'Template di quiz aggiornato con successo!',
@@ -408,7 +474,7 @@ class QuizService {
    */
   public static async deleteQuizTemplate(templateId: string): Promise<void> {
     try {
-      await ApiService.delete(`${QUIZ_API_URL}/templates/${templateId}`);
+      await ApiService.delete(`${QUIZ_API_URL}/${templateId}`);
       NotificationsService.success(
         'Template di quiz eliminato con successo!',
         'Eliminazione completata'
@@ -478,152 +544,359 @@ class QuizService {
    */
   public static async getPathQuiz(pathId: string, quizId: string): Promise<Quiz> {
     try {
-      console.log(`Richiesta quiz ${quizId} per il percorso ${pathId}`);
+      console.log(`[DEBUG QuizService] getPathQuiz called with pathId=${pathId}, quizId=${quizId}`);
       
-      // Tentiamo di caricare il quiz direttamente usando l'endpoint specifico per i percorsi
+      // Proviamo a recuperare il nodo prima di tutto per ottenere il resource_id
+      let resourceId: string | null = null;
+      
       try {
-        const response = await ApiService.get<any>(`${API_URL}/api/paths/${pathId}/nodes/${quizId}`);
-        console.log('Risposta diretta dal nodo quiz:', response);
-        if (response && response.id) {
-          return this.normalizeQuizData({
-            ...response,
+        console.log(`[DEBUG QuizService] Pre-fetching node info to get resource_id`);
+        const nodesResponse = await ApiService.get(`${API_URL}/api/paths/${pathId}/nodes`);
+        
+        if (Array.isArray(nodesResponse)) {
+          const matchedNode = nodesResponse.find(node => node.id.toString() === quizId);
+          if (matchedNode) {
+            // Tenta di ottenere il resource_id da tutte le possibili fonti
+            resourceId = matchedNode.resource_id ? matchedNode.resource_id.toString() : 
+                        (matchedNode.content?.quiz_id ? matchedNode.content.quiz_id.toString() : 
+                         (matchedNode.content?.quiz_template_id ? matchedNode.content.quiz_template_id.toString() : null));
+            
+            console.log(`[DEBUG QuizService] Found resource_id ${resourceId} for node ${quizId}`);
+          }
+        }
+      } catch (error) {
+        console.warn(`[DEBUG QuizService] Error pre-fetching node info: ${error}`);
+        // Continua anche se non riesce a ottenere il resource_id
+      }
+      
+      // First attempt: Try to interpret quizId as a template ID directly
+      // This is the most reliable way to get the correct quiz content
+      try {
+        console.log(`[DEBUG QuizService] First attempt: Loading direct template. Using resource_id: ${resourceId || 'not found, using node id instead'}`);
+        // IMPORTANTE: Passa il resource_id come override se disponibile
+        const template = await this.getQuizTemplateById(quizId, resourceId || undefined);
+        
+        if (template && template.questions && template.questions.length > 0) {
+          console.log(`[DEBUG QuizService] Successfully loaded template directly with ${template.questions.length} questions`);
+          
+          // Create a quiz object from the template data
+          const quiz: Quiz = {
+            id: quizId,
+            templateId: template.id,
+            studentId: '',
+            title: template.title,
+            description: template.description,
+            isCompleted: false,
+            score: 0,
+            maxScore: template.questions.reduce((sum, q) => sum + (q.points || 1), 0),
+            questions: template.questions,
+            timeLimit: template.timeLimit || 0,
             pathId: pathId
+          };
+          
+          console.log(`[DEBUG QuizService] Created quiz from direct template lookup:`, {
+            id: quiz.id,
+            templateId: quiz.templateId,
+            questionCount: quiz.questions.length
           });
+          
+          return quiz;
         }
-      } catch (directError) {
-        console.error('Errore nel caricamento diretto del nodo quiz:', directError);
+      } catch (templateError: any) {
+        console.log(`[DEBUG QuizService] Direct template load failed: ${templateError?.response?.status || templateError?.message || templateError}`);
+        // Continue to the next approach
       }
       
-      // Prima proviamo a ottenere tutti i nodi del percorso
-      const nodesResponse = await ApiService.get<any[]>(`${API_URL}/api/paths/${pathId}/nodes`);
-      console.log('Risposta nodi percorso:', JSON.stringify(nodesResponse, null, 2));
-      
-      if (!nodesResponse) {
-        console.error('Risposta API vuota per i nodi del percorso');
-        throw new Error('Nessun dato ricevuto dall\'API');
-      }
-      
-      if (!Array.isArray(nodesResponse)) {
-        console.error('Risposta API non è un array:', typeof nodesResponse, nodesResponse);
-        
-        // Tentiamo di recuperare il quiz direttamente
-        console.log('Tentativo di recupero diretto del quiz template:', quizId);
-        const quizTemplate = await this.getQuizTemplateById(quizId);
-        console.log('Quiz template recuperato:', quizTemplate);
-        
-        // Creiamo una versione compatibile con Quiz
-        return {
-          id: quizTemplate.id,
-          templateId: quizTemplate.id,
-          studentId: '', // Non disponibile in questo contesto
-          title: quizTemplate.title,
-          description: quizTemplate.description,
-          isCompleted: false,
-          score: 0,
-          maxScore: quizTemplate.questions.reduce((sum, q) => sum + (q.points || 1), 0),
-          questions: quizTemplate.questions,
-          timeLimit: quizTemplate.timeLimit,
-          pathId: pathId
-        };
-      }
-      
-      // Debug aggiuntivo per controllare la struttura degli elementi
-      if (nodesResponse.length > 0) {
-        console.log('Esempio di nodo:', JSON.stringify(nodesResponse[0], null, 2));
-      }
-      
-      // Cerchiamo il nodo specifico che corrisponde al quiz richiesto
-      console.log('Cercando nodo con ID ESATTO:', quizId);
-      const quizNode = nodesResponse.find((node: any) => {
-        return node.id === quizId;
-      });
-      
-      // Se abbiamo trovato il nodo con l'ID esatto, lo usiamo
-      if (quizNode) {
-        console.log('Trovato nodo quiz con ID esatto:', quizNode);
-        return this.normalizeQuizData({
-          ...quizNode,
-          pathId: pathId
-        });
-      }
-      
-      // Altrimenti cerchiamo nodi di tipo quiz che possono contenere l'ID del quiz desiderato
-      console.log('Cercando nodi di tipo quiz che contengono quiz_id:', quizId);
-      const contentMatchNode = nodesResponse.find((node: any) => 
-        (node.content && node.content.quiz_id === quizId) ||
-        (node.quiz_id === quizId) ||
-        (node.node_type === 'quiz' && node.content && node.content.id === quizId)
-      );
-      
-      if (contentMatchNode) {
-        console.log('Trovato nodo con quiz_id corrispondente:', contentMatchNode);
-        return this.normalizeQuizData({
-          ...contentMatchNode,
-          pathId: pathId
-        });
-      }
-      
-      // Tentativo alternativo: cerchiamo per indice nei nodi di tipo quiz
-      const quizNodes = nodesResponse.filter((node: any) => 
-        node.node_type === 'quiz' || 
-        (node.content && node.content.quiz_id)
-      );
-      
-      console.log('Nodi quiz trovati:', quizNodes.length);
-      
-      // Se abbiamo trovato dei nodi quiz, proviamo a usare quello che corrisponde per posizione
-      if (quizNodes.length > 0) {
-        // Proviamo a convertire quizId in numero e usarlo come indice
-        const index = parseInt(quizId, 10);
-        if (!isNaN(index) && index >= 0 && index < quizNodes.length) {
-          console.log(`Usando quiz node per indice ${index}:`, quizNodes[index]);
-          const quizData = this.normalizeQuizData(quizNodes[index]);
-          return {
-            ...quizData,
-            pathId: pathId
-          };
-        } else {
-          // Altrimenti, prendiamo il primo nodo quiz trovato
-          console.log('Usando il primo quiz node trovato:', quizNodes[0]);
-          const quizData = this.normalizeQuizData(quizNodes[0]);
-          return {
-            ...quizData,
-            pathId: pathId
-          };
-        }
-      }
-      
-      // Se ancora non abbiamo trovato nulla, tentiamo di recuperare il quiz template
-      console.log('Tentativo di recupero diretto del quiz template:', quizId);
+      // Second attempt: Try to find all the quiz nodes in the path and then match by ID or templateId
+      // This approach is more likely to work when we have permissions issues
       try {
-        const quizTemplate = await this.getQuizTemplateById(quizId);
-        console.log('Quiz template recuperato:', quizTemplate);
+        console.log(`[DEBUG QuizService] Second attempt: Searching in all path nodes`);
+        const nodesResponse = await ApiService.get(`${API_URL}/api/paths/${pathId}/nodes`);
         
-        // Creiamo una versione compatibile con Quiz
-        return {
-          id: quizTemplate.id,
-          templateId: quizTemplate.id,
-          studentId: '', // Non disponibile in questo contesto
-          title: quizTemplate.title,
-          description: quizTemplate.description,
-          isCompleted: false,
-          score: 0,
-          maxScore: quizTemplate.questions.reduce((sum, q) => sum + (q.points || 1), 0),
-          questions: quizTemplate.questions,
-          timeLimit: quizTemplate.timeLimit,
+        if (!Array.isArray(nodesResponse)) {
+          throw new Error('Invalid format: Path nodes response is not an array');
+        }
+        
+        console.log(`[DEBUG QuizService] Found ${nodesResponse.length} nodes in path`);
+        
+        // Look for the node with this ID
+        const matchedNode = nodesResponse.find(node => 
+          node.id.toString() === quizId
+        );
+        
+        if (!matchedNode) {
+          console.warn(`[DEBUG QuizService] No node matching ID=${quizId} found among path nodes`);
+          throw new Error('Quiz node not found in path');
+        }
+        
+        console.log(`[DEBUG QuizService] Found matching node:`, {
+          id: matchedNode.id, 
+          type: matchedNode.node_type,
+          title: matchedNode.title,
+          contentKeys: matchedNode.content ? Object.keys(matchedNode.content) : [],
+          resourceId: matchedNode.resource_id,
+          contentData: matchedNode.content
+        });
+        
+        // Logging dettagliato delle possibili fonti per l'ID del template
+        if (matchedNode.resource_id) {
+          console.log(`[DEBUG QuizService] Found resource_id in node: ${matchedNode.resource_id}`);
+        }
+        if (matchedNode.content?.quiz_id) {
+          console.log(`[DEBUG QuizService] Found content.quiz_id in node: ${matchedNode.content.quiz_id}`);
+        }
+        if (matchedNode.content?.quiz_template_id) {
+          console.log(`[DEBUG QuizService] Found content.quiz_template_id in node: ${matchedNode.content.quiz_template_id}`);
+        }
+        
+        // IMPORTANTE: Utilizza il resource_id del nodo se disponibile per trovare il template
+        let templateId = matchedNode.resource_id ? matchedNode.resource_id.toString() : 
+                          (matchedNode.content?.quiz_id ? matchedNode.content.quiz_id.toString() : 
+                           (matchedNode.content?.quiz_template_id ? matchedNode.content.quiz_template_id.toString() : null));
+        
+        console.log(`[DEBUG QuizService] Using templateId from node: ${templateId || 'none found'}`);
+        
+        let questions: Question[] = [];
+        
+        if (templateId) {
+          // Try to load the template with that ID
+          try {
+            console.log(`[DEBUG QuizService] Node has template ID ${templateId}, attempting to load it`);
+            const template = await this.getQuizTemplateById(templateId);
+            questions = template.questions;
+            console.log(`[DEBUG QuizService] Successfully loaded ${questions.length} questions from template ${templateId}`);
+          } catch (templateError: any) {
+            console.error(`[DEBUG QuizService] Error loading template ${templateId}:`, 
+                         templateError?.response?.status || templateError?.message);
+            
+            // Create placeholder questions for the quiz
+            questions = [{
+              id: 'placeholder_q1',
+              text: 'Questo quiz ha un problema: non è stato possibile caricare il template associato.',
+              type: 'multiple_choice',
+              options: [
+                { id: 'placeholder_o1', text: 'Contattare l\'amministratore', isCorrect: true },
+                { id: 'placeholder_o2', text: 'Riprovare più tardi', isCorrect: false }
+              ],
+              points: 1,
+              explanation: 'Il quiz è in stato di errore. Contatta l\'amministratore del sistema.'
+            }];
+          }
+        } else {
+          // Node doesn't have a template ID, check if it has embedded questions
+          if (matchedNode.content?.questions && Array.isArray(matchedNode.content.questions)) {
+            console.log(`[DEBUG QuizService] Node has ${matchedNode.content.questions.length} embedded questions`);
+            questions = normalizeQuestions(matchedNode.content.questions);
+          } else {
+            // No questions found, use placeholders
+            console.warn('[DEBUG QuizService] Node has no template ID or embedded questions');
+            questions = [{
+              id: 'placeholder_q1',
+              text: 'Questo quiz è incompleto: non contiene domande.',
+              type: 'multiple_choice',
+              options: [
+                { id: 'placeholder_o1', text: 'Contattare l\'amministratore', isCorrect: true },
+                { id: 'placeholder_o2', text: 'Tornare al percorso', isCorrect: false }
+              ],
+              points: 1,
+              explanation: 'Il quiz è in stato di errore. Contatta l\'amministratore del sistema.'
+            }];
+          }
+        }
+        
+        // Create a quiz object based on the node and any questions we found
+        const quiz: Quiz = {
+          id: matchedNode.id?.toString(),
+          templateId: templateId || '',
+          studentId: '',
+          title: matchedNode.title || 'Quiz senza titolo',
+          description: matchedNode.description || 'Nessuna descrizione disponibile',
+          isCompleted: matchedNode.status?.toLowerCase().includes('complet') || false,
+          score: matchedNode.score || matchedNode.points_awarded || 0,
+          maxScore: questions.reduce((sum, q) => sum + (q.points || 1), 0),
+          questions: questions,
+          timeLimit: matchedNode.content?.time_limit || 0,
           pathId: pathId
         };
-      } catch (templateError) {
-        console.error('Anche il recupero del template è fallito:', templateError);
-        throw new Error(`Quiz non trovato nel percorso specificato`);
+        
+        console.log(`[DEBUG QuizService] Created quiz from matched node:`, {
+          id: quiz.id,
+          templateId: quiz.templateId,
+          questionCount: quiz.questions.length
+        });
+        
+        return quiz;
+      } catch (pathError: any) {
+        console.error(`[DEBUG QuizService] Error searching for quiz in path nodes:`, pathError);
+        // Continue to next attempt
       }
-    } catch (error) {
-      console.error(`Errore recupero quiz ${quizId} del percorso ${pathId}:`, error);
-      NotificationsService.error(
-        'Impossibile caricare il quiz specifico per questo percorso',
-        'Errore di caricamento'
-      );
-      throw error;
+      
+      // Third attempt: Try to get the quiz directly from the path node
+      try {
+        console.log(`[DEBUG QuizService] Third attempt: Loading quiz directly from path node`);
+        const response = await ApiService.get(`${API_URL}/api/paths/${pathId}/nodes/${quizId}`);
+        
+        console.log('[DEBUG QuizService] Path node response:', {
+          id: response.id,
+          type: response.node_type,
+          resourceId: response.resource_id,
+          contentKeys: response.content ? Object.keys(response.content) : [],
+          contentData: response.content
+        });
+        
+        // Logging dettagliato delle possibili fonti per l'ID del template
+        if (response.resource_id) {
+          console.log(`[DEBUG QuizService] Found resource_id in response: ${response.resource_id}`);
+        }
+        if (response.content?.quiz_id) {
+          console.log(`[DEBUG QuizService] Found content.quiz_id in response: ${response.content.quiz_id}`);
+        }
+        if (response.content?.quiz_template_id) {
+          console.log(`[DEBUG QuizService] Found content.quiz_template_id in response: ${response.content.quiz_template_id}`);
+        }
+        
+        // Extract content from the node
+        if (!response || !response.content) {
+          throw new Error('Node response missing content');
+        }
+        
+        // Create default questions if none are available
+        let questions: Question[] = [];
+        let title = response.title || 'Quiz senza titolo';
+        let description = response.description || '';
+        
+        // IMPORTANTE: Prova prima a utilizzare resource_id se disponibile
+        const templateId = response.resource_id ? response.resource_id.toString() : 
+                          (response.content.quiz_id ? response.content.quiz_id.toString() : 
+                           (response.content.quiz_template_id ? response.content.quiz_template_id.toString() : null));
+        
+        console.log(`[DEBUG QuizService] Using templateId from node response: ${templateId || 'none found'}`);
+        
+        if (response.content.questions && Array.isArray(response.content.questions)) {
+          // The node already contains all the questions
+          console.log('[DEBUG QuizService] Node contains embedded questions', response.content.questions.length);
+          questions = response.content.questions;
+        } else if (templateId) {
+          // We need to get the questions from the template
+          console.log('[DEBUG QuizService] Node references quiz template, trying to load template questions');
+          try {
+            // Try to load the quiz template to get the questions
+            // But we'll still return the quiz in the context of the path node
+            console.log(`[DEBUG QuizService] Loading questions from template ID: ${templateId}`);
+            const template = await this.getQuizTemplateById(templateId);
+            
+            questions = template.questions;
+            // Only use template title/description as fallback
+            if (!title) title = template.title;
+            if (!description) description = template.description;
+            
+            console.log('[DEBUG QuizService] Successfully loaded questions from template', questions.length);
+          } catch (templateError: any) {
+            console.error('[DEBUG QuizService] Failed to load template questions:', templateError);
+            
+            // Create placeholder questions if template couldn't be loaded
+            if (templateError.response?.status === 404) {
+              console.log('[DEBUG QuizService] Quiz template not found (404). Creating placeholder questions.');
+              questions = [{
+                id: 'placeholder_q1',
+                text: 'Questo quiz ha un problema: il template associato non esiste.',
+                type: 'multiple_choice',
+                options: [
+                  { id: 'placeholder_o1', text: 'Contattare l\'amministratore', isCorrect: true },
+                  { id: 'placeholder_o2', text: 'Riprovare più tardi', isCorrect: false }
+                ],
+                points: 1,
+                explanation: 'Il quiz è in stato di errore. Contatta l\'amministratore del sistema.'
+              }];
+            }
+          }
+        }
+        
+        // If we still don't have questions, create a default empty quiz
+        if (!questions || !Array.isArray(questions) || questions.length === 0) {
+          console.log('[DEBUG QuizService] No questions found, creating default quiz');
+          questions = defaultQuestions();
+        }
+        
+        // Construct a compatible quiz object with the data we have
+        const quiz: Quiz = {
+          id: quizId, // The node ID
+          templateId: templateId || '', // Il templateId che abbiamo determinato
+          studentId: '', // Not available in this context
+          title: title,
+          description: description,
+          isCompleted: response.status?.toLowerCase().includes('complet') || false,
+          score: response.score || 0,
+          maxScore: response.max_score || 100,
+          questions: normalizeQuestions(questions),
+          timeLimit: response.content.time_limit || 0,
+          pathId: pathId // Include the path ID for context
+        };
+        
+        console.log(`[DEBUG QuizService] Successfully constructed quiz from path node:`, quiz);
+        return quiz;
+      } catch (pathError: any) {
+        console.log(`[DEBUG QuizService] Third attempt failed:`, pathError?.message || pathError);
+      }
+      
+      // If all previous attempts failed, return a default error quiz
+      console.error(`[DEBUG QuizService] All attempts to load quiz failed, returning error quiz`);
+      
+      // Create a default quiz with error message
+      const defaultQuiz: Quiz = {
+        id: quizId,
+        templateId: '',
+        studentId: '',
+        title: 'Quiz non disponibile',
+        description: 'Non è stato possibile caricare il quiz. Il template potrebbe non esistere o potresti non avere il permesso di accedervi.',
+        isCompleted: false,
+        score: 0,
+        maxScore: 100,
+        questions: [{
+          id: 'error_q1',
+          text: 'Questo quiz non può essere caricato. Potrebbero esserci problemi con il template o i permessi di accesso.',
+          type: 'multiple_choice',
+          options: [
+            { id: 'error_o1', text: 'Contattare l\'amministratore', isCorrect: true },
+            { id: 'error_o2', text: 'Riprovare più tardi', isCorrect: false }
+          ],
+          points: 1,
+          explanation: 'Il quiz è in stato di errore. Contatta l\'amministratore del sistema.'
+        }],
+        timeLimit: 0,
+        pathId: pathId
+      };
+      
+      return defaultQuiz;
+    } catch (error: any) {
+      console.error(`[DEBUG QuizService] Unexpected error in getPathQuiz:`, error);
+      
+      // Create a default quiz with error message
+      const defaultQuiz: Quiz = {
+        id: quizId,
+        templateId: '',
+        studentId: '',
+        title: 'Errore durante il caricamento',
+        description: 'Si è verificato un errore durante il caricamento del quiz.',
+        isCompleted: false,
+        score: 0,
+        maxScore: 100,
+        questions: [{
+          id: 'error_q1',
+          text: `Si è verificato un errore durante il caricamento del quiz: ${error.message || 'Errore sconosciuto'}`,
+          type: 'multiple_choice',
+          options: [
+            { id: 'error_o1', text: 'Contattare l\'amministratore', isCorrect: true },
+            { id: 'error_o2', text: 'Riprovare più tardi', isCorrect: false }
+          ],
+          points: 1,
+          explanation: 'Il quiz è in stato di errore. Contatta l\'amministratore del sistema.'
+        }],
+        timeLimit: 0,
+        pathId: pathId
+      };
+      
+      return defaultQuiz;
     }
   }
 

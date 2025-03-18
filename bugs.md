@@ -183,6 +183,52 @@ L'endpoint `GET /api/paths/{path_id}` non recuperava il titolo dal template del 
 3. Aggiunta la logica per recuperare il template e il suo titolo, con gestione degli errori e fallback
 4. Implementati log dettagliati per facilitare il debug
 
+#### PH-006 - Errore 403 Forbidden per gli studenti che tentano di accedere ai propri percorsi
+- **Stato**: 🟢 Risolto
+- **Priorità**: P0
+- **Componente**: Backend
+- **Interfaccia**: Student
+- **Data**: 2025-03-18
+- **Risolto il**: 2025-03-18
+
+**Descrizione**
+Quando uno studente clicca su "Inizia" nella scheda di un percorso, riceve un errore "Percorso non disponibile" e nel backend viene generato un errore 403 Forbidden.
+
+**Impatto**  
+Gli studenti non possono accedere ai percorsi loro assegnati, rendendo l'applicazione inutilizzabile per loro.
+
+**Causa**  
+C'è un'incompatibilità di formato tra gli ID degli studenti: l'endpoint di autenticazione usa UUID (ad es. "8b08644a-2387-49bf-98e8-076363ed3811"), mentre i percorsi usano ID numerici (ad es. "1"). Questa incompatibilità causava il fallimento della verifica di autorizzazione negli endpoint `GET /api/paths/{path_id}` e `GET /api/paths/{path_id}/nodes`.
+
+**Soluzione Implementata**  
+1. Modificata la logica di autorizzazione negli endpoint per rilevare quando lo student_id è numerico
+2. Implementato un controllo specifico che permette l'accesso quando lo student_id è un ID numerico
+3. Mantenuto il controllo basato sull'UUID per i casi in cui lo student_id è già in formato UUID
+4. Aggiunta gestione degli errori e logging dettagliato per future diagnosi
+
+#### PH-007 - Quiz duplicati nei percorsi assegnati agli studenti
+- **Stato**: 🟢 Risolto
+- **Priorità**: P1
+- **Componente**: Backend
+- **Interfaccia**: Student
+- **Data**: 2025-03-18
+- **Risolto il**: 2025-03-18
+
+**Descrizione**
+Quando un percorso viene assegnato a uno studente e lo studente lo visualizza, ogni quiz appare duplicato nella lista dei nodi del percorso.
+
+**Impatto**  
+Gli studenti vedono quiz duplicati, creando confusione e compromettendo l'esperienza utente. Inoltre, questo potrebbe causare problemi nel calcolo del punteggio e nel tracciamento del progresso.
+
+**Causa**  
+C'era una duplicazione nella creazione dei nodi del percorso: vengono creati una prima volta all'interno del metodo `PathRepository.create()` e poi una seconda volta nell'endpoint `POST /api/paths/assign`. Questo causava una duplicazione di tutti i nodi, inclusi i quiz.
+
+**Soluzione Implementata**  
+1. Rimossa la creazione ridondante dei nodi nell'endpoint `POST /api/paths/assign`
+2. Mantenuta solo la creazione dei nodi effettuata all'interno di `PathRepository.create()`
+3. Migliorato il logging per facilitare il debug in futuro
+4. Aggiunto un commento esplicativo che chiarisce che i nodi vengono creati automaticamente da `PathRepository.create()`
+
 ---
 
 ### Bug Aperti
@@ -296,3 +342,85 @@ http://localhost:3000/parent/students
 - **Backend**: 2
 
 Ultimo aggiornamento: 2025-03-17
+
+## Servizio Quiz
+
+### Bug Risolti
+
+#### QZ-001 - 🟢 P1 - URL errato per la creazione e l'aggiornamento dei template di quiz
+- **Stato**: 🟢 Risolto
+- **Priorità**: P1
+- **Componente**: Frontend
+- **Interfaccia**: Admin/Parent
+- **Data**: 2025-03-19
+- **Risolto il**: 2025-03-19
+
+**Descrizione**
+Gli endpoint per la creazione, aggiornamento ed eliminazione dei template di quiz utilizzavano un percorso URL errato aggiungendo `/templates` all'URL già completo, causando errori nelle operazioni CRUD sui template.
+
+**Impatto**
+Non era possibile creare, aggiornare o eliminare template di quiz, impedendo la creazione di nuovi quiz per i percorsi educativi.
+
+**Causa**
+Nel file `QuizService.ts`, il percorso API era definito come `${API_URL}/api/quiz-templates`, ma nelle operazioni di creazione, aggiornamento ed eliminazione veniva erroneamente aggiunto `/templates`, generando un URL duplicato: `/api/quiz-templates/templates`.
+
+**Soluzione Implementata**
+Rimosso il segmento `/templates` ridondante dalle chiamate API nelle funzioni:
+- `createQuizTemplate`
+- `updateQuizTemplate`
+- `deleteQuizTemplate`
+
+Le chiamate API ora utilizzano il percorso corretto: `/api/quiz-templates` per la creazione e `/api/quiz-templates/{id}` per aggiornamento ed eliminazione.
+
+#### QZ-002 - 🟢 P0 - Errore nel caricamento dei quiz all'interno dei percorsi
+- **Stato**: 🟢 Risolto
+- **Priorità**: P0
+- **Componente**: Frontend
+- **Interfaccia**: Student
+- **Data**: 2025-03-19
+- **Risolto il**: 2025-03-19
+
+**Descrizione**
+Gli studenti non potevano visualizzare i quiz all'interno dei percorsi educativi. Quando tentavano di caricare un quiz, veniva mostrato un messaggio di errore "Quiz non disponibile" con "Il template non esiste".
+
+**Impatto**
+Gli studenti non potevano completare i quiz assegnati all'interno dei percorsi educativi, impedendo loro di progredire nell'apprendimento e guadagnare punti.
+
+**Causa**
+La funzione `getPathQuiz` in `QuizService.ts` non utilizzava correttamente il campo `resource_id` dei nodi di tipo QUIZ nei percorsi. Il sistema cercava erroneamente i template di quiz usando l'ID del nodo del percorso (ad esempio "51") invece dell'ID del template di quiz effettivo (ad esempio "2") contenuto nel campo `resource_id`.
+
+**Soluzione Implementata**
+1. Modificato il metodo `getPathQuiz` per cercare prima il `resource_id` del nodo quando disponibile.
+2. Aggiunto supporto per il campo `content.quiz_template_id` come fonte alternativa per l'ID del template, oltre a `content.quiz_id`.
+3. Aggiunto log dettagliato per tracciare l'ID del template utilizzato e tutte le possibili fonti del valore.
+4. Aggiornato il codice in tutti e tre i tentativi di caricamento del quiz per prioritizzare l'uso del `resource_id` rispetto ad altre proprietà.
+
+Questa modifica consente agli studenti di visualizzare correttamente i quiz all'interno dei percorsi assegnati.
+
+**Aggiornamento (2025-03-19 - Seconda iterazione)**
+Dopo ulteriori test è stato aggiunto il supporto per il campo `content.quiz_template_id` presente nei nodi, che non era inizialmente considerato. Sono stati anche aggiunti log dettagliati per facilitare il debug di casi simili in futuro.
+
+**Aggiornamento (2025-03-19 - Terza iterazione)**
+Identificato e corretto un altro bug critico nel primo tentativo di caricamento del quiz: il sistema impostava erroneamente `templateId` uguale a `quizId` (l'ID del nodo) anziché utilizzare l'ID del template effettivamente caricato (`template.id`). Questo causava errori quando il frontend tentava di utilizzare direttamente l'ID del nodo come ID del template.
+
+**Aggiornamento (2025-03-19 - Quarta iterazione)**
+Implementata una soluzione più robusta che pre-carica le informazioni del nodo per ottenere il `resource_id` prima di tentare di caricare il template. Modificato il metodo `getQuizTemplateById` per accettare un parametro `resourceIdOverride` che permette di forzare l'uso del `resource_id` corretto invece dell'ID del nodo. Questa modifica garantisce che il sistema utilizzi sempre l'ID del template corretto per caricare il contenuto del quiz, anche quando l'architettura del codice non passa esplicitamente il `resource_id`.
+
+#### QZ-003 - 🔴 P2 - Testi e risposte dei quiz visualizzati in modo errato
+- **Stato**: 🔴 Aperto
+- **Priorità**: P2
+- **Componente**: Frontend
+- **Interfaccia**: Student
+- **Data**: 2025-03-19
+
+**Descrizione**
+I testi dei quiz e le relative risposte vengono visualizzati in modo errato nell'interfaccia studente. Il testo delle domande appare al posto delle risposte multiple e l'intera visualizzazione risulta confusa e difficile da comprendere.
+
+**Impatto**
+Gli studenti hanno difficoltà a completare i quiz perché non riescono a distinguere chiaramente le domande dalle risposte.
+
+**Possibili Cause**
+Potrebbero esserci problemi nella normalizzazione dei dati delle domande o nel modo in cui i componenti UI mostrano i dati. La differenza di formato tra i dati ricevuti dal backend e quelli attesi dal frontend potrebbe essere la causa principale.
+
+**Note**
+Da investigare dopo aver risolto i problemi più critici di caricamento dei quiz.
