@@ -346,8 +346,22 @@ class PathService {
         // Estrai i quiz dai nodi se disponibili
         const quizzes = [];
         if (path.nodes && Array.isArray(path.nodes)) {
+          // Use a Set to track unique quiz IDs
+          const processedQuizIds = new Set<string>();
+          
           for (const node of path.nodes) {
             if (node.node_type === 'quiz' || node.content?.quiz_id) {
+              // Determine the actual quiz ID to use for deduplication
+              const quizId = node.content?.quiz_id || node.id.toString();
+              
+              // Skip if we've already processed this quiz
+              if (processedQuizIds.has(quizId)) {
+                continue;
+              }
+              
+              // Mark as processed
+              processedQuizIds.add(quizId);
+              
               // Converti lo stato del nodo al formato richiesto dall'interfaccia Path
               let quizStatus: 'da_iniziare' | 'in_corso' | 'completato' = 'da_iniziare';
               if (node.status) {
@@ -360,7 +374,7 @@ class PathService {
               }
               
               quizzes.push({
-                quizId: node.content?.quiz_id || node.id.toString(),
+                quizId: quizId,
                 title: node.title || node.content?.title || 'Quiz senza titolo',
                 status: quizStatus,
                 score: node.score !== undefined ? node.score : undefined,
@@ -534,74 +548,200 @@ class PathService {
    */
   public async getPathDetail(pathId: string): Promise<any> {
     try {
-      console.log(`Richiesta dettagli percorso per ID: ${pathId}`);
+      console.log(`[DEBUG-PathService] Starting getPathDetail for path ID: ${pathId}`);
+      
+      let path: any = null;
+      let accessDenied = false;
       
       // Prima proviamo l'endpoint principale del path
-      const response = await this.api.get(`/${pathId}`);
-      console.log('Risposta API percorso:', response);
-      console.log('Dettagli percorso recuperati:', response.data);
+      try {
+        const response = await this.api.get(`/${pathId}`);
+        console.log('[DEBUG-PathService] Path API response:', response.data);
+        path = response.data;
+      } catch (pathError: any) {
+        console.warn('[DEBUG-PathService] Error fetching path details:', pathError.response?.status);
+        
+        // Se otteniamo un 403, significa che non abbiamo accesso diretto al percorso
+        // ma potremmo comunque avere accesso ai nodi
+        if (pathError.response?.status === 403) {
+          console.log('[DEBUG-PathService] Access forbidden to path details, but we might have access to nodes');
+          accessDenied = true;
+          
+          // Creiamo un oggetto path minimo che verrà completato più avanti
+          path = {
+            id: pathId,
+            title: 'Percorso',
+            description: 'Dettagli non disponibili',
+            subject: 'Non disponibile',
+            difficulty_level: 2,
+            status: 'in_corso',
+            completion_percentage: 0
+          };
+        } else {
+          // Per altri errori, rilanciamo per essere gestiti dal catch esterno
+          throw pathError;
+        }
+      }
       
-      // Trasformiamo i dati nel formato atteso dal frontend
-      const path = response.data;
-      
+      // A questo punto abbiamo un path (o reale o minimo)
       // Ottieni i nodi del percorso (che dovrebbero includere i quiz)
       let quizzes = [];
       
       try {
         // Proviamo a recuperare i nodi del percorso dall'endpoint specifico
+        console.log(`[DEBUG-PathService] Calling GET ${API_URL}/api/paths/${pathId}/nodes`);
         const nodesResponse = await ApiService.get(`${API_URL}/api/paths/${pathId}/nodes`);
-        console.log('Nodi del percorso recuperati:', nodesResponse);
+        console.log('[DEBUG-PathService] Nodes response type:', typeof nodesResponse, 'isArray:', Array.isArray(nodesResponse));
         
         if (Array.isArray(nodesResponse)) {
-          // Filtriamo solo i nodi di tipo quiz
-          const quizNodes = nodesResponse.filter((node: any) => 
-            node.node_type === 'quiz' || 
-            (node.content && node.content.quiz_id)
-          );
+          console.log(`[DEBUG-PathService] Found ${nodesResponse.length} nodes in path`);
           
-          quizzes = quizNodes.map((node: any) => ({
-            id: node.id || node.content?.quiz_id,
-            title: node.title || node.content?.title || 'Quiz senza titolo',
-            description: node.description || 'Nessuna descrizione disponibile',
-            status: this.mapQuizStatus(node.status),
-            completedAt: node.completed_at,
-            pointsAwarded: node.points_awarded || node.points || 0
-          }));
+          // Se avevamo access denied, possiamo estrarre alcuni dettagli del percorso dai nodi
+          if (accessDenied && nodesResponse.length > 0) {
+            // Cerchiamo il primo nodo con un titolo decente
+            const nodeWithTitle = nodesResponse.find(node => node.title && node.title.length > 3);
+            if (nodeWithTitle) {
+              path.title = `Percorso: ${nodeWithTitle.title.split(':')[0]}`;
+            }
+            
+            // Calcoliamo la percentuale di completamento in base ai nodi completati
+            const completedNodes = nodesResponse.filter(node => 
+              node.status?.toLowerCase().includes('complet')
+            ).length;
+            path.completion_percentage = Math.round((completedNodes / nodesResponse.length) * 100);
+          }
           
-          console.log('Quiz trasformati dai nodi:', quizzes);
+          // Print full debug of all nodes with their details
+          nodesResponse.forEach((node, index) => {
+            console.log(`[DEBUG-PathService] Node #${index+1}:`, {
+              id: node.id,
+              type: node.node_type,
+              title: node.title,
+              hasContent: !!node.content,
+              contentKeys: node.content ? Object.keys(node.content) : [],
+              quizId: node.content?.quiz_id
+            });
+          });
+          
+          // Extract only quiz nodes that have an associated quiz
+          const validQuizNodes = nodesResponse.filter(node => {
+            const isValid = (node.node_type === 'quiz' && node.content?.quiz_id) || 
+                     (node.content && node.content.quiz_id);
+                     
+            if (isValid) {
+              console.log(`[DEBUG-PathService] Found valid quiz node:`, {
+                id: node.id,
+                type: node.node_type,
+                quizId: node.content?.quiz_id
+              });
+            }
+            
+            return isValid;
+          });
+          
+          console.log('[DEBUG-PathService] Valid quiz nodes found:', validQuizNodes.length);
+          
+          if (validQuizNodes.length === 0) {
+            // If no valid nodes found, check all nodes for any quiz-related data
+            console.log('[DEBUG-PathService] No valid quiz nodes found, checking all nodes for quiz data');
+            
+            // Try to find any quiz-like nodes
+            const potentialQuizNodes = nodesResponse.filter(node => 
+              node.node_type === 'quiz' || 
+              node.title?.toLowerCase().includes('quiz') ||
+              node.description?.toLowerCase().includes('quiz')
+            );
+            
+            if (potentialQuizNodes.length > 0) {
+              console.log(`[DEBUG-PathService] Found ${potentialQuizNodes.length} potential quiz nodes`);
+              
+              // Create quiz objects from these nodes even if they don't have quiz_id
+              validQuizNodes.push(...potentialQuizNodes);
+            }
+          }
+          
+          // Create a Map to deduplicate quizzes properly
+          // We'll track both template IDs and node IDs to ensure we don't add duplicates
+          const processedTemplateIds = new Set<string>();
+          const processedNodeIds = new Set<string>();
+          const deduplicatedQuizzes: any[] = [];
+          
+          console.log('[DEBUG-PathService] Starting quiz deduplication with', validQuizNodes.length, 'nodes');
+          
+          // Create quiz objects for display, with deduplication
+          for (const node of validQuizNodes) {
+            // Get both IDs for tracking
+            const nodeId = node.id?.toString();
+            const templateId = node.content?.quiz_id?.toString();
+            
+            // For deduplication, skip if we've seen this node or template before
+            if (nodeId && processedNodeIds.has(nodeId)) {
+              console.log(`[DEBUG-PathService] Skipping duplicate node ID ${nodeId}`);
+              continue;
+            }
+            
+            if (templateId && processedTemplateIds.has(templateId)) {
+              console.log(`[DEBUG-PathService] Skipping duplicate template ID ${templateId}`);
+              continue;
+            }
+            
+            // Track that we've processed this node/template
+            if (nodeId) processedNodeIds.add(nodeId);
+            if (templateId) processedTemplateIds.add(templateId);
+            
+            // Create a quiz object for this node regardless of whether template exists
+            const quizObj = {
+              id: nodeId,
+              templateId: templateId || nodeId,
+              title: node.title || node.content?.title || 'Quiz senza titolo',
+              description: node.description || node.content?.description || 'Nessuna descrizione disponibile',
+              status: this.mapQuizStatus(node.status),
+              completedAt: node.completed_at,
+              pointsAwarded: node.points_awarded || node.points || 0
+            };
+            
+            // Add this quiz to our deduplicated list
+            console.log(`[DEBUG-PathService] Added unique quiz with nodeId=${nodeId}, templateId=${templateId}`);
+            deduplicatedQuizzes.push(quizObj);
+          }
+          
+          // Replace the quizzes array with our deduplicated version
+          quizzes = deduplicatedQuizzes;
+          
+          console.log('[DEBUG-PathService] Final quizzes after deduplication:', quizzes.length);
+        } else {
+          console.error('[DEBUG-PathService] Nodes response is not an array:', nodesResponse);
         }
       } catch (nodeError) {
-        console.warn('Errore nel recupero dei nodi del percorso, provo un modo alternativo:', nodeError);
+        console.warn('[DEBUG-PathService] Error fetching path nodes:', nodeError);
         
         // Se non riusciamo a ottenere i nodi, proviamo a usare i quiz dal percorso stesso
         if (path.quizzes && Array.isArray(path.quizzes)) {
+          console.log('[DEBUG-PathService] Using quizzes from path object:', path.quizzes.length);
           quizzes = path.quizzes.map((quiz: any) => ({
             id: quiz.id,
+            templateId: quiz.quiz_id || quiz.template_id || quiz.id,
             title: quiz.title || 'Quiz senza titolo',
             description: quiz.description || 'Nessuna descrizione disponibile',
             status: this.mapQuizStatus(quiz.status),
             completedAt: quiz.completed_at,
             pointsAwarded: quiz.points_awarded || 0
           }));
-          
-          console.log('Quiz trasformati dal campo quizzes del percorso:', quizzes);
         } else {
-          console.warn('Nessun quiz trovato nel percorso:', path);
-          
-          // Se non abbiamo quiz, aggiungiamo un quiz di esempio per test
-          quizzes = [{
-            id: '1',
-            title: 'Quiz di esempio',
-            description: 'Questo è un quiz di esempio per testare l\'interfaccia',
-            status: 'available',
-            pointsAwarded: 10
-          }];
-          
-          NotificationsService.warning(
-            'Non sono stati trovati quiz associati a questo percorso. Contatta l\'amministratore.',
-            'Attenzione'
-          );
+          console.warn('[DEBUG-PathService] No quizzes found in path object');
         }
+      }
+      
+      // If we didn't find any quizzes, create a test quiz
+      if (quizzes.length === 0) {
+        console.log('[DEBUG-PathService] No quizzes found, creating a test quiz');
+        quizzes = [{
+          id: 'test-quiz-1',
+          templateId: 'test-template-1',
+          title: 'Quiz di esempio',
+          description: 'Questo è un quiz di esempio creato automaticamente perché non ne sono stati trovati altri.',
+          status: 'available'
+        }];
       }
       
       // Ritorna l'oggetto completo con tutti i dettagli necessari
@@ -616,10 +756,10 @@ class PathService {
         quizzes: quizzes
       };
       
-      console.log('Dettaglio percorso finale:', pathDetail);
+      console.log('[DEBUG-PathService] Final path detail object:', pathDetail);
       return pathDetail;
     } catch (error) {
-      console.error('Errore nel recupero dei dettagli del percorso:', error);
+      console.error('[DEBUG-PathService] Error in getPathDetail:', error);
       NotificationsService.error(
         'Non è stato possibile caricare i dettagli del percorso',
         'Errore'
@@ -634,7 +774,13 @@ class PathService {
         subject: 'Non disponibile',
         difficulty: 'medio',
         status: 'non_iniziato',
-        quizzes: []
+        quizzes: [{
+          id: 'error-quiz',
+          templateId: 'error-template',
+          title: 'Quiz di debug',
+          description: 'Questo quiz è stato creato automaticamente a causa di un errore.',
+          status: 'available'
+        }]
       };
     }
   }
@@ -687,8 +833,7 @@ class PathService {
       // Forzare un invalidamento della cache per questo studente
       this.clearPathCache(studentId);
       
-      // Invia un evento personalizzato che può essere intercettato da qualsiasi componente
-      // Questo evita dipendenze circolari e problemi di importazione
+      // Emetti l'evento a livello di window per assicurarsi che sia visibile in tutta l'applicazione
       const event = new CustomEvent('student-data-updated', { 
         detail: { 
           studentId,

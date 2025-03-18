@@ -37,142 +37,139 @@ console.log('API URL utilizzato:', API_URL);
  */
 class ApiService {
   private api: AxiosInstance;
-  private errorHandler: ApiErrorHandler;
 
   constructor() {
+    // Get the API URL from environment variables or use a default
+    const baseURL = getApiUrl();
+    
+    console.log('[DEBUG ApiService] Creating API service with base URL:', baseURL);
+    
+    // Create an Axios instance with default config
     this.api = axios.create({
-      baseURL: API_URL,
+      baseURL,
+      timeout: 30000, // 30 seconds
       headers: {
         'Content-Type': 'application/json',
       },
     });
-
-    // Configura l'handler degli errori
-    this.errorHandler = new ApiErrorHandler({
-      onError: (error) => {
-        console.error('Errore API:', error);
-        // Implementare qui eventuali notifiche UI globali per errori
-      },
-      timeout: 15000, // 15 secondi
-      maxRetries: 2,
-      retryStatusCodes: [408, 429, 500, 502, 503, 504]
-    });
-
-    // Configura gli interceptor
+    
+    // Set up interceptors for authentication
     this.setupInterceptors();
   }
 
+  /**
+   * Setup interceptors for adding auth token and handling errors
+   */
   private setupInterceptors(): void {
     // Interceptor per aggiungere il token di autenticazione
     this.api.interceptors.request.use(
       (config) => {
-        // Otteniamo il token direttamente dal localStorage
-        const token = localStorage.getItem('accessToken');
+        // Try different token keys for backward compatibility
+        const token = localStorage.getItem('authToken') || localStorage.getItem('accessToken');
+        
+        // Se il token esiste, aggiungilo agli header
         if (token) {
-          // Usiamo formato Bearer standard di OAuth2
-          config.headers['Authorization'] = `Bearer ${token}`;
-          
-          // Per debugging
-          console.log(`[OAuth2 Debug] Aggiunto token di autenticazione alla richiesta: ${config.url}`);
+          config.headers.Authorization = `Bearer ${token}`;
+          console.log(`[DEBUG ApiService] Adding auth token to request: ${config.method?.toUpperCase()} ${config.url}`);
         } else {
-          console.log(`[OAuth2 Debug] Richiesta senza token: ${config.url}`);
+          console.warn(`[DEBUG ApiService] No auth token found for request: ${config.method?.toUpperCase()} ${config.url}`);
         }
+        
         return config;
       },
       (error) => {
+        console.error('[DEBUG ApiService] Request interceptor error:', error);
         return Promise.reject(error);
       }
     );
 
-    // Interceptor per gestire gli errori di autenticazione, refresh token e filtrare errori 404
+    // Interceptor per gestire le risposte e gli errori
     this.api.interceptors.response.use(
       (response) => response,
       async (error) => {
         const originalRequest = error.config;
         
-        // Filtriamo preventivamente gli errori 404 per alcuni endpoint
-        if (error.response?.status === 404) {
-          const url = originalRequest.url || '';
-          
-          // Lista di pattern URL per cui ignorare silenziosamente errori 404
-          const silentlyIgnorePatterns = [
-            '/api/rewards', 
-            '/reward/',
-            '/rewards/',
-            '/parent/',
-            '/points'
-          ];
-          
-          // Escludiamo esplicitamente gli endpoint importanti
-          // Nota: rimuoviamo '/api/templates' e '/template' dalla lista di ignore
-          // perché bloccava la richiesta dei nodi di template
-          const excludePatterns = [
-            '/quiz/templates',
-            '/api/quiz/templates',
-            '/api/path-templates',  // Escludiamo esplicitamente gli endpoint dei path templates
-            '/nodes'               // Escludiamo esplicitamente gli endpoint dei nodi
-          ];
-          
-          // Verifica se l'URL contiene uno dei pattern da ignorare silenziosamente
-          // e non contiene pattern che vogliamo esplicitamente non ignorare
-          const containsIgnorePattern = silentlyIgnorePatterns.some(pattern => url.includes(pattern));
-          const containsExcludePattern = excludePatterns.some(pattern => url.includes(pattern));
-          
-          const shouldIgnore = containsIgnorePattern && !containsExcludePattern;
-          
-          // Log di debug per capire cosa sta succedendo con l'endpoint
-          if (url.includes('/quiz') || url.includes('/templates')) {
-            console.log(`[ApiService] URL: ${url} - shouldIgnore: ${shouldIgnore}`);
-          }
-          
-          if (shouldIgnore) {
-            console.log(`[ApiService] Errore 404 ignorato silenziosamente per: ${url}`);
-            
-            // Per GET restituiamo array vuoto o null
-            if (originalRequest.method === 'get') {
-              return Promise.resolve({ data: originalRequest.url.includes('stats') ? {} : [] });
-            }
-            
-            // Per altre richieste, restituiamo un oggetto vuoto
-            return Promise.resolve({ data: {} });
-          }
-        }
+        console.log(`[DEBUG ApiService] Response error:`, {
+          status: error.response?.status,
+          url: originalRequest?.url,
+          method: originalRequest?.method?.toUpperCase(),
+          errorMessage: error.message
+        });
         
-        // Se l'errore è 401 (Unauthorized) e non è già un retry
-        if (error.response?.status === 401 && !originalRequest._retry) {
-          originalRequest._retry = true;
+        // Gestisci errori di autenticazione
+        if (error.response?.status === 401 && !originalRequest?._retry) {
+          console.log('[DEBUG ApiService] Received 401 error, attempting token refresh');
+          
+          // Try refreshing token
           try {
-            // Tenta di refreshare il token
-            const refreshToken = localStorage.getItem('refreshToken');
-            if (!refreshToken) {
-              // Nessun refresh token disponibile, richiede login
-              await AuthService.logout();
+            // Mark request as retry to avoid infinite loop
+            originalRequest._retry = true;
+            
+            // Attempt to refresh the token
+            const token = await this.refreshToken();
+            
+            if (token) {
+              // Update the original request with the new token
+              originalRequest.headers.Authorization = `Bearer ${token}`;
+              console.log('[DEBUG ApiService] Token refreshed, retrying request');
+              return this.api(originalRequest);
+            } else {
+              // If token refresh fails, let user know they need to login again
+              console.error('[DEBUG ApiService] Token refresh failed');
+              window.location.href = '/login';
               return Promise.reject(error);
             }
-            
-            // Utilizziamo il metodo pubblico refreshTokens del AuthService
-            const tokens = await AuthService.refreshTokens(refreshToken);
-            
-            // Salviamo i nuovi token nel localStorage
-            localStorage.setItem('accessToken', tokens.accessToken);
-            localStorage.setItem('refreshToken', tokens.refreshToken);
-            
-            // Riprova la richiesta originale con il nuovo token
-            originalRequest.headers['Authorization'] = `Bearer ${tokens.accessToken}`;
-            return this.api(originalRequest);
           } catch (refreshError) {
-            // Se il refresh fallisce, logout
-            await AuthService.logout();
-            return Promise.reject(refreshError);
+            console.error('[DEBUG ApiService] Error refreshing token:', refreshError);
+            // Redirect to login
+            window.location.href = '/login';
+            return Promise.reject(error);
           }
         }
         
+        // Return the error for other cases
         return Promise.reject(error);
       }
     );
+  }
 
-    // Configura gli interceptor di gestione errori
-    this.errorHandler.setupAxiosInterceptors(this.api);
+  /**
+   * Attempt to refresh the authentication token
+   * @returns A new valid token or null if refresh failed
+   */
+  private async refreshToken(): Promise<string | null> {
+    console.log('[DEBUG ApiService] Attempting to refresh token');
+    try {
+      // Get refresh token from localStorage
+      const refreshToken = localStorage.getItem('refreshToken');
+      
+      if (!refreshToken) {
+        console.error('[DEBUG ApiService] No refresh token available');
+        return null;
+      }
+      
+      // Make request to refresh token endpoint
+      const response = await axios.post(`${this.api.defaults.baseURL}/api/auth/refresh-token`, {
+        refreshToken
+      });
+      
+      if (response.data && response.data.accessToken) {
+        // Store new tokens in localStorage
+        localStorage.setItem('authToken', response.data.accessToken);
+        
+        if (response.data.refreshToken) {
+          localStorage.setItem('refreshToken', response.data.refreshToken);
+        }
+        
+        console.log('[DEBUG ApiService] Token refresh successful');
+        return response.data.accessToken;
+      }
+      
+      return null;
+    } catch (error) {
+      console.error('[DEBUG ApiService] Error in refreshToken:', error);
+      return null;
+    }
   }
 
   /**
@@ -217,3 +214,138 @@ class ApiService {
 
 // Esporta una singola istanza del servizio
 export default new ApiService();
+
+// Expose the ApiService class for static method access
+export class ApiServiceClass {
+  /**
+   * Diagnostic function to check API connectivity and authentication status
+   * @param pathId Optional path ID to check access to specific path
+   */
+  public static async checkApiAccess(pathId?: string): Promise<any> {
+    console.log('[DEBUG ApiService] Running API access diagnostic');
+    
+    try {
+      // Check auth token
+      const accessToken = localStorage.getItem('accessToken');
+      const authToken = localStorage.getItem('authToken');
+      
+      console.log('[DEBUG ApiService] Auth tokens available:', {
+        accessToken: accessToken ? '✓ Present' : '✗ Missing',
+        authToken: authToken ? '✓ Present' : '✗ Missing',
+        tokenToUse: accessToken || authToken || 'NONE'
+      });
+      
+      // Test API basic connectivity
+      const apiInstance = new ApiService();
+      
+      // Test a simple endpoint first
+      try {
+        const testResult = await apiInstance.get('/api/health');
+        console.log('[DEBUG ApiService] Basic API connectivity: ✓ SUCCESS');
+        console.log('[DEBUG ApiService] Response:', testResult);
+      } catch (e: any) {
+        console.error('[DEBUG ApiService] Basic API connectivity: ✗ FAILED');
+        console.error(e);
+      }
+      
+      // Test paths API if pathId provided
+      if (pathId) {
+        try {
+          const pathResult = await apiInstance.get(`/api/paths/${pathId}`);
+          console.log(`[DEBUG ApiService] Path ${pathId} access: ✓ SUCCESS`);
+          console.log('[DEBUG ApiService] Path data:', pathResult);
+          
+          // Try to get nodes
+          try {
+            const nodesResult = await apiInstance.get(`/api/paths/${pathId}/nodes`);
+            if (!Array.isArray(nodesResult)) {
+              console.error(`[DEBUG ApiService] Path ${pathId} nodes response format is invalid:`, nodesResult);
+              return {
+                success: false,
+                message: 'Path nodes response format is invalid',
+                data: nodesResult
+              };
+            }
+            
+            console.log(`[DEBUG ApiService] Path ${pathId} nodes access: ✓ SUCCESS`);
+            console.log(`[DEBUG ApiService] Found ${nodesResult.length} nodes in path`);
+            
+            // Log all nodes with basic info for debugging
+            nodesResult.forEach((node, index) => {
+              console.log(`[DEBUG ApiService] Node #${index+1}:`, {
+                id: node.id,
+                type: node.node_type,
+                title: node.title || 'No title',
+                hasContent: Boolean(node.content),
+                contentKeys: node.content ? Object.keys(node.content) : [],
+                contentQuizId: node.content?.quiz_id,
+              });
+            });
+            
+            // Check for quiz nodes
+            const quizNodes = nodesResult.filter(node => 
+              node.node_type === 'quiz' || node.content?.quiz_id
+            );
+            
+            console.log(`[DEBUG ApiService] Quiz nodes found: ${quizNodes.length}`);
+            
+            if (quizNodes.length > 0) {
+              // Print all quiz nodes
+              quizNodes.forEach((node, index) => {
+                console.log(`[DEBUG ApiService] Quiz node #${index+1}:`, {
+                  id: node.id,
+                  title: node.title || 'No title',
+                  quizId: node.content?.quiz_id || 'Missing quiz_id'
+                });
+              });
+              
+              // Try to load a quiz template for the first node with valid content.quiz_id
+              const nodeWithQuizId = quizNodes.find(node => node.content?.quiz_id);
+              
+              if (nodeWithQuizId) {
+                const quizId = nodeWithQuizId.content.quiz_id;
+                console.log(`[DEBUG ApiService] Testing quiz template access with ID: ${quizId}`);
+                
+                try {
+                  const quizResult = await apiInstance.get(`/api/quiz-templates/${quizId}`);
+                  console.log(`[DEBUG ApiService] Quiz template ${quizId} access: ✓ SUCCESS`);
+                  console.log('[DEBUG ApiService] Quiz template data:', quizResult);
+                } catch (e: any) {
+                  console.error(`[DEBUG ApiService] Quiz template ${quizId} access: ✗ FAILED`);
+                  console.error(`Error type: ${e.name}, message: ${e.message}`);
+                  
+                  // Check if quiz ID exists in response
+                  if (e.response && e.response.status === 404) {
+                    console.error(`[DEBUG ApiService] Quiz template with ID ${quizId} does not exist (404)`);
+                    console.log("[DEBUG ApiService] This suggests the quiz_id in the node doesn't match any real quiz template.");
+                  }
+                }
+              } else {
+                console.warn('[DEBUG ApiService] Found quiz nodes but none have a content.quiz_id property');
+              }
+            } else {
+              console.warn('[DEBUG ApiService] No quiz nodes found in path');
+            }
+          } catch (e: any) {
+            console.error(`[DEBUG ApiService] Path ${pathId} nodes access: ✗ FAILED`);
+            console.error(`Error type: ${e.name}, message: ${e.message}`);
+          }
+        } catch (e: any) {
+          console.error(`[DEBUG ApiService] Path ${pathId} access: ✗ FAILED`);
+          console.error(`Error type: ${e.name}, message: ${e.message}`);
+        }
+      }
+      
+      return {
+        success: true,
+        message: 'API diagnostic complete'
+      };
+    } catch (e: any) {
+      console.error('[DEBUG ApiService] API diagnostic failed:', e);
+      return {
+        success: false,
+        error: e
+      };
+    }
+  }
+}

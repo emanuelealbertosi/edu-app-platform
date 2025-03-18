@@ -8,14 +8,7 @@ import {
   CardContent,
   CardActions,
   Button,
-  LinearProgress,
   Chip,
-  Divider,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  CircularProgress,
   Paper,
 } from '@mui/material';
 import AssignmentIcon from '@mui/icons-material/Assignment';
@@ -25,8 +18,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import MainLayout from '../../components/layout/MainLayout';
 import PathService from '../../services/PathService';
 import { NotificationsService } from '../../services/NotificationsService';
-
-// Importazione componenti di animazione
+import ApiService from '../../services/ApiService';
 import { 
   FadeIn, 
   SlideInUp, 
@@ -39,8 +31,12 @@ import {
 } from '../../components/animations/LoadingAnimations';
 import { AnimatedPage } from '../../components/animations/PageTransitions';
 
+// API URL
+const API_URL = 'http://localhost:8001';
+
 interface Quiz {
   id: string;
+  templateId?: string;
   title: string;
   description: string;
   status: 'locked' | 'available' | 'completed';
@@ -73,10 +69,125 @@ const PathDetail: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        const response = await PathService.getPathDetail(pathId);
+        console.log(`[DEBUG PathDetail] Fetching path details for ID: ${pathId}`);
+        
+        // Tenta di ottenere i dettagli del percorso
+        let response;
+        try {
+          response = await PathService.getPathDetail(pathId);
+          console.log(`[DEBUG PathDetail] Raw response from PathService:`, response);
+        } catch (err) {
+          console.error('[DEBUG PathDetail] Error from PathService:', err);
+          
+          // Se c'è un errore, creiamo un oggetto percorso minimo per evitare crash
+          const defaultResponse: PathDetail = {
+            id: pathId,
+            title: 'Percorso (dettagli non disponibili)',
+            description: 'Non è stato possibile caricare i dettagli completi del percorso, ma puoi comunque visualizzare i quiz disponibili.',
+            progress: 0,
+            subject: 'Non disponibile',
+            difficulty: 'medio',
+            status: 'non_iniziato',
+            quizzes: []
+          };
+          
+          response = defaultResponse;
+          
+          // Tentiamo comunque di caricare i quiz dai nodi
+          try {
+            console.log('[DEBUG PathDetail] Attempting to fetch only nodes for quiz data');
+            const nodesResponse = await ApiService.get(`${API_URL}/api/paths/${pathId}/nodes`);
+            
+            if (Array.isArray(nodesResponse) && nodesResponse.length > 0) {
+              console.log(`[DEBUG PathDetail] Successfully retrieved ${nodesResponse.length} nodes`);
+              
+              // Estrai i nodi quiz
+              const quizNodes = nodesResponse.filter(node => 
+                node.node_type === 'quiz' || 
+                node.content?.quiz_id ||
+                node.title?.toLowerCase().includes('quiz')
+              );
+              
+              console.log(`[DEBUG PathDetail] Found ${quizNodes.length} potential quiz nodes`);
+              
+              // Converti in formato Quiz
+              if (quizNodes.length > 0) {
+                const mappedQuizzes = quizNodes.map(node => ({
+                  id: node.id?.toString() || '',
+                  templateId: node.content?.quiz_id?.toString() || node.id?.toString() || '',
+                  title: node.title || 'Quiz senza titolo',
+                  description: node.description || 'Nessuna descrizione disponibile',
+                  status: node.status?.toLowerCase().includes('complet') ? 'completed' :
+                          node.status?.toLowerCase().includes('lock') ? 'locked' : 'available'
+                } as Quiz));
+                
+                response.quizzes = mappedQuizzes;
+              }
+            }
+          } catch (nodesError) {
+            console.error('[DEBUG PathDetail] Failed to retrieve nodes as fallback:', nodesError);
+            // Se anche il caricamento dei nodi fallisce, mostriamo l'errore originale
+            throw err;
+          }
+        }
+        
+        // Check if quizzes array exists
+        if (!response || !response.quizzes) {
+          console.error(`[DEBUG PathDetail] Response missing quizzes array:`, response);
+          // Create dummy quizzes for testing
+          response.quizzes = [{
+            id: 'test1',
+            templateId: 'test1',
+            title: 'Test Quiz 1',
+            description: 'This is a test quiz for debugging',
+            status: 'available'
+          }];
+          console.log(`[DEBUG PathDetail] Added test quiz to response`);
+        } else {
+          console.log(`[DEBUG PathDetail] Quizzes found in response: ${response.quizzes.length}`);
+        }
+        
+        // Deduplicate quizzes before setting state
+        if (response && response.quizzes && Array.isArray(response.quizzes)) {
+          console.log(`[DEBUG PathDetail] Deduplicating quizzes: ${response.quizzes.length} quizzes found`);
+          
+          // Create a unique lookup based on both node ID and template ID
+          const processedTemplateIds = new Set<string>();
+          const processedNodeIds = new Set<string>();
+          const uniqueQuizzes: Quiz[] = [];
+          
+          for (const quiz of response.quizzes) {
+            console.log(`[DEBUG PathDetail] Processing quiz: nodeId=${quiz.id}, templateId=${quiz.templateId || 'none'}`);
+            
+            // Skip if we've already seen this node or template
+            if (quiz.id && processedNodeIds.has(quiz.id)) {
+              console.log(`[DEBUG PathDetail] Skipping quiz with duplicate node ID: ${quiz.id}`);
+              continue;
+            }
+            
+            if (quiz.templateId && processedTemplateIds.has(quiz.templateId)) {
+              console.log(`[DEBUG PathDetail] Skipping quiz with duplicate template ID: ${quiz.templateId}`);
+              continue;
+            }
+            
+            // Track that we've processed this ID
+            if (quiz.id) processedNodeIds.add(quiz.id);
+            if (quiz.templateId) processedTemplateIds.add(quiz.templateId);
+            
+            // Add to our unique quizzes list
+            uniqueQuizzes.push(quiz);
+            console.log(`[DEBUG PathDetail] Added unique quiz: ${quiz.title}`);
+          }
+          
+          // Replace the quizzes array with our deduplicated version
+          response.quizzes = uniqueQuizzes;
+          
+          console.log(`[DEBUG PathDetail] Final quiz count after deduplication: ${response.quizzes.length}`);
+        }
+        
         setPath(response);
       } catch (err) {
-        console.error('Errore durante il recupero dei dettagli del percorso:', err);
+        console.error('[DEBUG PathDetail] Error fetching path details:', err);
         setError('Si è verificato un errore durante il caricamento dei dettagli del percorso. Riprova più tardi.');
         NotificationsService.error('Errore di caricamento', 'Non è stato possibile caricare i dettagli del percorso');
       } finally {
@@ -126,10 +237,47 @@ const PathDetail: React.FC = () => {
     }
   };
 
-  const handleStartQuiz = (quizId: string) => {
+  const handleStartQuiz = (quizId: string, quizTemplateId?: string) => {
     if (!pathId) return;
-    console.log(`Navigazione al quiz ${quizId} nel percorso ${pathId}`);
-    navigate(`/student/path/${pathId}/quiz/${quizId}`);
+
+    // Clear preference order for IDs to use:
+    // 1. Template ID is preferred as it directly points to the questions
+    // 2. Node ID as fallback
+    const idToUse = quizTemplateId || quizId;
+    
+    // Add detailed logging for debugging
+    console.log(`[DEBUG PathDetail] Starting quiz with:`, {
+      pathId,
+      nodeId: quizId,
+      templateId: quizTemplateId,
+      usingId: idToUse
+    });
+    
+    // Always navigate to the chosen ID
+    navigate(`/student/path/${pathId}/quiz/${idToUse}`);
+  };
+
+  // Add function to run API diagnostic
+  const runApiDiagnostic = async () => {
+    console.log(`[DEBUG] Running API diagnostic for path ${pathId}`);
+    try {
+      // Chiamare il metodo di diagnostica
+      const result = await ApiService.get(`${API_URL}/api/debug/verify-token`);
+      console.log('[DEBUG] API diagnostic result:', result);
+      
+      // Tenta di recuperare direttamente i nodi del percorso
+      try {
+        const nodes = await ApiService.get(`${API_URL}/api/paths/${pathId}/nodes`);
+        console.log(`[DEBUG] Path nodes (${nodes.length}):`, nodes);
+      } catch (nodesError) {
+        console.error('[DEBUG] Failed to get path nodes:', nodesError);
+      }
+      
+      NotificationsService.success('API diagnostic completed. Check console for details.', 'Diagnostic');
+    } catch (err) {
+      console.error('[DEBUG] API diagnostic error:', err);
+      NotificationsService.error('API diagnostic failed', 'Error');
+    }
   };
 
   if (loading) {
@@ -224,56 +372,89 @@ const PathDetail: React.FC = () => {
           </Typography>
 
           <Grid container spacing={3}>
-            {path.quizzes.map((quiz, index) => (
-              <Grid item xs={12} md={6} key={quiz.id}>
-                <HoverAnimation delay={index * 0.1}>
-                  <Card 
-                    elevation={3} 
-                    sx={{ 
-                      height: '100%', 
-                      display: 'flex', 
-                      flexDirection: 'column',
-                      opacity: quiz.status === 'locked' ? 0.7 : 1
-                    }}
-                  >
-                    <CardContent sx={{ flexGrow: 1 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                        <Typography variant="h6" component="h2">
-                          {quiz.title}
-                        </Typography>
-                        {getQuizStatusIcon(quiz.status)}
-                      </Box>
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                        {quiz.description}
-                      </Typography>
-                      
-                      {quiz.status === 'completed' && (
-                        <Box sx={{ mt: 2, p: 1, bgcolor: 'success.light', borderRadius: 1 }}>
-                          <Typography variant="body2">
-                            Completato il: {new Date(quiz.completedAt!).toLocaleDateString()}
+            {path.quizzes && path.quizzes.length > 0 ? (
+              path.quizzes.map((quiz, index) => (
+                <Grid item xs={12} md={6} key={quiz.id}>
+                  <HoverAnimation delay={index * 0.1}>
+                    <Card 
+                      elevation={3} 
+                      sx={{ 
+                        height: '100%', 
+                        display: 'flex', 
+                        flexDirection: 'column',
+                        opacity: quiz.status === 'locked' ? 0.7 : 1
+                      }}
+                    >
+                      <CardContent sx={{ flexGrow: 1 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                          <Typography variant="h6" component="h2">
+                            {quiz.title}
                           </Typography>
-                          <Typography variant="body2">
-                            Punti guadagnati: {quiz.pointsAwarded}
-                          </Typography>
+                          {getQuizStatusIcon(quiz.status)}
                         </Box>
-                      )}
-                    </CardContent>
-                    <CardActions sx={{ p: 2 }}>
-                      <Button 
-                        variant={quiz.status === 'completed' ? 'outlined' : 'contained'} 
-                        fullWidth
-                        size="large"
-                        disabled={quiz.status === 'locked'}
-                        onClick={() => handleStartQuiz(quiz.id)}
-                      >
-                        {quiz.status === 'completed' ? 'Rivedi' : quiz.status === 'locked' ? 'Bloccato' : 'Inizia quiz'}
-                      </Button>
-                    </CardActions>
-                  </Card>
-                </HoverAnimation>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                          {quiz.description}
+                        </Typography>
+                        
+                        {quiz.status === 'completed' && (
+                          <Box sx={{ mt: 2, p: 1, bgcolor: 'success.light', borderRadius: 1 }}>
+                            <Typography variant="body2">
+                              Completato il: {new Date(quiz.completedAt!).toLocaleDateString()}
+                            </Typography>
+                            <Typography variant="body2">
+                              Punti guadagnati: {quiz.pointsAwarded}
+                            </Typography>
+                          </Box>
+                        )}
+                      </CardContent>
+                      <CardActions sx={{ p: 2 }}>
+                        <Button 
+                          variant={quiz.status === 'completed' ? 'outlined' : 'contained'} 
+                          fullWidth
+                          size="large"
+                          disabled={quiz.status === 'locked'}
+                          onClick={() => handleStartQuiz(quiz.id, quiz.templateId)}
+                        >
+                          {quiz.status === 'completed' ? 'Rivedi' : quiz.status === 'locked' ? 'Bloccato' : 'Inizia quiz'}
+                        </Button>
+                      </CardActions>
+                    </Card>
+                  </HoverAnimation>
+                </Grid>
+              ))
+            ) : (
+              <Grid item xs={12}>
+                <Paper elevation={2} sx={{ p: 3, bgcolor: 'info.light', color: 'info.contrastText' }}>
+                  <Typography variant="h6" align="center" gutterBottom>
+                    Nessun quiz disponibile per questo percorso
+                  </Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                    <Button 
+                      variant="contained" 
+                      color="primary"
+                      onClick={runApiDiagnostic}
+                    >
+                      Esegui diagnostica API
+                    </Button>
+                  </Box>
+                </Paper>
               </Grid>
-            ))}
+            )}
           </Grid>
+          
+          {/* Debug controls */}
+          <Box sx={{ mt: 4, pt: 2, borderTop: '1px dashed #ccc' }}>
+            <Typography variant="subtitle2" color="text.secondary">Strumenti di debug</Typography>
+            <Button 
+              variant="outlined" 
+              size="small" 
+              color="secondary" 
+              onClick={runApiDiagnostic}
+              sx={{ mt: 1 }}
+            >
+              Test API Connection
+            </Button>
+          </Box>
         </Box>
       </MainLayout>
     </AnimatedPage>
