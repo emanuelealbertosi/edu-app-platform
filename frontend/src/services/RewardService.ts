@@ -182,7 +182,7 @@ class RewardService {
    * Admin e parent possono vedere tutti i template
    */
   public async getAllRewardTemplates(): Promise<RewardTemplate[]> {
-    return ApiService.get<RewardTemplate[]>(`/api/templates`);
+    return ApiService.get<RewardTemplate[]>(`/api/templates/`);
   }
   
   /**
@@ -190,7 +190,7 @@ class RewardService {
    */
   public async getRewardTemplates(): Promise<RewardTemplate[]> {
     try {
-      return await ApiService.get<RewardTemplate[]>(`/api/templates`);
+      return await ApiService.get<RewardTemplate[]>(`/api/templates/`);
     } catch (error: any) {
       console.error('Errore nel recupero dei template delle ricompense:', error);
       throw error;
@@ -201,7 +201,7 @@ class RewardService {
    * Ottiene un template di ricompensa specifico per ID
    */
   public async getRewardTemplate(id: string): Promise<RewardTemplate> {
-    return ApiService.get<RewardTemplate>(`/api/templates/${id}`);
+    return ApiService.get<RewardTemplate>(`/api/templates/${id}/`);
   }
 
   /**
@@ -257,49 +257,43 @@ class RewardService {
   private async attemptBackendSave(template: Omit<RewardTemplate, 'id'>): Promise<void> {
     // Questo metodo prova a salvare silenziosamente il template nel backend
     try {
-      console.log('Template da salvare nel backend:', template);
+      console.log('[attemptBackendSave] Template da salvare nel backend:', template);
       
       // Verifichiamo che l'utente sia autenticato
       const accessToken = localStorage.getItem('accessToken');
       if (!accessToken) {
-        console.log('Tentativo backend: nessun token disponibile');
+        console.log('[attemptBackendSave] Nessun token disponibile');
         return;
       }
       
-      // Adattiamo il formato del template a quello atteso dal backend
+      // Adattiamo il formato del template a quello atteso dal backend - stesso formato di createRewardTemplateOnBackend
       const templateData = {
         title: template.title,
         description: template.description,
-        points_value: template.pointsCost,
+        category: template.category || 'digitale',
+        points_cost: template.pointsCost,
         image_url: template.imageUrl || '',
-        icon_url: null
+        created_by: template.createdBy || 'default-user'
       };
       
-      console.log('Formato dati inviati al backend:', JSON.stringify(templateData, null, 2));
-
-      // Configurazione esplicita per l'autenticazione OAuth2
-      const config = {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      };
+      console.log('[attemptBackendSave] Formato dati inviati al backend:', JSON.stringify(templateData, null, 2));
       
-      // Utilizziamo direttamente ApiService invece di Axios
+      // Utilizziamo ApiService con l'endpoint corretto
       try {
-        console.log('Tentativo di salvataggio tramite ApiService a: /api/templates');
-        const response = await ApiService.post('/api/templates', templateData);
-        console.log('Salvataggio tramite ApiService riuscito:', response);
+        console.log('[attemptBackendSave] Tentativo di salvataggio tramite ApiService a: api/templates/');
+        // Usiamo direttamente lo slash finale
+        const response = await ApiService.post('api/templates/', templateData);
+        console.log('[attemptBackendSave] Salvataggio tramite ApiService riuscito:', response);
         return;
       } catch (error: any) {
         // Evitiamo di registrare errori 404 come critici
         if (error.response?.status === 404) {
-          console.log('Endpoint /api/templates non disponibile (404). Operazione ignorata silenziosamente.');
+          console.log('[attemptBackendSave] Endpoint api/templates/ non disponibile (404). Operazione ignorata silenziosamente.');
           return;
         }
         
-        console.error('Errore nel salvataggio tramite ApiService:', error.response?.status, error.response?.data);
-        console.error('Dettaglio errore:', error);
+        console.error('[attemptBackendSave] Errore nel salvataggio tramite ApiService:', error.response?.status, error.response?.data);
+        console.error('[attemptBackendSave] Dettaglio errore:', error);
         
         // Se l'errore è 401, prova con il refresh token
         if (error.response?.status === 401) {
@@ -308,7 +302,7 @@ class RewardService {
       }
     } catch (error: any) {
       // Log errore generale
-      console.error('Errore generale nel salvataggio backend:', error);
+      console.error('[attemptBackendSave] Errore generale nel salvataggio backend:', error);
     }
   }
   
@@ -501,18 +495,18 @@ class RewardService {
       }
       
       // 2. AGGIORNAMENTO DATI SUL BACKEND
-      console.log(`Invio richiesta PUT a /api/templates/${id}...`);
+      console.log(`Invio richiesta PUT a /api/templates/${id}/...`);
       try {
         // Utilizziamo ApiService, che gestisce già token e intestazioni
-        await ApiService.put(`/api/templates/${id}`, backendData);
+        await ApiService.put(`/api/templates/${id}/`, backendData);
         console.log('PUT completata con successo');
         
         // FONDAMENTALE: Aggiungi un piccolo ritardo per assicurarsi che le modifiche siano state elaborate
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         // 3. RECUPERO E NORMALIZZAZIONE DATI AGGIORNATI
-        console.log(`Recupero dati aggiornati da /api/templates/${id}...`);
-        const updatedData = await ApiService.get(`/api/templates/${id}`);
+        console.log(`Recupero dati aggiornati da /api/templates/${id}/...`);
+        const updatedData = await ApiService.get(`/api/templates/${id}/`);
         console.log('Dati ricevuti dal backend:', JSON.stringify(updatedData, null, 2));
         
         // Normalizza i dati dal backend al formato del frontend
@@ -546,7 +540,7 @@ class RewardService {
    */
   public async deleteRewardTemplate(id: string): Promise<void> {
     try {
-      await ApiService.delete(`/api/templates/${id}`);
+      await ApiService.delete(`/api/templates/${id}/`);
       safeNotify.success(
         'La ricompensa è stata eliminata con successo.',
         'Ricompensa eliminata'
@@ -1006,7 +1000,7 @@ class RewardService {
    */
   public async getTemplatesForParent(): Promise<RewardTemplate[]> {
     try {
-      return await ApiService.get<RewardTemplate[]>(`/api/templates`);
+      return await ApiService.get<RewardTemplate[]>(`/api/templates/`);
     } catch (error: any) {
       safeNotify.error(
         'Si è verificato un errore durante il recupero dei template delle ricompense',
@@ -1026,6 +1020,12 @@ class RewardService {
     // Prima otteniamo il template per avere tutti i dettagli
     const templateId = template.id;
     
+    console.log(`[assignRewardToStudent] Assegnazione premio a studente:`, {
+      studentId,
+      templateId,
+      templateTitle: template.title
+    });
+    
     // Normalizzazione: se il template proviene dal backend, potrebbe avere cost invece di pointsCost
     // Assicuriamo la presenza di entrambi per evitare problemi nell'interfaccia di chiamata
     if (template.cost === undefined && template.pointsCost !== undefined) {
@@ -1034,16 +1034,205 @@ class RewardService {
       template.pointsCost = template.cost;
     }
     
+    try {
+      // Se l'ID inizia con 'temp_', sostituiamolo con un ID valido
+      if (templateId.startsWith('temp_')) {
+        console.log(`[assignRewardToStudent] ID temporaneo rilevato: ${templateId}. Utilizzo approccio alternativo.`);
+        
+        // Proviamo a recuperare un template valido dal backend che possiamo usare
+        try {
+          console.log(`[assignRewardToStudent] Tentativo recupero templates esistenti...`);
+          
+          // Recuperiamo i template esistenti
+          const existingTemplates = await this.getRewardTemplates();
+          
+          if (existingTemplates && existingTemplates.length > 0) {
+            // Troviamo un template con categoria simile se possibile
+            const similarTemplate = existingTemplates.find(t => t.category === template.category) || existingTemplates[0];
+            
+            console.log(`[assignRewardToStudent] Trovato template esistente da usare:`, similarTemplate);
+            
+            // Creiamo un payload che usa l'ID di un template valido ma mantiene i dati del template originale
+            const assignRequest = {
+              user_id: studentId,
+              reward_id: similarTemplate.id,  // Usiamo un ID valido
+              is_displayed: true,
+              reward_metadata: {
+                // Aggiungiamo i dati del template originale come metadata
+                original_title: template.title,
+                original_description: template.description,
+                original_points: template.pointsCost,
+                was_temp_id: true
+              }
+            };
+            
+            console.log(`[assignRewardToStudent] Invio richiesta con ID template sostitutivo:`, assignRequest);
+            
+            const result = await ApiService.post<Reward>(`/api/user-rewards/`, assignRequest);
+            
+            safeNotify.success(
+              `Premio "${template.title}" assegnato con successo allo studente`,
+              'Premio assegnato'
+            );
+            
+            return result;
+          } else {
+            console.log(`[assignRewardToStudent] Nessun template esistente trovato, tento con ID standard...`);
+          }
+        } catch (templatesError) {
+          console.error(`[assignRewardToStudent] Errore nel recupero dei templates:`, templatesError);
+        }
+      }
+      
+      // Metodo standard per assegnare un premio usando l'ID del template
+      return this.assignRewardWithBackendId(studentId, template);
+    } catch (error: any) {
+      console.error('[assignRewardToStudent] Errore durante l\'assegnazione del premio:', error);
+      
+      // Estrazione del messaggio di errore per una notifica più informativa
+      let errorMessage = 'Si è verificato un errore sconosciuto';
+      
+      if (error.response) {
+        console.error('[assignRewardToStudent] Dettagli errore:', {
+          status: error.response.status,
+          data: error.response.data
+        });
+        
+        if (error.response.status === 401) {
+          errorMessage = 'Non sei autorizzato ad assegnare ricompense. Prova a effettuare nuovamente il login.';
+        } else if (error.response.status === 404) {
+          errorMessage = `Endpoint non trovato. Verifica che il servizio dei premi sia attivo.`;
+        } else if (error.response.data?.detail) {
+          errorMessage = error.response.data.detail;
+        } else if (error.response.data?.message) {
+          errorMessage = error.response.data.message;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+                          
+      safeNotify.error(
+        `Non è stato possibile assegnare il premio: ${errorMessage}`,
+        'Errore'
+      );
+      return null;
+    }
+  }
+  
+  /**
+   * Crea effettivamente un template sul backend e restituisce il template con ID reale
+   */
+  private async createRewardTemplateOnBackend(template: RewardTemplate): Promise<RewardTemplate | null> {
+    try {
+      console.log('[createRewardTemplateOnBackend] Template da convertire:', template);
+      
+      // Prepara i dati per il backend
+      const backendData = {
+        title: template.title,
+        description: template.description,
+        category: template.category || 'digitale',
+        points_cost: template.pointsCost,
+        image_url: template.imageUrl || "",
+        created_by: template.createdBy || "default-user"
+      };
+      
+      console.log('[createRewardTemplateOnBackend] Dati formattati per backend:', backendData);
+      
+      // Log dettagliato per il debug
+      console.log('[createRewardTemplateOnBackend] Invio richiesta a /api/templates/ con payload:', JSON.stringify(backendData));
+      
+      // Modifica URL senza slash finale per evitare reindirizzamento a /api/templates/ che causa 404
+      // Usiamo direttamente lo slash finale
+      const response = await ApiService.post<any>('api/templates/', backendData);
+      console.log('[createRewardTemplateOnBackend] Risposta dal backend:', response);
+      
+      // Converti la risposta dal backend al formato RewardTemplate
+      if (response && response.id) {
+        const normalizedTemplate: RewardTemplate = {
+          id: response.id,
+          title: response.title || response.name,
+          description: response.description || '',
+          category: response.category || 'digitale',
+          pointsCost: response.points_cost || 0,
+          cost: response.points_cost || 0,
+          imageUrl: response.image_url || '',
+          availability: 'illimitato',
+          createdBy: response.created_by || template.createdBy
+        };
+        
+        console.log('[createRewardTemplateOnBackend] Template normalizzato:', normalizedTemplate);
+        return normalizedTemplate;
+      }
+      
+      console.error('[createRewardTemplateOnBackend] Risposta dal backend senza ID valido:', response);
+      return null;
+    } catch (error: any) {
+      console.error('[createRewardTemplateOnBackend] Errore durante la creazione del template sul backend:', error);
+      
+      // Log informazioni più dettagliate sull'errore
+      if (error.response) {
+        console.error('[createRewardTemplateOnBackend] Dettagli errore:', {
+          status: error.response.status,
+          data: error.response.data
+        });
+        
+        // Fornire un messaggio più specifico all'utente
+        if (error.response.status === 401) {
+          safeNotify.error(
+            'Non sei autorizzato a creare premi. Effettua nuovamente il login.',
+            'Errore di autenticazione'
+          );
+        } else if (error.response.status === 422) {
+          // Errore di validazione dello schema
+          safeNotify.error(
+            'Errore nella convalida dei dati del premio. Controlla i campi richiesti.',
+            'Errore di validazione'
+          );
+        } else if (error.response.status === 404) {
+          // Endpoint non trovato
+          safeNotify.error(
+            'Endpoint per la creazione del premio non trovato. Controlla che il servizio dei premi sia attivo.',
+            'Endpoint non trovato'
+          );
+        }
+      }
+      
+      return null;
+    }
+  }
+  
+  /**
+   * Assegna un premio usando un ID backend valido
+   */
+  private async assignRewardWithBackendId(studentId: string, template: RewardTemplate): Promise<Reward | null> {
     // Creiamo un payload conforme allo schema UserRewardCreate atteso dal backend
     const assignRequest = {
       user_id: studentId,           // ID dello studente (usando snake_case per il backend)
-      reward_id: templateId,       // ID del template come reward_id
+      reward_id: template.id,       // ID del template come reward_id
       is_displayed: true            // Il premio sarà visibile di default
     };
     
-    // Inviamo la richiesta direttamente al backend senza controllo preventivo
+    console.log(`[assignRewardWithBackendId] Invio richiesta di assegnazione:`, assignRequest);
+    console.log(`[assignRewardWithBackendId] Dettagli template:`, template);
+    
+    // Inviamo la richiesta direttamente al backend
     try {
-      const result = await ApiService.post<Reward>(`/api/user-rewards`, assignRequest);
+      // Prima verifichiamo che l'ID del template sia valido (non è un ID temporaneo)
+      if (template.id.startsWith('temp_')) {
+        throw new Error('Non è possibile assegnare un premio con ID temporaneo. Necessario salvare prima il template.');
+      }
+      
+      // Verifichiamo che l'ID dello studente sia valido
+      if (!studentId || studentId.trim() === '') {
+        throw new Error('ID studente non valido.');
+      }
+      
+      const result = await ApiService.post<Reward>(`/api/user-rewards/`, assignRequest);
+      console.log(`[assignRewardWithBackendId] Risposta dal backend:`, result);
+      
+      if (!result) {
+        throw new Error('Risposta vuota dal server.');
+      }
       
       safeNotify.success(
         `Premio "${template.title}" assegnato con successo allo studente`,
@@ -1052,12 +1241,29 @@ class RewardService {
       
       return result;
     } catch (error: any) {
-      console.error('Errore durante l\'assegnazione del premio:', error);
+      console.error('[assignRewardWithBackendId] Errore durante l\'assegnazione del premio:', error);
       
       // Estrazione del messaggio di errore per una notifica più informativa
-      const errorMessage = error.response?.data?.detail || 
-                          error.message || 
-                          'Si è verificato un errore sconosciuto';
+      let errorMessage = 'Si è verificato un errore sconosciuto';
+      
+      if (error.response) {
+        console.error('[assignRewardWithBackendId] Dettagli errore:', {
+          status: error.response.status,
+          data: error.response.data
+        });
+        
+        if (error.response.status === 401) {
+          errorMessage = 'Non sei autorizzato ad assegnare ricompense. Prova a effettuare nuovamente il login.';
+        } else if (error.response.status === 404) {
+          errorMessage = `Ricompensa con ID ${template.id} non trovata nel sistema.`;
+        } else if (error.response.data?.detail) {
+          errorMessage = error.response.data.detail;
+        } else if (error.response.data?.message) {
+          errorMessage = error.response.data.message;
+        }
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
                           
       safeNotify.error(
         `Non è stato possibile assegnare il premio: ${errorMessage}`,

@@ -139,13 +139,12 @@ function ManageRewards() {
   const [assignDialogOpen, setAssignDialogOpen] = useState<boolean>(false);
   const [selectedTemplate, setSelectedTemplate] = useState<RewardTemplate | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
-  const [studentStatsDialogOpen, setStudentStatsDialogOpen] = useState(false);
+  const [studentStatsDialogOpen, setStudentStatsDialogOpen] = useState<boolean>(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingRewardId, setEditingRewardId] = useState<string | null>(null);
-  
-  // I duplicati sono stati rimossi, questi stati sono già dichiarati sopra
+  const [assignLoading, setAssignLoading] = useState<boolean>(false);
   
   // Form per nuovo reward template
   const [newReward, setNewReward] = useState<RewardForm>({
@@ -498,15 +497,63 @@ function ManageRewards() {
       return;
     }
     
+    setAssignLoading(true);
+    
     try {
-      await RewardService.assignRewardToStudent(selectedStudentId, selectedTemplate);
+      console.log('Assegnazione premio:', {
+        template: selectedTemplate,
+        studentId: selectedStudentId
+      });
       
-      // Aggiorniamo le statistiche dello studente
-      fetchStudentStats(selectedStudentId);
+      // Se l'ID del template inizia con 'temp_', mostro un messaggio che spiega cosa sta succedendo
+      if (selectedTemplate.id.startsWith('temp_')) {
+        NotificationsService.info(
+          'Il premio è temporaneo e deve essere prima salvato sul server. Attendere per favore.',
+          'Salvataggio premio in corso'
+        );
+      }
       
-      handleAssignDialogClose();
-    } catch (error) {
-      ApiErrorHandler.handleApiError(error);
+      const result = await RewardService.assignRewardToStudent(selectedStudentId, selectedTemplate);
+      
+      if (result) {
+        // Aggiorniamo le statistiche dello studente
+        await fetchStudentStats(selectedStudentId);
+        
+        // Aggiorna anche la lista dei template in caso fosse stato creato un nuovo template sul backend
+        await fetchRewardTemplates();
+        
+        // Aggiorna la lista delle ricompense assegnate
+        await fetchAssignedRewards();
+        
+        NotificationsService.success(
+          `Premio "${selectedTemplate.title}" assegnato con successo allo studente`,
+          'Premio assegnato'
+        );
+        
+        handleAssignDialogClose();
+      } else {
+        // RewardService.assignRewardToStudent già mostra una notifica di errore
+        console.error('Impossibile assegnare il premio: nessun risultato restituito');
+        
+        NotificationsService.error(
+          'Non è stato possibile completare l\'assegnazione del premio. Controlla i log per maggiori dettagli.',
+          'Errore di assegnazione'
+        );
+      }
+    } catch (error: any) {
+      console.error('Errore durante l\'assegnazione del premio:', error);
+      
+      // Mostra informazioni più dettagliate sull'errore
+      if (error.response?.data?.detail) {
+        NotificationsService.error(
+          `Errore durante l'assegnazione: ${error.response.data.detail}`,
+          'Errore dal server'
+        );
+      } else {
+        ApiErrorHandler.handleApiError(error);
+      }
+    } finally {
+      setAssignLoading(false);
     }
   };
   
@@ -1145,6 +1192,7 @@ function ManageRewards() {
                     value={selectedStudentId}
                     label="Studente"
                     onChange={(e) => setSelectedStudentId(e.target.value)}
+                    disabled={assignLoading}
                   >
                     {students.map(student => (
                       <MenuItem key={student.id} value={student.id}>
@@ -1155,16 +1203,21 @@ function ManageRewards() {
                 </FormControl>
               </Box>
             )}
+            {assignLoading && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                <CircularProgress size={24} />
+              </Box>
+            )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={handleAssignDialogClose}>Annulla</Button>
+            <Button onClick={handleAssignDialogClose} disabled={assignLoading}>Annulla</Button>
             <Button 
               onClick={handleAssignReward} 
               color="primary" 
               variant="contained"
-              disabled={!selectedTemplate || !selectedStudentId}
+              disabled={!selectedTemplate || !selectedStudentId || assignLoading}
             >
-              Assegna
+              {assignLoading ? 'Assegnazione in corso...' : 'Assegna'}
             </Button>
           </DialogActions>
         </Dialog>

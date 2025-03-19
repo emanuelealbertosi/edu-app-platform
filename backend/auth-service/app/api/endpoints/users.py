@@ -387,3 +387,67 @@ async def update_current_user_profile(
     updated_user = UserRepository.update(db, current_user, user_data)
     
     return updated_user
+
+@router.put("/{user_id}/deactivate", response_model=User)
+async def deactivate_user(
+    user_id: int = Path(..., gt=0),
+    current_user: UserModel = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+) -> Any:
+    """
+    Disattiva un utente (solo amministratori).
+    """
+    # Non permettere di disattivare sé stessi
+    if current_user.id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Non puoi disattivare il tuo account",
+        )
+    
+    user = UserRepository.get(db, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Utente non trovato",
+        )
+    
+    # Disattiva l'utente
+    user.is_active = False
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    
+    return user
+
+@router.put("/{user_id}/reset-password")
+async def reset_user_password(
+    user_id: int = Path(..., gt=0),
+    password_data: dict = Body(...),
+    current_user: UserModel = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+) -> Any:
+    """
+    Reimposta la password di un utente (solo amministratori).
+    """
+    user = UserRepository.get(db, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Utente non trovato",
+        )
+    
+    # Controlla che sia stata fornita una nuova password
+    new_password = password_data.get("password")
+    if not new_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Nuova password non fornita",
+        )
+    
+    # Utilizziamo UserUpdate per aggiornare solo la password
+    user_update = UserUpdate(password=new_password)
+    
+    # Aggiorna la password dell'utente
+    updated_user = UserRepository.update(db, user, user_update)
+    
+    return {"detail": "Password reimpostata con successo"}

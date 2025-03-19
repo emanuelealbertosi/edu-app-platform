@@ -243,6 +243,9 @@ const AdminUsers: React.FC = () => {
     if (!createFormData.username) {
       errors.username = 'Il nome utente è obbligatorio';
       valid = false;
+    } else if (!/^[a-zA-Z0-9]+$/.test(createFormData.username)) {
+      errors.username = 'Il nome utente deve contenere solo caratteri alfanumerici';
+      valid = false;
     }
 
     if (!createFormData.email) {
@@ -754,7 +757,7 @@ const AdminUsers: React.FC = () => {
               value={createFormData.username}
               onChange={(e) => setCreateFormData({...createFormData, username: e.target.value})}
               error={!!formErrors.username}
-              helperText={formErrors.username}
+              helperText={formErrors.username || "L'username deve contenere solo caratteri alfanumerici (lettere e numeri)"}
               required
             />
             <TextField

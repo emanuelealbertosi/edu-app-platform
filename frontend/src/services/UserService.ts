@@ -21,7 +21,10 @@ const getApiUrl = () => {
 };
 
 const API_URL = getApiUrl();
-const AUTH_API_URL = `${API_URL}/auth`;
+console.log('API URL utilizzato in UserService:', API_URL);
+
+// Corretto il percorso per essere coerente con altri servizi
+const AUTH_API_URL = `${API_URL}/api/auth`;
 
 /**
  * Interfaccia per i dati dell'utente
@@ -127,7 +130,7 @@ class UserService {
    */
   public async getUserById(userId: string): Promise<User> {
     try {
-      return await ApiService.get<User>(`/api/auth/users/${userId}`);
+      return await ApiService.get<User>(`/api/users/${userId}`);
     } catch (error) {
       NotificationsService.error('Errore nel recupero dei dati dell\'utente', 'Errore');
       throw error;
@@ -168,18 +171,29 @@ class UserService {
     parentId: number;
   }): Promise<User> {
     try {
-      // Se l'utente ha ruolo student e ha un parentId, usiamo l'endpoint specifico
-      const user = await ApiService.post<User>('/api/auth/parent/students', {
-        email: studentData.email,
-        password: studentData.password,
-        firstName: studentData.firstName,
-        lastName: studentData.lastName,
-        username: studentData.username,
-        parentId: studentData.parentId
+      // Normalizza l'username rimuovendo caratteri non alfanumerici
+      // La validazione del backend accetta solo caratteri alfanumerici
+      const normalizedUsername = studentData.username.replace(/[^a-zA-Z0-9]/g, '');
+      
+      console.log('Creazione studente con dati:', {
+        username: normalizedUsername,
+        name: `${studentData.firstName} ${studentData.lastName}`.trim(),
+        parent_id: studentData.parentId
       });
+      
+      // Se l'utente ha ruolo student e ha un parentId, usiamo l'endpoint specifico
+      // Usiamo AUTH_API_URL invece del percorso hardcoded per coerenza
+      const user = await ApiService.post<User>(`${AUTH_API_URL}/parent/students`, {
+        username: normalizedUsername,
+        password: studentData.password,
+        name: `${studentData.firstName} ${studentData.lastName}`.trim(),
+        parent_id: studentData.parentId
+      });
+      
       NotificationsService.success('Account studente creato con successo');
       return user;
     } catch (error) {
+      console.error('Errore creazione studente:', error);
       NotificationsService.error('Errore nella creazione dell\'account studente', 'Errore');
       throw error;
     }
@@ -234,7 +248,7 @@ class UserService {
       if (dataToSend.active !== undefined) normalizedData.is_active = dataToSend.active;
       
       console.log(`Aggiornamento utente ${userId}:`, { 
-        endpoint: `/api/auth/users/${userId}`,
+        endpoint: `/api/users/${userId}`,
         originaleDataToSend: dataToSend,
         normalizedData: normalizedData 
       });
@@ -255,7 +269,7 @@ class UserService {
    */
   public async deactivateUser(userId: string): Promise<void> {
     try {
-      await ApiService.put(`/api/auth/users/${userId}/deactivate`);
+      await ApiService.put(`/api/users/${userId}/deactivate`);
       NotificationsService.success('Utente disattivato con successo');
     } catch (error) {
       NotificationsService.error('Errore nella disattivazione dell\'utente', 'Errore');
@@ -268,7 +282,7 @@ class UserService {
    */
   public async resetUserPassword(userId: string, newPassword: string): Promise<void> {
     try {
-      await ApiService.put(`/api/auth/users/${userId}/reset-password`, { password: newPassword });
+      await ApiService.put(`/api/users/${userId}/reset-password`, { password: newPassword });
       NotificationsService.success('Password reimpostata con successo');
     } catch (error) {
       NotificationsService.error('Errore nel reset della password', 'Errore');

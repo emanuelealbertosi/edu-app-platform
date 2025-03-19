@@ -150,23 +150,44 @@ async def create_parent_student(
     Crea un nuovo utente con ruolo studente e lo associa al genitore.
     Questa API può essere utilizzata sia da genitori che da admin.
     - Un genitore può creare studenti solo per sé stesso
-    - Un admin può creare studenti per qualsiasi genitore (non implementato)
+    - Un admin può creare studenti per qualsiasi genitore
     """
-    # Verifica se chi fa la richiesta è un genitore
+    # Verifica se chi fa la richiesta è un genitore o un admin
     is_parent = any(role.name == "parent" for role in current_user.roles)
+    is_admin = any(role.name == "admin" for role in current_user.roles)
     
-    if not is_parent:
+    # Ottieni il profilo del genitore corrente o del genitore specificato
+    parent_profile = None
+    
+    if is_parent:
+        # Se è un genitore, usa il suo profilo
+        parent_profile = ParentProfileRepo.get_by_user_id(db, current_user.id)
+        if not parent_profile:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Profilo genitore non trovato per l'utente corrente"
+            )
+    elif is_admin:
+        # Se è un admin, può specificare un parent_id nei dati dello studente
+        parent_id = student_data.get("parent_id")
+        if parent_id:
+            parent_profile = ParentProfileRepo.get(db, parent_id)
+            if not parent_profile:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Profilo genitore con ID {parent_id} non trovato"
+                )
+        else:
+            # Admin deve specificare un parent_id
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Come admin, devi specificare un parent_id per associare lo studente"
+            )
+    else:
+        # Questo caso non dovrebbe verificarsi grazie alla dependency, ma per sicurezza
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Solo i genitori possono creare studenti tramite questa API"
-        )
-    
-    # Ottieni il profilo del genitore corrente
-    parent_profile = ParentProfileRepo.get_by_user_id(db, current_user.id)
-    if not parent_profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Profilo genitore non trovato per l'utente corrente"
+            detail="Solo i genitori e gli admin possono creare studenti tramite questa API"
         )
     
     # Crea un nuovo utente per lo studente

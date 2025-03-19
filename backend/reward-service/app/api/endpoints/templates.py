@@ -65,7 +65,7 @@ async def create_reward_template(
         "reward_type": RewardType.BADGE, # Utilizziamo BADGE come tipo predefinito per i template
         "rarity": RewardRarity.COMMON, # Imposta la rarità predefinita
         "created_by": current_user["id"], # Utilizziamo l'ID dell'utente corrente
-        "category_id": "f7e228cd-c6c7-424b-8129-eff04af1ab4f", # ID valido per la categoria Badge
+        "category_id": "0d7223fa-9097-4e78-9786-75b14f0492aa", # ID valido per la categoria Badge
         "is_active": True,
         "is_public": True
     }
