@@ -32,6 +32,8 @@ import {
   Card,
   CardContent,
   CircularProgress,
+  FormGroup,
+  Checkbox,
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
@@ -67,6 +69,7 @@ interface QuizAnswer {
 interface QuizSubmission {
   answers: QuizAnswer[];
   timeSpent: number;
+  quizUuid?: string; // Campo opzionale per l'UUID
 }
 
 const TakeQuiz: React.FC = () => {
@@ -79,7 +82,8 @@ const TakeQuiz: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [multipleChoiceAnswers, setMultipleChoiceAnswers] = useState<Record<string, string[]>>({});
   const [textAnswers, setTextAnswers] = useState<Record<string, string>>({});
   const [remainingTime, setRemainingTime] = useState<number | null>(null);
   const [quizCompleted, setQuizCompleted] = useState(false);
@@ -176,6 +180,11 @@ const TakeQuiz: React.FC = () => {
           quizData = await QuizService.getQuiz(quizId);
           console.log(`[DEBUG TakeQuiz] Successfully loaded standard quiz:`, {
             id: quizData.id,
+            uuid: quizData.uuid,
+            uuidPresent: !!quizData.uuid,
+            uuidRaw: JSON.stringify(quizData.uuid),
+            uuidLength: quizData.uuid ? quizData.uuid.length : 0,
+            rawData: JSON.stringify(quizData).substring(0, 200) + '...',
             templateId: quizData.templateId,
             title: quizData.title,
             questionCount: quizData.questions?.length || 0,
@@ -202,6 +211,7 @@ const TakeQuiz: React.FC = () => {
           // Normalize the quiz according to frontend conventions
           setQuiz({
             id: quizData.id,
+            uuid: quizData.uuid || '',
             title: quizData.title || 'Quiz senza titolo',
             description: quizData.description || 'Nessuna descrizione disponibile',
             pathId: quizData.pathId || pathId || '',
@@ -318,53 +328,101 @@ const TakeQuiz: React.FC = () => {
       
       setSubmitting(true);
       
-      console.log('Preparazione invio risposte:', answers);
+      console.log('[DEBUG TakeQuiz] Preparazione invio risposte:', {
+        singleChoice: answers,
+        multipleChoice: multipleChoiceAnswers,
+        textAnswers: textAnswers,
+        quizId: quiz.id,
+        quizUuid: quiz.uuid
+      });
+      
+      // STEP 1: Assicuriamoci di avere un UUID valido
+      let quizUuid = quiz.uuid;
+      console.log('[DEBUG TakeQuiz] Verifica UUID iniziale:', {
+        uuid: quizUuid,
+        valid: quizUuid && quizUuid.includes('-')
+      });
+      
+      // Se non abbiamo un UUID valido, otteniamolo dal server
+      if (!quizUuid || !quizUuid.includes('-')) {
+        console.log('[DEBUG TakeQuiz] UUID non valido o mancante, richiedo tentativo al server');
+        try {
+          // Usa getOrCreateQuizAttempt che è designato specificamente per ottenere un UUID valido
+          const attemptUuid = await QuizService.getOrCreateQuizAttempt(quiz.id);
+          if (attemptUuid) {
+            console.log('[DEBUG TakeQuiz] Ottenuto UUID valido dal server:', attemptUuid);
+            quizUuid = attemptUuid;
+          } else {
+            console.error('[DEBUG TakeQuiz] Non è stato possibile ottenere un UUID valido');
+            NotificationsService.error(
+              'Non è stato possibile creare un tentativo per il quiz',
+              'Errore'
+            );
+            setSubmitting(false);
+            return;
+          }
+        } catch (err) {
+          console.error('[DEBUG TakeQuiz] Errore nel recupero dell\'UUID:', err);
+          NotificationsService.error(
+            'Si è verificato un errore nella creazione del tentativo',
+            'Errore'
+          );
+          setSubmitting(false);
+          return;
+        }
+      }
+      
+      // A questo punto abbiamo un UUID valido o abbiamo già gestito l'errore
+      console.log('[DEBUG TakeQuiz] UUID valido ottenuto:', quizUuid);
       
       // Preparazione dei dati per l'invio
       const submission: QuizSubmission = {
-        answers: Object.entries(answers).map(([questionId, answer]) => {
-          // Determiniamo il tipo di domanda per sapere come formattare la risposta
-          const question = quiz.questions.find(q => q.id === questionId);
+        answers: quiz.questions.map(question => {
+          const questionId = question.id;
           
-          if (question && (question.type === 'text' || question.type === 'numeric')) {
+          // Risposte in base al tipo di domanda
+          if (question.type === 'text' || question.type === 'numeric') {
             return {
               questionId,
-              textAnswer: typeof answer === 'string' ? answer : 
-                         Array.isArray(answer) && answer.length > 0 ? answer[0] : ''
+              textAnswer: textAnswers[questionId] || ''
+            };
+          } else if (question.type === 'multiple_choice') {
+            return {
+              questionId,
+              selectedOptionId: multipleChoiceAnswers[questionId]?.join(',') || ''
             };
           } else {
+            // single_choice, true_false
             return {
               questionId,
-              selectedOptionId: typeof answer === 'string' ? answer : 
-                              Array.isArray(answer) && answer.length > 0 ? answer[0] : ''
+              selectedOptionId: answers[questionId] || ''
             };
           }
         }),
-        timeSpent: Math.floor((new Date().getTime() - startTime!.getTime()) / 1000) // Tempo impiegato in secondi
+        timeSpent: Math.floor((new Date().getTime() - startTime!.getTime()) / 1000), // Tempo impiegato in secondi
+        quizUuid: quizUuid // Includi sempre l'UUID che abbiamo ottenuto
       };
 
-      console.log('Invio risposte:', submission);
+      console.log('[DEBUG TakeQuiz] Invio risposte per il quiz:', {
+        quizId: quiz.id,
+        quizUuid: quizUuid,
+        answersCount: submission.answers.length
+      });
       
+      // Invio del quiz usando il metodo appropriato
       let result;
       
-      // Se il quiz è stato avviato in un percorso, usa l'endpoint specifico per i percorsi
+      // Il percorso è solo un dettaglio di contesto, non cambia l'endpoint da utilizzare
       if (pathId && quiz.pathId) {
-        console.log(`Invio risposte al quiz ${quiz.id} nel percorso ${pathId}`);
-        try {
-          result = await QuizService.submitPathQuiz(pathId, quiz.id, submission);
-        } catch (pathError) {
-          console.error('Errore invio risposte al percorso:', pathError);
-          
-          // Fallback: prova con l'endpoint standard
-          console.log('Tentativo invio con endpoint standard');
-          result = await QuizService.submitQuiz(quiz.id, submission);
-        }
+        console.log(`[DEBUG TakeQuiz] Invio con percorso ${pathId} e UUID ${quizUuid}`);
       } else {
-        console.log(`Invio risposte al quiz standard ${quiz.id}`);
-        result = await QuizService.submitQuiz(quiz.id, submission);
+        console.log(`[DEBUG TakeQuiz] Invio senza percorso con UUID ${quizUuid}`);
       }
       
-      console.log('Risultato sottomissione:', result);
+      // Usa submitQuiz che ora utilizza esclusivamente l'endpoint con UUID
+      result = await QuizService.submitQuiz(quiz.id, submission);
+      
+      console.log('[DEBUG TakeQuiz] Risultato sottomissione:', result);
       
       // Aggiorna il risultato nella UI
       setResult(result);
@@ -387,7 +445,7 @@ const TakeQuiz: React.FC = () => {
         }
       }, 5000);
     } catch (error) {
-      console.error('Errore durante l\'invio delle risposte:', error);
+      console.error('[DEBUG TakeQuiz] Errore durante l\'invio delle risposte:', error);
       
       NotificationsService.error(
         'Si è verificato un errore durante l\'invio delle risposte',
@@ -398,9 +456,34 @@ const TakeQuiz: React.FC = () => {
     }
   };
 
-  // Gestisce il cambio di opzione nelle domande a scelta multipla
+  // Gestisce il cambio di opzione nelle domande a scelta singola
   const handleOptionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     handleAnswerChange(quiz!.questions[activeStep].id, e.target.value);
+  };
+
+  // Gestisce il cambio di opzione nelle domande a scelta multipla
+  const handleMultipleChoiceChange = (questionId: string, optionId: string, checked: boolean) => {
+    setMultipleChoiceAnswers(prev => {
+      const currentAnswers = prev[questionId] || [];
+      
+      if (checked) {
+        // Aggiungi l'opzione se non è già presente
+        if (!currentAnswers.includes(optionId)) {
+          return {
+            ...prev,
+            [questionId]: [...currentAnswers, optionId]
+          };
+        }
+      } else {
+        // Rimuovi l'opzione se è presente
+        return {
+          ...prev,
+          [questionId]: currentAnswers.filter(id => id !== optionId)
+        };
+      }
+      
+      return prev;
+    });
   };
 
   // Gestisce il cambio del testo nelle domande aperte
@@ -413,11 +496,37 @@ const TakeQuiz: React.FC = () => {
     if (!quiz) return 0;
     
     return quiz.questions.reduce((count, question) => {
-      if (question.type === 'multiple_choice' && !answers[question.id]) {
-        return count + 1;
-      } else if (question.type === 'text' && (!textAnswers[question.id] || textAnswers[question.id].trim() === '')) {
-        return count + 1;
+      const questionId = question.id;
+      
+      switch (question.type) {
+        case 'multiple_choice':
+          // Verifica se non ci sono risposte multiple o se l'array è vuoto
+          if (!multipleChoiceAnswers[questionId] || multipleChoiceAnswers[questionId].length === 0) {
+            return count + 1;
+          }
+          break;
+          
+        case 'single_choice':
+        case 'true_false':
+          // Verifica se non c'è una risposta singola
+          if (!answers[questionId]) {
+            return count + 1;
+          }
+          break;
+          
+        case 'text':
+        case 'numeric':
+          // Verifica se non c'è una risposta testuale o è vuota
+          if (!textAnswers[questionId] || textAnswers[questionId].trim() === '') {
+            return count + 1;
+          }
+          break;
+          
+        default:
+          // Per sicurezza, considera non risposte le domande di tipo sconosciuto
+          return count + 1;
       }
+      
       return count;
     }, 0);
   };
@@ -536,6 +645,10 @@ const TakeQuiz: React.FC = () => {
                 pathId: pathId,
                 loadedQuiz: quiz ? {
                   id: quiz.id,
+                  uuid: quiz.uuid,
+                  uuidPresent: !!quiz.uuid,
+                  uuidLength: quiz.uuid ? quiz.uuid.length : 0,
+                  containsDash: quiz.uuid ? quiz.uuid.includes('-') : false,
                   templateId: quiz.templateId,
                   title: quiz.title,
                   description: quiz.description?.substring(0, 50) + '...',
@@ -688,7 +801,8 @@ const TakeQuiz: React.FC = () => {
                   <Divider sx={{ mb: 3 }} />
                   
                   <Box mb={4}>
-                    {quiz.questions[activeStep].type === 'multiple_choice' ? (
+                    {/* Domande a scelta singola */}
+                    {quiz.questions[activeStep].type === 'single_choice' && (
                       <FormControl component="fieldset" fullWidth>
                         <RadioGroup
                           name={`question-${quiz.questions[activeStep].id}`}
@@ -718,16 +832,91 @@ const TakeQuiz: React.FC = () => {
                           </Box>
                         </RadioGroup>
                       </FormControl>
-                    ) : (
+                    )}
+                    
+                    {/* Domande a scelta multipla */}
+                    {quiz.questions[activeStep].type === 'multiple_choice' && (
+                      <FormControl component="fieldset" fullWidth>
+                        <FormGroup>
+                          {quiz.questions[activeStep].options?.map((option) => (
+                            <HoverAnimation key={option.id}>
+                              <FormControlLabel
+                                control={
+                                  <Checkbox 
+                                    checked={multipleChoiceAnswers[quiz.questions[activeStep].id]?.includes(option.id) || false}
+                                    onChange={(e) => handleMultipleChoiceChange(quiz.questions[activeStep].id, option.id, e.target.checked)}
+                                  />
+                                }
+                                label={option.text}
+                                sx={{ 
+                                  mb: 1,
+                                  p: 1,
+                                  borderRadius: 1,
+                                  width: '100%',
+                                  '&:hover': {
+                                    bgcolor: 'action.hover',
+                                  }
+                                }}
+                              />
+                            </HoverAnimation>
+                          ))}
+                        </FormGroup>
+                      </FormControl>
+                    )}
+                    
+                    {/* Domande vero/falso */}
+                    {quiz.questions[activeStep].type === 'true_false' && (
+                      <FormControl component="fieldset" fullWidth>
+                        <RadioGroup
+                          name={`question-${quiz.questions[activeStep].id}`}
+                          value={answers[quiz.questions[activeStep].id] || ''}
+                          onChange={handleOptionChange}
+                        >
+                          {/* Usa un Box per avvolgere gli elementi singolarmente */}
+                          <Box>
+                            {quiz.questions[activeStep].options?.map((option) => (
+                              <HoverAnimation key={option.id}>
+                                <FormControlLabel
+                                  value={option.id}
+                                  control={<Radio />}
+                                  label={option.text}
+                                  sx={{ 
+                                    mb: 1,
+                                    p: 1,
+                                    borderRadius: 1,
+                                    width: '100%',
+                                    '&:hover': {
+                                      bgcolor: 'action.hover',
+                                    }
+                                  }}
+                                />
+                              </HoverAnimation>
+                            ))}
+                          </Box>
+                        </RadioGroup>
+                      </FormControl>
+                    )}
+                    
+                    {/* Domande a risposta testuale o numerica */}
+                    {(quiz.questions[activeStep].type === 'text' || quiz.questions[activeStep].type === 'numeric') && (
                       <TextField
                         fullWidth
-                        multiline
-                        rows={4}
+                        multiline={quiz.questions[activeStep].type === 'text'}
+                        rows={quiz.questions[activeStep].type === 'text' ? 4 : 1}
                         label="La tua risposta"
                         value={textAnswers[quiz.questions[activeStep].id] || ''}
                         onChange={(e) => handleTextChange(quiz.questions[activeStep].id, e.target.value)}
                         variant="outlined"
+                        type={quiz.questions[activeStep].type === 'numeric' ? 'number' : 'text'}
                       />
+                    )}
+                    
+                    {/* Messaggio di fallback per tipi sconosciuti */}
+                    {!['multiple_choice', 'single_choice', 'true_false', 'text', 'numeric'].includes(quiz.questions[activeStep].type) && (
+                      <Alert severity="warning">
+                        Tipo di domanda non supportato: {quiz.questions[activeStep].type}. 
+                        Contattare l'amministratore.
+                      </Alert>
                     )}
                   </Box>
                   
