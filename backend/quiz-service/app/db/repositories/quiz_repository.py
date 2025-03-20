@@ -397,9 +397,12 @@ class QuizRepository:
         if question.question_type == "single_choice":
             # Per le domande a scelta singola, confronta l'ID selezionato con quello corretto
             correct_options = [opt for opt in question.answer_options if opt.is_correct]
-            if correct_options and str(correct_options[0].uuid) == str(answer_value):
-                is_correct = True
-                score = question.points
+            if correct_options:
+                # Estrai l'ID selezionato dal dizionario answer_value
+                selected_option_id = answer_value.get("selected_option_id") if isinstance(answer_value, dict) else answer_value
+                if str(correct_options[0].uuid) == str(selected_option_id):
+                    is_correct = True
+                    score = question.points
         
         elif question.question_type == "multiple_choice":
             # Per le domande a scelta multipla, confronta gli ID selezionati con quelli corretti
@@ -639,9 +642,14 @@ class QuizAttemptRepository:
             
         # Ottieni tutte le domande del quiz
         questions = db.query(Question).filter(Question.quiz_id == quiz.id).all()
-        questions_dict = {str(q.uuid): q for q in questions}
+        
+        # Creiamo due dizionari, uno per UUID e uno per ID numerico delle domande
+        questions_by_uuid = {str(q.uuid): q for q in questions}
+        questions_by_id = {q.id: q for q in questions}
+        
         print(f"DEBUG - Repository submit_answers - Trovate {len(questions)} domande")
-        print(f"DEBUG - Repository submit_answers - IDs domande: {list(questions_dict.keys())}")
+        print(f"DEBUG - Repository submit_answers - IDs domande: {list(questions_by_uuid.keys())}")
+        print(f"DEBUG - Repository submit_answers - Domande IDs numerici: {list(questions_by_id.keys())}")
         
         total_score = 0.0
         max_score = 0.0
@@ -651,24 +659,47 @@ class QuizAttemptRepository:
         for answer in answers_data.answers:
             print(f"DEBUG - Repository submit_answers - Elaborazione risposta: {answer}")
             
-            # Estrai UUID della domanda
+            # Estrai UUID o ID della domanda
+            question_uuid = None
+            question_id = None
+            
             if hasattr(answer, 'questionId'):
-                question_uuid = answer.questionId
+                question_id_or_uuid = answer.questionId
             elif hasattr(answer, 'question_id'):
-                question_uuid = answer.question_id
+                question_id_or_uuid = answer.question_id
             elif hasattr(answer, 'question_uuid'):
-                question_uuid = answer.question_uuid
+                question_id_or_uuid = answer.question_uuid
+            elif isinstance(answer, dict) and 'question_id' in answer:
+                question_id_or_uuid = answer['question_id']
+            elif isinstance(answer, dict) and 'questionId' in answer:
+                question_id_or_uuid = answer['questionId']
+            elif isinstance(answer, dict) and 'question_uuid' in answer:
+                question_id_or_uuid = answer['question_uuid']
             else:
                 print(f"DEBUG - Repository submit_answers - Risposta senza ID domanda: {answer}")
                 continue
                 
-            # Trova la domanda nel dizionario
-            question = questions_dict.get(str(question_uuid))
+            print(f"DEBUG - Repository submit_answers - ID/UUID estratto: {question_id_or_uuid}, tipo: {type(question_id_or_uuid)}")
+            
+            # Cerca la domanda prima per UUID, poi per ID numerico
+            question = None
+            
+            # Prova a cercare la domanda per UUID
+            if isinstance(question_id_or_uuid, str) and question_id_or_uuid in questions_by_uuid:
+                question = questions_by_uuid[question_id_or_uuid]
+                print(f"DEBUG - Repository submit_answers - Domanda trovata per UUID")
+            # Altrimenti prova a cercare per ID numerico
+            elif isinstance(question_id_or_uuid, int) or (isinstance(question_id_or_uuid, str) and question_id_or_uuid.isdigit()):
+                numeric_id = int(question_id_or_uuid)
+                if numeric_id in questions_by_id:
+                    question = questions_by_id[numeric_id]
+                    print(f"DEBUG - Repository submit_answers - Domanda trovata per ID numerico: {numeric_id}")
+            
             if not question:
-                print(f"DEBUG - Repository submit_answers - Domanda non trovata con UUID: {question_uuid}")
+                print(f"DEBUG - Repository submit_answers - Domanda non trovata con identificatore: {question_id_or_uuid}")
                 continue
                 
-            print(f"DEBUG - Repository submit_answers - Domanda trovata: {question.text}, tipo: {question.question_type}")
+            print(f"DEBUG - Repository submit_answers - Domanda trovata: ID={question.id}, UUID={question.uuid}, Tipo={question.question_type}")
             max_score += question.points
             
             # Estrai la risposta in base al tipo di domanda
@@ -677,35 +708,33 @@ class QuizAttemptRepository:
             # Per oggetti dict
             if isinstance(answer, dict):
                 if "selected_option_id" in answer:
-                    selected_option = answer["selected_option_id"]
-                    answer_value = {"selected_option_id": selected_option}
+                    answer_value = answer["selected_option_id"]  # Estrai direttamente l'ID
                 elif "selected_option_ids" in answer:
-                    selected_option = answer["selected_option_ids"]
-                    answer_value = {"selected_option_ids": selected_option}
+                    answer_value = answer["selected_option_ids"]
                 elif "text_answer" in answer:
                     answer_value = {"text_answer": answer["text_answer"]}
             else:
                 # Per oggetti Pydantic
                 if hasattr(answer, 'selected_option_id') and answer.selected_option_id is not None:
-                    selected_option = answer.selected_option_id
-                    answer_value = {"selected_option_id": selected_option}
+                    answer_value = answer.selected_option_id  # Estrai direttamente l'ID
                 elif hasattr(answer, 'selectedOptionId') and answer.selectedOptionId is not None:
-                    selected_option = answer.selectedOptionId
-                    answer_value = {"selected_option_id": selected_option}
+                    answer_value = answer.selectedOptionId
                 elif hasattr(answer, 'selected_option_ids') and answer.selected_option_ids:
-                    selected_option = answer.selected_option_ids
-                    answer_value = {"selected_option_ids": selected_option}
+                    answer_value = answer.selected_option_ids
                 elif hasattr(answer, 'selectedOptionIds') and answer.selectedOptionIds:
-                    selected_option = answer.selectedOptionIds
-                    answer_value = {"selected_option_ids": selected_option}
+                    answer_value = answer.selectedOptionIds
                 elif hasattr(answer, 'text_answer') and answer.text_answer:
                     answer_value = {"text_answer": answer.text_answer}
                 elif hasattr(answer, 'textAnswer') and answer.textAnswer:
                     answer_value = {"text_answer": answer.textAnswer}
             
+            print(f"DEBUG - Repository submit_answers - Valore risposta estratto: {answer_value}")
+            
             # Calcola se la risposta è corretta e il punteggio
             is_correct, score = QuizRepository._evaluate_answer(question, answer_value)
             total_score += score
+            
+            print(f"DEBUG - Repository submit_answers - Risultato valutazione: is_correct={is_correct}, score={score}")
             
             # Se una risposta non è corretta, imposta il flag a False
             if not is_correct:
@@ -715,7 +744,7 @@ class QuizAttemptRepository:
             student_answer = StudentAnswer(
                 attempt_id=attempt.id,
                 question_id=question.id,
-                answer_data=answer_value,
+                answer_data={"selected_option_id": answer_value} if question.question_type == "single_choice" else answer_value,
                 is_correct=is_correct,
                 score=score
             )
@@ -730,14 +759,9 @@ class QuizAttemptRepository:
         attempt.passed = all_correct
         
         # Il quiz è considerato completato solo se tutte le risposte sono corrette
-        if all_correct:
-            # Aggiorna anche il quiz per segnalarlo come completato
-            quiz.is_completed = True
-            print(f"DEBUG - Repository submit_answers - Quiz completato con successo! Score: {total_score}/{max_score}")
-        else:
-            # Se non tutte le risposte sono corrette, il quiz non è considerato completato
-            quiz.is_completed = False
-            print(f"DEBUG - Repository submit_answers - Quiz NON completato. Score: {total_score}/{max_score}")
+        quiz.is_completed = all_correct
+        
+        print(f"DEBUG - Repository submit_answers - Quiz completato: passed={all_correct}, score={total_score}/{max_score}")
         
         db.add(attempt)
         db.add(quiz)
