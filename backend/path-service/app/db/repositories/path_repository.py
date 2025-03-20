@@ -285,37 +285,67 @@ class PathRepository:
         Returns:
             Il nodo aggiornato se trovato, altrimenti None
         """
-        node = db.query(PathNode).filter(PathNode.uuid == node_uuid).first()
-        if not node:
+        import logging
+        import traceback
+        logger = logging.getLogger("path-service")
+        
+        try:
+            logger.info(f"Aggiornamento stato nodo: uuid={node_uuid}, nuovi dati={status_update}")
+            
+            node = db.query(PathNode).filter(PathNode.uuid == node_uuid).first()
+            if not node:
+                logger.error(f"Nodo con UUID {node_uuid} non trovato nel database")
+                return None
+            
+            logger.info(f"Nodo trovato: id={node.id}, path_id={node.path_id}, stato attuale={node.status}")
+            
+            # Aggiorna lo stato del nodo
+            old_status = node.status
+            node.status = status_update.status
+            logger.info(f"Stato nodo aggiornato: {old_status} -> {node.status}")
+            
+            # Se il nodo è stato completato, imposta la data di completamento
+            if status_update.status == CompletionStatus.COMPLETED and not node.completed_at:
+                node.completed_at = datetime.now()
+                logger.info(f"Impostata data di completamento: {node.completed_at}")
+            
+            # Se il nodo è stato iniziato e non ha una data di inizio, imposta la data di inizio
+            if status_update.status == CompletionStatus.IN_PROGRESS and not node.started_at:
+                node.started_at = datetime.now()
+                logger.info(f"Impostata data di inizio: {node.started_at}")
+            
+            # Aggiorna il punteggio se fornito
+            if status_update.score is not None:
+                old_score = node.score
+                node.score = status_update.score
+                logger.info(f"Punteggio aggiornato: {old_score} -> {node.score}")
+            
+            # Aggiorna il feedback se fornito
+            if status_update.feedback is not None:
+                node.feedback = status_update.feedback
+                logger.info(f"Feedback aggiornato: {node.feedback}")
+            
+            try:
+                logger.info("Salvataggio modifiche del nodo nel database...")
+                db.add(node)
+                db.commit()
+                db.refresh(node)
+                logger.info("Nodo aggiornato con successo nel database")
+            except Exception as db_error:
+                logger.error(f"Errore durante il salvataggio del nodo: {str(db_error)}")
+                logger.error(traceback.format_exc())
+                db.rollback()
+                raise
+            
+            # Aggiorna lo stato e i punteggi del percorso
+            logger.info(f"Aggiornamento stato percorso: path_id={node.path_id}")
+            PathRepository._update_path_status(db, node.path_id)
+            
+            return node
+        except Exception as e:
+            logger.error(f"Errore durante l'aggiornamento dello stato del nodo: {str(e)}")
+            logger.error(traceback.format_exc())
             return None
-        
-        # Aggiorna lo stato del nodo
-        node.status = status_update.status
-        
-        # Se il nodo è stato completato, imposta la data di completamento
-        if status_update.status == CompletionStatus.COMPLETED and not node.completed_at:
-            node.completed_at = datetime.now()
-        
-        # Se il nodo è stato iniziato e non ha una data di inizio, imposta la data di inizio
-        if status_update.status == CompletionStatus.IN_PROGRESS and not node.started_at:
-            node.started_at = datetime.now()
-        
-        # Aggiorna il punteggio se fornito
-        if status_update.score is not None:
-            node.score = status_update.score
-        
-        # Aggiorna il feedback se fornito
-        if status_update.feedback is not None:
-            node.feedback = status_update.feedback
-        
-        db.add(node)
-        db.commit()
-        db.refresh(node)
-        
-        # Aggiorna lo stato e i punteggi del percorso
-        PathRepository._update_path_status(db, node.path_id)
-        
-        return node
     
     @staticmethod
     def _update_path_status(db: Session, path_id: int) -> None:

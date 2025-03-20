@@ -1,6 +1,7 @@
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any, Tuple, Union
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
+from datetime import datetime
 
 from app.db.models.quiz import (
     Quiz, Question, AnswerOption, 
@@ -20,8 +21,76 @@ class QuizRepository:
     
     @staticmethod
     def get(db: Session, quiz_id: int) -> Optional[Quiz]:
-        """Ottiene un quiz dal database per ID."""
-        return db.query(Quiz).filter(Quiz.id == quiz_id).first()
+        """
+        Ottiene un quiz dal database per ID.
+        Se non trova un quiz concreto, cerca un template.
+        """
+        # Prima cerca un quiz concreto
+        quiz = db.query(Quiz).filter(Quiz.id == quiz_id).first()
+        if quiz:
+            return quiz
+            
+        # Se non trova un quiz concreto, cerca un template
+        template = db.query(QuizTemplate).filter(QuizTemplate.id == quiz_id).first()
+        if template:
+            # Se trova un template, crea un nuovo quiz concreto
+            from app.schemas.quiz import QuizCreate
+            quiz_create = QuizCreate(
+                template_id=template.id,
+                student_id=None,  # Questo dovrà essere impostato dall'endpoint
+                path_id=None
+            )
+            return QuizRepository.create_from_template(db, quiz_create)
+            
+        return None
+    
+    @staticmethod
+    def get_by_id_or_uuid(db: Session, identifier: Union[int, str]) -> Optional[Quiz]:
+        """
+        Ottiene un quiz dal database per ID o UUID.
+        Se l'identificatore è un numero, cerca per ID sia nei quiz che nei template.
+        Se l'identificatore è una stringa, cerca per UUID.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"DEBUG - QuizRepository.get_by_id_or_uuid - Cerco quiz con identificatore: {identifier}, tipo: {type(identifier)}")
+        
+        if isinstance(identifier, int):
+            # Prima cerca un quiz concreto
+            quiz = db.query(Quiz).filter(Quiz.id == identifier).first()
+            if quiz:
+                logger.warning(f"DEBUG - QuizRepository.get_by_id_or_uuid - Trovato quiz concreto: ID={quiz.id}")
+                return quiz
+                
+            # Se non trova un quiz concreto, cerca un quiz con template_id
+            quiz = db.query(Quiz).filter(Quiz.template_id == identifier).first()
+            if quiz:
+                logger.warning(f"DEBUG - QuizRepository.get_by_id_or_uuid - Trovato quiz con template_id: {identifier}")
+                return quiz
+                
+            # Se non trova un quiz con template_id, cerca un template
+            template = db.query(QuizTemplate).filter(QuizTemplate.id == identifier).first()
+            if template:
+                logger.warning(f"DEBUG - QuizRepository.get_by_id_or_uuid - Trovato template: ID={template.id}")
+                # Se trova un template, crea un nuovo quiz concreto
+                from app.schemas.quiz import QuizCreate
+                quiz_create = QuizCreate(
+                    template_id=template.id,
+                    student_id=None,  # Questo dovrà essere impostato dall'endpoint
+                    path_id=None
+                )
+                return QuizRepository.create_from_template(db, quiz_create)
+                
+            logger.warning(f"DEBUG - QuizRepository.get_by_id_or_uuid - Nessun quiz o template trovato con ID: {identifier}")
+            return None
+        else:
+            # Se è una stringa, cerca per UUID
+            quiz = db.query(Quiz).filter(Quiz.uuid == identifier).first()
+            if quiz:
+                logger.warning(f"DEBUG - QuizRepository.get_by_id_or_uuid - Trovato quiz con UUID: {quiz.uuid}")
+            else:
+                logger.warning(f"DEBUG - QuizRepository.get_by_id_or_uuid - Nessun quiz trovato con UUID: {identifier}")
+            return quiz
     
     @staticmethod
     def get_by_uuid(db: Session, uuid: str) -> Optional[Quiz]:
@@ -246,7 +315,6 @@ class QuizRepository:
         
         # Se è il primo tentativo, registra l'orario di inizio
         if not attempt.started_at:
-            from datetime import datetime
             attempt.started_at = datetime.now()
         
         # Mappa le domande per UUID
@@ -461,7 +529,40 @@ class QuizAttemptRepository:
     @staticmethod
     def get_by_uuid(db: Session, uuid: str) -> Optional[QuizAttempt]:
         """Ottiene un tentativo di quiz dal database per UUID."""
-        return db.query(QuizAttempt).filter(QuizAttempt.uuid == uuid).first()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"DEBUG - QuizAttemptRepository.get_by_uuid - Cerco tentativo con UUID: '{uuid}', tipo: {type(uuid)}")
+        
+        # Prova a usare l'UUID così com'è
+        result = db.query(QuizAttempt).filter(QuizAttempt.uuid == uuid).first()
+        logger.warning(f"DEBUG - QuizAttemptRepository.get_by_uuid - Risultato ricerca con UUID esatto: {result is not None}")
+        
+        if not result:
+            # Prova a cercare come stringa
+            try:
+                from uuid import UUID
+                # Normalizza l'UUID
+                try:
+                    normalized_uuid = str(UUID(uuid))
+                    logger.warning(f"DEBUG - QuizAttemptRepository.get_by_uuid - UUID normalizzato: {normalized_uuid}")
+                    result = db.query(QuizAttempt).filter(QuizAttempt.uuid == normalized_uuid).first()
+                    logger.warning(f"DEBUG - QuizAttemptRepository.get_by_uuid - Risultato ricerca con UUID normalizzato: {result is not None}")
+                except ValueError:
+                    logger.warning(f"DEBUG - QuizAttemptRepository.get_by_uuid - UUID non valido: {uuid}")
+                    pass
+            except Exception as e:
+                logger.warning(f"DEBUG - QuizAttemptRepository.get_by_uuid - Errore nella normalizzazione UUID: {str(e)}")
+                pass
+        
+        # Log su tutti i tentativi se non abbiamo trovato nulla
+        if not result:
+            all_attempts = db.query(QuizAttempt).limit(10).all()
+            if all_attempts:
+                logger.warning(f"DEBUG - QuizAttemptRepository.get_by_uuid - Primi 10 tentativi nel DB:")
+                for attempt in all_attempts:
+                    logger.warning(f"DEBUG - QuizAttemptRepository.get_by_uuid - Tentativo: ID={attempt.id}, UUID={attempt.uuid}")
+        
+        return result
     
     @staticmethod
     def get_by_quiz_id(db: Session, quiz_id: int) -> Optional[QuizAttempt]:
@@ -476,17 +577,33 @@ class QuizAttemptRepository:
         ).filter(QuizAttempt.id == attempt_id).first()
     
     @staticmethod
-    def create(db: Session, attempt_data: QuizAttemptCreate) -> QuizAttempt:
-        """Crea un nuovo tentativo di quiz nel database."""
-        # Estrai i dati dal modello Pydantic
-        attempt_dict = attempt_data.model_dump()
-        quiz_id = attempt_dict.pop('quiz_id')
+    def create(db: Session, quiz_id: int = None, max_score: float = 0, attempt_data: Optional[QuizAttemptCreate] = None) -> QuizAttempt:
+        """
+        Crea un nuovo tentativo di quiz nel database.
+        Supporta sia la chiamata con oggetto QuizAttemptCreate che con parametri separati.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
         
-        # Crea il tentativo usando i dati estratti
-        db_attempt = QuizAttempt(quiz_id=quiz_id, **attempt_dict)
+        if attempt_data is not None:
+            # Se è stato fornito un oggetto QuizAttemptCreate, usa quello
+            logger.warning(f"DEBUG - QuizAttemptRepository.create - Usando oggetto QuizAttemptCreate: {attempt_data}")
+            attempt_dict = attempt_data.model_dump()
+            db_attempt = QuizAttempt(**attempt_dict)
+        else:
+            # Altrimenti usa i parametri separati
+            logger.warning(f"DEBUG - QuizAttemptRepository.create - Usando parametri separati: quiz_id={quiz_id}, max_score={max_score}")
+            db_attempt = QuizAttempt(quiz_id=quiz_id, max_score=max_score)
+        
+        # Imposta la data di inizio
+        db_attempt.started_at = datetime.now()
+        
         db.add(db_attempt)
         db.commit()
         db.refresh(db_attempt)
+        
+        logger.warning(f"DEBUG - QuizAttemptRepository.create - Tentativo creato: ID={db_attempt.id}, UUID={db_attempt.uuid}")
+        
         return db_attempt
     
     @staticmethod
@@ -510,46 +627,89 @@ class QuizAttemptRepository:
         from datetime import datetime
         from app.db.models.quiz import StudentAnswer
         
+        print(f"DEBUG - Repository submit_answers - Tentativo ID: {attempt.id}, UUID: {attempt.uuid}")
+        print(f"DEBUG - Repository submit_answers - Quiz ID: {attempt.quiz_id}")
+        print(f"DEBUG - Repository submit_answers - Answers data: {answers_data}")
+        
         # Ottieni il quiz associato al tentativo
         quiz = db.query(Quiz).filter(Quiz.id == attempt.quiz_id).first()
         if not quiz:
+            print(f"DEBUG - Repository submit_answers - Quiz non trovato con ID: {attempt.quiz_id}")
             raise ValueError("Quiz non trovato")
             
         # Ottieni tutte le domande del quiz
         questions = db.query(Question).filter(Question.quiz_id == quiz.id).all()
         questions_dict = {str(q.uuid): q for q in questions}
+        print(f"DEBUG - Repository submit_answers - Trovate {len(questions)} domande")
+        print(f"DEBUG - Repository submit_answers - IDs domande: {list(questions_dict.keys())}")
         
         total_score = 0.0
         max_score = 0.0
+        all_correct = True  # Flag per verificare se tutte le risposte sono corrette
         
-        # Esamina ogni risposta inviata
+        # Elabora le risposte
         for answer in answers_data.answers:
-            question_id = answer.question_id
-            if question_id not in questions_dict:
+            print(f"DEBUG - Repository submit_answers - Elaborazione risposta: {answer}")
+            
+            # Estrai UUID della domanda
+            if hasattr(answer, 'questionId'):
+                question_uuid = answer.questionId
+            elif hasattr(answer, 'question_id'):
+                question_uuid = answer.question_id
+            elif hasattr(answer, 'question_uuid'):
+                question_uuid = answer.question_uuid
+            else:
+                print(f"DEBUG - Repository submit_answers - Risposta senza ID domanda: {answer}")
                 continue
                 
-            question = questions_dict[question_id]
+            # Trova la domanda nel dizionario
+            question = questions_dict.get(str(question_uuid))
+            if not question:
+                print(f"DEBUG - Repository submit_answers - Domanda non trovata con UUID: {question_uuid}")
+                continue
+                
+            print(f"DEBUG - Repository submit_answers - Domanda trovata: {question.text}, tipo: {question.question_type}")
             max_score += question.points
             
-            # Valuta la risposta
-            selected_option = None
+            # Estrai la risposta in base al tipo di domanda
             answer_value = None
             
-            if hasattr(answer, 'selected_option_id') and answer.selected_option_id is not None:
-                # Risposta a scelta singola
-                selected_option = answer.selected_option_id
-                answer_value = {"selected_option_id": selected_option}
-            elif hasattr(answer, 'selected_option_ids') and answer.selected_option_ids:
-                # Risposta a scelta multipla
-                selected_option = answer.selected_option_ids
-                answer_value = {"selected_option_ids": selected_option}
-            elif hasattr(answer, 'text_answer') and answer.text_answer:
-                # Risposta testuale
-                answer_value = {"text_answer": answer.text_answer}
+            # Per oggetti dict
+            if isinstance(answer, dict):
+                if "selected_option_id" in answer:
+                    selected_option = answer["selected_option_id"]
+                    answer_value = {"selected_option_id": selected_option}
+                elif "selected_option_ids" in answer:
+                    selected_option = answer["selected_option_ids"]
+                    answer_value = {"selected_option_ids": selected_option}
+                elif "text_answer" in answer:
+                    answer_value = {"text_answer": answer["text_answer"]}
+            else:
+                # Per oggetti Pydantic
+                if hasattr(answer, 'selected_option_id') and answer.selected_option_id is not None:
+                    selected_option = answer.selected_option_id
+                    answer_value = {"selected_option_id": selected_option}
+                elif hasattr(answer, 'selectedOptionId') and answer.selectedOptionId is not None:
+                    selected_option = answer.selectedOptionId
+                    answer_value = {"selected_option_id": selected_option}
+                elif hasattr(answer, 'selected_option_ids') and answer.selected_option_ids:
+                    selected_option = answer.selected_option_ids
+                    answer_value = {"selected_option_ids": selected_option}
+                elif hasattr(answer, 'selectedOptionIds') and answer.selectedOptionIds:
+                    selected_option = answer.selectedOptionIds
+                    answer_value = {"selected_option_ids": selected_option}
+                elif hasattr(answer, 'text_answer') and answer.text_answer:
+                    answer_value = {"text_answer": answer.text_answer}
+                elif hasattr(answer, 'textAnswer') and answer.textAnswer:
+                    answer_value = {"text_answer": answer.textAnswer}
             
             # Calcola se la risposta è corretta e il punteggio
-            is_correct, score = QuizRepository.evaluate_answer(question, answer_value)
+            is_correct, score = QuizRepository._evaluate_answer(question, answer_value)
             total_score += score
+            
+            # Se una risposta non è corretta, imposta il flag a False
+            if not is_correct:
+                all_correct = False
             
             # Salva la risposta nel database
             student_answer = StudentAnswer(
@@ -565,10 +725,19 @@ class QuizAttemptRepository:
         attempt.score = total_score
         attempt.max_score = max_score
         attempt.completed_at = datetime.utcnow()
-        attempt.passed = (total_score / max_score * 100) >= quiz.passing_score if max_score > 0 else False
         
-        # Aggiorna anche il quiz per segnalarlo come completato
-        quiz.is_completed = True
+        # Il quiz è considerato passato solo se tutte le risposte sono corrette
+        attempt.passed = all_correct
+        
+        # Il quiz è considerato completato solo se tutte le risposte sono corrette
+        if all_correct:
+            # Aggiorna anche il quiz per segnalarlo come completato
+            quiz.is_completed = True
+            print(f"DEBUG - Repository submit_answers - Quiz completato con successo! Score: {total_score}/{max_score}")
+        else:
+            # Se non tutte le risposte sono corrette, il quiz non è considerato completato
+            quiz.is_completed = False
+            print(f"DEBUG - Repository submit_answers - Quiz NON completato. Score: {total_score}/{max_score}")
         
         db.add(attempt)
         db.add(quiz)

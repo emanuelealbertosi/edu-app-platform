@@ -337,43 +337,39 @@ const TakeQuiz: React.FC = () => {
       });
       
       // STEP 1: Assicuriamoci di avere un UUID valido
-      let quizUuid = quiz.uuid;
+      let quizUuid: string = quiz.uuid || '';
       console.log('[DEBUG TakeQuiz] Verifica UUID iniziale:', {
         uuid: quizUuid,
         valid: quizUuid && quizUuid.includes('-')
       });
       
-      // Se non abbiamo un UUID valido, otteniamolo dal server
+      // Se non abbiamo un UUID valido, dobbiamo ottenerlo
       if (!quizUuid || !quizUuid.includes('-')) {
-        console.log('[DEBUG TakeQuiz] UUID non valido o mancante, richiedo tentativo al server');
+        console.log('[DEBUG TakeQuiz] UUID non valido, tentativo di ottenerlo');
+        
         try {
-          // Usa getOrCreateQuizAttempt che è designato specificamente per ottenere un UUID valido
-          const attemptUuid = await QuizService.getOrCreateQuizAttempt(quiz.id);
-          if (attemptUuid) {
-            console.log('[DEBUG TakeQuiz] Ottenuto UUID valido dal server:', attemptUuid);
-            quizUuid = attemptUuid;
+          // Prova a creare un nuovo tentativo
+          console.log('[DEBUG TakeQuiz] Chiamata a getOrCreateQuizAttempt con quiz ID:', quiz.id);
+          const newUuid = await QuizService.getOrCreateQuizAttempt(quiz.id);
+          console.log('[DEBUG TakeQuiz] Risposta di getOrCreateQuizAttempt:', newUuid);
+          
+          if (newUuid && typeof newUuid === 'string' && newUuid.includes('-')) {
+            console.log('[DEBUG TakeQuiz] Ottenuto UUID valido:', newUuid);
+            quizUuid = newUuid;
           } else {
-            console.error('[DEBUG TakeQuiz] Non è stato possibile ottenere un UUID valido');
-            NotificationsService.error(
-              'Non è stato possibile creare un tentativo per il quiz',
-              'Errore'
-            );
-            setSubmitting(false);
-            return;
+            // Se non siamo riusciti a ottenere un UUID valido, non possiamo procedere
+            console.error('[DEBUG TakeQuiz] Impossibile ottenere un UUID valido per il quiz');
+            throw new Error('Impossibile ottenere un UUID valido per il quiz. Riprova più tardi.');
           }
-        } catch (err) {
-          console.error('[DEBUG TakeQuiz] Errore nel recupero dell\'UUID:', err);
+        } catch (error) {
+          console.error('[DEBUG TakeQuiz] Errore durante il recupero dell\'UUID:', error);
           NotificationsService.error(
-            'Si è verificato un errore nella creazione del tentativo',
+            'Impossibile iniziare il quiz. Riprova più tardi.',
             'Errore'
           );
-          setSubmitting(false);
-          return;
+          throw new Error('Impossibile ottenere un UUID valido per il quiz. Riprova più tardi.');
         }
       }
-      
-      // A questo punto abbiamo un UUID valido o abbiamo già gestito l'errore
-      console.log('[DEBUG TakeQuiz] UUID valido ottenuto:', quizUuid);
       
       // Preparazione dei dati per l'invio
       const submission: QuizSubmission = {
@@ -437,8 +433,8 @@ const TakeQuiz: React.FC = () => {
       // Reindirizzamento dopo un breve ritardo per mostrare il risultato
       setTimeout(() => {
         if (pathId) {
-          // Torna alla pagina del percorso
-          navigate(`/student/paths/${pathId}`);
+          // Torna alla pagina del percorso (corretto il percorso)
+          navigate(`/student/path/${pathId}`);
         } else {
           // Torna all'elenco dei quiz
           navigate('/student/quizzes');
@@ -455,6 +451,30 @@ const TakeQuiz: React.FC = () => {
       setSubmitting(false);
     }
   };
+
+  // Gestisce il timeout del quiz
+  useEffect(() => {
+    if (!quiz?.timeLimit || !startTime) return;
+
+    const timeLimitMs = quiz.timeLimit * 60 * 1000; // Converti i minuti in millisecondi
+    const endTime = startTime.getTime() + timeLimitMs;
+
+    const timer = setInterval(() => {
+      const now = new Date().getTime();
+      const timeLeft = endTime - now;
+
+      if (timeLeft <= 0) {
+        // Il tempo è scaduto, invia automaticamente le risposte
+        clearInterval(timer);
+        handleSubmitAnswers();
+      } else if (timeLeft <= 60000) { // Ultimo minuto
+        // Mostra un avviso quando manca un minuto
+        setTimeWarning(true);
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [quiz?.timeLimit, startTime]);
 
   // Gestisce il cambio di opzione nelle domande a scelta singola
   const handleOptionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -534,7 +554,7 @@ const TakeQuiz: React.FC = () => {
   // Handle navigating back to the path detail or quiz list
   const handleBackToPath = () => {
     if (pathId) {
-      navigate(`/student/path/${pathId}`);
+      navigate(`/student/path/${pathId}`); // Corretto il percorso
     } else {
       navigate('/student/quizzes');
     }

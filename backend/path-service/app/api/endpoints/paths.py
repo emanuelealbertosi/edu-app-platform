@@ -561,53 +561,96 @@ async def update_node_status(
     Gli admin e i genitori possono aggiornare lo stato di qualsiasi nodo.
     Gli studenti possono aggiornare solo lo stato dei nodi dei propri percorsi e
     solo per metterli in stato IN_PROGRESS (richiedono verifica).
+    Il quiz service può aggiornare lo stato dei nodi di tipo quiz.
     """
-    # Verifica che il nodo esista
-    node = PathRepository.get_node_by_uuid(db, status_update.node_uuid)
-    if not node:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Nodo con UUID {status_update.node_uuid} non trovato"
-        )
+    import logging
+    import traceback
+    logger = logging.getLogger("path-service")
     
-    # Ottieni il percorso associato
-    path = PathRepository.get(db, path_id=node.path_id)
-    
-    # Controlla i permessi di accesso
-    user_role = current_user.get("role")
-    user_id = current_user.get("user_id")
-    
-    if user_role == "admin":
-        # Gli admin possono aggiornare qualsiasi nodo in qualsiasi stato
-        pass
-    elif user_role == "parent":
-        # I genitori possono aggiornare solo i nodi dei percorsi che hanno assegnato
-        if path.assigned_by != user_id:
+    try:
+        logger.info(f"Richiesta di aggiornamento nodo ricevuta: node_uuid={status_update.node_uuid}, status={status_update.status}")
+        logger.info(f"Utente: ruolo={current_user.get('role')}, id={current_user.get('user_id')}")
+        logger.info(f"Dati completi della richiesta: {status_update}")
+        
+        # Verifica che il nodo esista
+        node = PathRepository.get_node_by_uuid(db, status_update.node_uuid)
+        if not node:
+            logger.error(f"Nodo con UUID {status_update.node_uuid} non trovato")
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Non hai i permessi per aggiornare questo nodo"
-            )
-    elif user_role == "student":
-        # Gli studenti possono aggiornare solo i nodi dei propri percorsi
-        # e solo per metterli in stato IN_PROGRESS
-        if path.student_id != user_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Non hai i permessi per aggiornare questo nodo"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Nodo con UUID {status_update.node_uuid} non trovato"
             )
         
-        if status_update.status != CompletionStatus.IN_PROGRESS:
+        logger.info(f"Nodo trovato: id={node.id}, path_id={node.path_id}, tipo={node.node_type}, stato attuale={node.status}")
+        
+        # Ottieni il percorso associato
+        path = PathRepository.get(db, path_id=node.path_id)
+        logger.info(f"Percorso associato: id={path.id}, student_id={path.student_id}, stato={path.status}")
+        
+        # Controlla i permessi di accesso
+        user_role = current_user.get("role")
+        user_id = current_user.get("user_id")
+        
+        # Se l'utente è il quiz service, permetti l'aggiornamento solo per nodi di tipo quiz
+        if user_role == "quiz_service":
+            logger.info(f"Richiesta dal quiz service per nodo di tipo {node.node_type}")
+            if node.node_type != "quiz":
+                logger.error(f"Il quiz service può aggiornare solo nodi di tipo quiz, non {node.node_type}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Il quiz service può aggiornare solo nodi di tipo quiz"
+                )
+            logger.info("Autorizzazione quiz service verificata con successo")
+        elif user_role == "admin":
+            # Gli admin possono aggiornare qualsiasi nodo in qualsiasi stato
+            logger.info("Richiesta da admin, permessi OK")
+            pass
+        elif user_role == "parent":
+            # I genitori possono aggiornare solo i nodi dei percorsi che hanno assegnato
+            if path.assigned_by != user_id:
+                logger.error(f"Il genitore {user_id} non ha i permessi per aggiornare il nodo del percorso assegnato da {path.assigned_by}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Non hai i permessi per aggiornare questo nodo"
+                )
+            logger.info("Autorizzazione genitore verificata con successo")
+        elif user_role == "student":
+            # Gli studenti possono aggiornare solo i nodi dei propri percorsi
+            # e solo per metterli in stato IN_PROGRESS
+            if path.student_id != user_id:
+                logger.error(f"Lo studente {user_id} non ha i permessi per aggiornare il nodo del percorso assegnato a {path.student_id}")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Non hai i permessi per aggiornare questo nodo"
+                )
+            
+            if status_update.status != CompletionStatus.IN_PROGRESS:
+                logger.error(f"Lo studente {user_id} sta tentando di impostare lo stato a {status_update.status}, ma può solo impostare IN_PROGRESS")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Gli studenti possono solo mettere i nodi in stato 'in progress'"
+                )
+            logger.info("Autorizzazione studente verificata con successo")
+        
+        # Aggiorna lo stato del nodo
+        logger.info(f"Aggiornamento stato nodo da {node.status} a {status_update.status}")
+        updated_node = PathRepository.update_node_status(db, status_update.node_uuid, status_update)
+        if not updated_node:
+            logger.error(f"Errore interno durante l'aggiornamento dello stato del nodo {status_update.node_uuid}")
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Gli studenti possono solo mettere i nodi in stato 'in progress'"
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Errore durante l'aggiornamento dello stato del nodo"
             )
-    
-    # Aggiorna lo stato del nodo
-    updated_node = PathRepository.update_node_status(db, status_update.node_uuid, status_update)
-    if not updated_node:
+        
+        logger.info(f"Aggiornamento completato con successo: node_id={updated_node.id}, nuovo stato={updated_node.status}")
+        return updated_node
+    except HTTPException:
+        # Rilancia le eccezioni HTTP
+        raise
+    except Exception as e:
+        logger.error(f"Errore non gestito nell'endpoint update_node_status: {str(e)}")
+        logger.error(traceback.format_exc())
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Errore durante l'aggiornamento dello stato del nodo"
+            detail=f"Errore durante l'aggiornamento dello stato del nodo: {str(e)}"
         )
-    
-    return updated_node

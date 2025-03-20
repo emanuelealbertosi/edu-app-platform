@@ -53,7 +53,9 @@ class Settings(BaseSettings):
     
     # Service URLs
     AUTH_SERVICE_URL: str = os.getenv("AUTH_SERVICE_URL", "http://localhost:8001")
+    PATH_SERVICE_URL: str = os.getenv("PATH_SERVICE_URL", "http://localhost:8003")
     
-    # Le impostazioni sono state migrate a model_config
+    # Service authentication
+    SERVICE_TOKEN: str = os.getenv("SERVICE_TOKEN", "shared_service_token_for_microservices")
 
 settings = Settings()

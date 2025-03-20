@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # Aggiunta di campi mancanti che vengono utilizzati nell'applicazione
     API_GATEWAY_URL: str = os.getenv("API_GATEWAY_URL", "http://localhost:8000")
     
+    # Service authentication
+    SERVICE_TOKEN: str = os.getenv("SERVICE_TOKEN", "shared_service_token_for_microservices")
+    
     model_config = {
         "case_sensitive": True,
         "env_file": ".env",

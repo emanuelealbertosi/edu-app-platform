@@ -348,4 +348,77 @@ export class ApiServiceClass {
       };
     }
   }
+
+  /**
+   * Ottiene gli header di autenticazione necessari per le richieste API
+   * @returns Un oggetto con gli header di autenticazione
+   */
+  private static getAuthHeaders() {
+    const token = localStorage.getItem('token');
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': token ? `Bearer ${token}` : ''
+    };
+  }
+
+  /**
+   * Metodo per effettuare richieste POST
+   * @param url URL della richiesta
+   * @param data Dati da inviare con la richiesta
+   * @returns Promise con i dati della risposta
+   */
+  public static async post<T>(url: string, data: any): Promise<T> {
+    try {
+      console.log(`[DEBUG ApiService] POST request to ${url}`, { requestBody: data });
+      
+      // Includi sempre le credenziali per gestire l'autenticazione
+      const response = await axios.post(url, data, {
+        withCredentials: true,
+        headers: this.getAuthHeaders()
+      });
+      
+      console.log(`[DEBUG ApiService] POST response from ${url}`, { 
+        status: response.status,
+        statusText: response.statusText,
+        responseData: response.data 
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error(`[DEBUG ApiService] Error in POST request to ${url}:`, error);
+      
+      if (axios.isAxiosError(error)) {
+        console.error('[DEBUG ApiService] Axios error details:', {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          data: error.response?.data,
+          config: {
+            url: error.config?.url,
+            method: error.config?.method,
+            baseURL: error.config?.baseURL,
+            headers: error.config?.headers,
+            data: error.config?.data
+          }
+        });
+        
+        // Handle auth errors
+        if (error.response?.status === 401) {
+          console.error('[DEBUG ApiService] Authentication error detected (401)');
+          // Redirect to login or show notification
+          this.handleUnauthorizedError();
+        }
+      }
+      
+      throw error;
+    }
+  }
+  
+  /**
+   * Gestisce gli errori di autenticazione (401)
+   */
+  private static handleUnauthorizedError() {
+    // Pulisci il token e reindirizza alla pagina di login
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+  }
 }

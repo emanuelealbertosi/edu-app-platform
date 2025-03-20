@@ -307,7 +307,7 @@ class QuizAttempt(QuizAttemptInDBBase):
 
 # Schema per l'invio delle risposte dello studente
 class SubmitQuizAnswers(BaseModel):
-    quiz_id: str  # UUID del quiz
+    quiz_id: Optional[int] = None  # ID del quiz, necessario quando l'UUID del tentativo non esiste e deve essere creato
     answers: List[Dict[str, Any]]  # Lista di risposte (question_uuid -> risposta)
 
 # Schema per i risultati di un quiz

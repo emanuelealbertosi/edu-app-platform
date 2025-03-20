@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 import requests
@@ -78,13 +78,15 @@ def verify_token(token: str) -> Dict:
             )
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> Dict:
     """
-    Ottiene l'utente corrente dal token JWT.
+    Ottiene l'utente corrente dal token JWT o dall'header X-Service-Role.
     
     Args:
-        credentials: Le credenziali di autenticazione
+        request: La richiesta HTTP
+        credentials: Le credenziali di autenticazione (opzionale)
         
     Returns:
         Dict: Dati dell'utente
@@ -92,6 +94,34 @@ def get_current_user(
     Raises:
         HTTPException: Se l'autenticazione fallisce
     """
+    # Verifica se è una richiesta da un servizio interno
+    service_role = request.headers.get("X-Service-Role")
+    service_token = request.headers.get("X-Service-Token")
+    
+    if service_role and service_token:
+        # Verifica il token del servizio
+        if service_token != settings.SERVICE_TOKEN:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token del servizio non valido",
+            )
+        
+        # Restituisci i dati del servizio
+        return {
+            "user_id": f"service_{service_role}",
+            "email": f"{service_role}@service",
+            "role": service_role,
+            "exp": 0  # I servizi non hanno scadenza
+        }
+    
+    # Se non è una richiesta da un servizio, verifica il token JWT
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token non fornito",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     token = credentials.credentials
     token_data = verify_token(token)
     

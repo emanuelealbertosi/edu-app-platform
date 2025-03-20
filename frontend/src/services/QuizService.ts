@@ -229,6 +229,127 @@ class QuizService {
   }
 
   /**
+   * Maps a difficulty level from API (number or string) to the frontend enum format
+   */
+  private static mapDifficultyLevel(level: any): 'easy' | 'medium' | 'hard' {
+    // Gestisce sia il formato numerico che il formato stringa
+    if (typeof level === 'number') {
+      if (level <= 1) return 'easy';
+      if (level <= 3) return 'medium';
+      return 'hard';
+    }
+    
+    if (typeof level === 'string') {
+      const lowerLevel = level.toLowerCase();
+      if (lowerLevel === 'easy' || lowerLevel === 'facile') return 'easy';
+      if (lowerLevel === 'medium' || lowerLevel === 'medio') return 'medium';
+      if (lowerLevel === 'hard' || lowerLevel === 'difficile') return 'hard';
+    }
+    
+    return 'medium'; // Default
+  }
+
+  /**
+   * Maps a frontend difficulty level to the API format (number)
+   */
+  private static mapDifficultyLevelToApi(level: 'easy' | 'medium' | 'hard'): number {
+    if (level === 'easy') return 1;
+    if (level === 'medium') return 2;
+    if (level === 'hard') return 3;
+    return 2; // Medium come default
+  }
+
+  /**
+   * Normalizes the quiz data received from the backend
+   */
+  private static normalizeQuizData(data: any): Quiz {
+    console.log('[DEBUG QuizService] Normalizzazione dati quiz - dati originali:', {
+      id: data.id,
+      uuid: data.uuid,
+      rawUuid: JSON.stringify(data.uuid),
+      hasUuid: 'uuid' in data,
+      template_id: data.template_id,
+      is_completed: data.is_completed
+    });
+    
+    // Gestisce il caso in cui i dati provengano da un nodo percorso
+    let quizData = data;
+    
+    // Verifica speciale per UUID
+    if (!quizData.uuid) {
+      console.log('[DEBUG QuizService] ATTENZIONE: UUID non trovato nei dati originali. Cerco alternative...');
+      
+      // Cerca UUID in altre possibili proprietà (per API inconsistenti)
+      const possibleUuidFields = ['uuid', 'id_uuid', 'quiz_uuid', 'attempt_uuid'];
+      for (const field of possibleUuidFields) {
+        if (quizData[field] && typeof quizData[field] === 'string' && quizData[field].includes('-')) {
+          console.log(`[DEBUG QuizService] Trovato UUID alternativo in ${field}: ${quizData[field]}`);
+          quizData.uuid = quizData[field];
+          break;
+        }
+      }
+      
+      // Se ancora non abbiamo un UUID, guarda nei campi che rappresentano frammenti annidati
+      if (!quizData.uuid) {
+        if (quizData.quiz && quizData.quiz.uuid) {
+          console.log(`[DEBUG QuizService] Trovato UUID in quiz.uuid: ${quizData.quiz.uuid}`);
+          quizData.uuid = quizData.quiz.uuid;
+        } else if (quizData.attempt && quizData.attempt.uuid) {
+          console.log(`[DEBUG QuizService] Trovato UUID in attempt.uuid: ${quizData.attempt.uuid}`);
+          quizData.uuid = quizData.attempt.uuid;
+        }
+      }
+    }
+    
+    // Scenario 1: Nodo percorso con content.quiz_id
+    if (data.content && data.content.quiz_id) {
+      // Se è un nodo percorso, estraiamo i dati del quiz dal contenuto
+      quizData = {
+        ...data.content,
+        id: data.content.quiz_id || data.id,
+        uuid: data.content.uuid || data.uuid,
+        pathId: data.path_id,
+        pathTitle: data.path_title
+      };
+    }
+    
+    // Debug info per problemi di identificazione
+    console.log('[DEBUG QuizService] Dati normalizzati:', {
+      id: quizData.id,
+      uuid: quizData.uuid,
+      title: quizData.title || quizData.template?.title,
+      templateId: quizData.template_id,
+      pathId: quizData.path_id,
+      isCompleted: quizData.is_completed,
+      studentId: quizData.student_id
+    });
+    
+    // Normalizza le domande se presenti
+    let questions: Question[] = [];
+    if (quizData.questions && Array.isArray(quizData.questions)) {
+      questions = normalizeQuestions(quizData.questions);
+    }
+    
+    return {
+      id: quizData.id?.toString() || '0',
+      uuid: quizData.uuid || '',
+      templateId: (quizData.template_id || quizData.templateId || '0').toString(),
+      studentId: quizData.student_id || '',
+      title: quizData.title || quizData.template?.title || 'Quiz senza titolo',
+      description: quizData.description || quizData.template?.description || '',
+      isCompleted: quizData.is_completed || false,
+      startedAt: quizData.started_at ? new Date(quizData.started_at) : undefined,
+      completedAt: quizData.completed_at ? new Date(quizData.completed_at) : undefined,
+      score: quizData.score || 0,
+      maxScore: quizData.max_score || 0,
+      timeLimit: quizData.time_limit || quizData.timeLimit,
+      questions,
+      pathId: quizData.path_id || quizData.pathId,
+      pathTitle: quizData.path_title || quizData.pathTitle
+    };
+  }
+
+  /**
    * Ottiene tutti i template di quiz disponibili
    */
   public static async getAllQuizTemplates(): Promise<QuizTemplate[]> {
@@ -1153,7 +1274,7 @@ class QuizService {
       // Prova con l'endpoint degli attempts
       try {
         console.log('[DEBUG UUID] Tentativo 2: ricerca tra tentativi esistenti');
-        const apiUrl = `${API_URL}/quiz-attempts?quiz_id=${quizId}`;
+        const apiUrl = `${API_URL}/api/quiz-attempts?quiz_id=${quizId}`;
         const attempts = await ApiService.get<any[]>(apiUrl);
         
         if (Array.isArray(attempts) && attempts.length > 0) {
@@ -1173,7 +1294,7 @@ class QuizService {
       try {
         console.log('[DEBUG UUID] Tentativo 3: creazione nuovo tentativo');
         const attemptResponse = await ApiService.post<any>(
-          `${API_URL}/quiz-attempts`,
+          `${API_URL}/api/quiz-attempts`,
           { quiz_id: parseInt(quizId) }
         );
         
@@ -1185,10 +1306,8 @@ class QuizService {
         }
       } catch (error) {
         console.error('[DEBUG UUID] Errore nella creazione tentativo:', error);
+        return undefined;
       }
-      
-      console.log('[DEBUG UUID] Tutti i tentativi di ottenere UUID falliti');
-      return undefined;
     } catch (error) {
       console.error('[DEBUG UUID] Errore globale nel recupero UUID:', error);
       return undefined;
@@ -1236,7 +1355,7 @@ class QuizService {
       
       // Adatta il formato delle risposte per rispettare le aspettative dell'API
       const formattedSubmission = {
-        quiz_id: quizId,
+        quiz_id: parseInt(quizId),
         answers: submission.answers.map(answer => ({
           question_id: answer.questionId,
           selected_option_id: answer.selectedOptionId,
@@ -1245,13 +1364,13 @@ class QuizService {
       };
       
       console.log('[DEBUG QuizService] Dati formattati per invio:', {
-        endpoint: `/quiz-attempts/${quizUuid}/submit`,
+        endpoint: `/api/quiz-attempts/${quizUuid}/submit`,
         dati: formattedSubmission
       });
       
       // Usa l'endpoint SENZA il prefisso /api/ come richiesto dal backend
       const response = await ApiService.post<QuizResult>(
-        `${API_URL}/quiz-attempts/${quizUuid}/submit`,
+        `${API_URL}/api/quiz-attempts/${quizUuid}/submit`,
         formattedSubmission
       );
       
@@ -1312,7 +1431,7 @@ class QuizService {
       
       // Adatta il formato delle risposte per rispettare le aspettative dell'API
       const formattedSubmission = {
-        quiz_id: quizId,
+        quiz_id: parseInt(quizId),
         answers: submission.answers.map(answer => ({
           question_id: answer.questionId,
           selected_option_id: answer.selectedOptionId,
@@ -1321,14 +1440,14 @@ class QuizService {
       };
       
       console.log('[DEBUG QuizService] Dati formattati per invio:', {
-        endpoint: `/quiz-attempts/${quizUuid}/submit`,
+        endpoint: `/api/quiz-attempts/${quizUuid}/submit`,
         pathId: pathId,
         dati: formattedSubmission
       });
       
       // Invia le risposte tramite l'endpoint con UUID
       const response = await ApiService.post<QuizResult>(
-        `${API_URL}/quiz-attempts/${quizUuid}/submit`,
+        `${API_URL}/api/quiz-attempts/${quizUuid}/submit`,
         formattedSubmission
       );
       
@@ -1353,226 +1472,6 @@ class QuizService {
   }
 
   /**
-   * Normalizes the quiz data received from the backend
-   */
-  private static normalizeQuizData(data: any): Quiz {
-    console.log('[DEBUG QuizService] Normalizzazione dati quiz - dati originali:', {
-      id: data.id,
-      uuid: data.uuid,
-      rawUuid: JSON.stringify(data.uuid),
-      hasUuid: 'uuid' in data,
-      template_id: data.template_id,
-      is_completed: data.is_completed
-    });
-    
-    // Gestisce il caso in cui i dati provengano da un nodo percorso
-    let quizData = data;
-    
-    // Verifica speciale per UUID
-    if (!quizData.uuid) {
-      console.log('[DEBUG QuizService] ATTENZIONE: UUID non trovato nei dati originali. Cerco alternative...');
-      
-      // Cerca UUID in altre possibili proprietà (per API inconsistenti)
-      const possibleUuidFields = ['uuid', 'id_uuid', 'quiz_uuid', 'attempt_uuid'];
-      for (const field of possibleUuidFields) {
-        if (quizData[field] && typeof quizData[field] === 'string' && quizData[field].includes('-')) {
-          console.log(`[DEBUG QuizService] Trovato UUID alternativo in ${field}: ${quizData[field]}`);
-          quizData.uuid = quizData[field];
-          break;
-        }
-      }
-      
-      // Se ancora non abbiamo un UUID, guarda nei campi che rappresentano frammenti annidati
-      if (!quizData.uuid) {
-        if (quizData.quiz && quizData.quiz.uuid) {
-          console.log(`[DEBUG QuizService] Trovato UUID in quiz.uuid: ${quizData.quiz.uuid}`);
-          quizData.uuid = quizData.quiz.uuid;
-        } else if (quizData.attempt && quizData.attempt.uuid) {
-          console.log(`[DEBUG QuizService] Trovato UUID in attempt.uuid: ${quizData.attempt.uuid}`);
-          quizData.uuid = quizData.attempt.uuid;
-        }
-      }
-    }
-    
-    // Scenario 1: Nodo percorso con content.quiz_id
-    if (data.content && data.content.quiz_id) {
-      // Se è un nodo percorso, estraiamo i dati del quiz dal contenuto
-      quizData = {
-        ...data.content,
-        id: data.content.quiz_id || data.id,
-        uuid: quizData.uuid, // Preserva l'UUID che abbiamo recuperato
-        title: data.title || data.content.title || 'Quiz senza titolo',
-        description: data.description || data.content.description || 'Nessuna descrizione',
-        // Assicuriamoci che le domande vengano estratte correttamente
-        questions: data.content.questions || data.questions || []
-      };
-      console.log('Estratti dati quiz dal nodo percorso (content.quiz_id):', quizData);
-    } 
-    // Scenario 2: Nodo percorso con node_type quiz
-    else if (data.node_type === 'quiz') {
-      // Il nodo è direttamente un quiz
-      quizData = {
-        id: data.id,
-        uuid: quizData.uuid, // Preserva l'UUID che abbiamo recuperato
-        quiz_id: data.quiz_id || data.id,
-        title: data.title || 'Quiz senza titolo',
-        description: data.description || 'Nessuna descrizione',
-        questions: data.questions || []
-      };
-      console.log('Estratti dati da nodo quiz diretto:', quizData);
-    }
-    // Scenario 3: Il nodo è un quiz template diretto
-    else if (data.template_id || data.templateId) {
-      quizData = {
-        ...data,
-        uuid: quizData.uuid // Preserva l'UUID che abbiamo recuperato
-      };
-      console.log('Quiz è già in formato template');
-    }
-    // Scenario 4: Formato risposta API non riconosciuto, prova a recuperare comunque qualche informazione
-    else {
-      console.log('Formato dati quiz non riconosciuto, tentativo di recupero dati');
-      quizData = {
-        ...data,
-        uuid: quizData.uuid, // Preserva l'UUID che abbiamo recuperato
-        id: data.id || data.uuid || data.quiz_id || `quiz_${Date.now()}`,
-        title: data.title || 'Quiz',
-        description: data.description || 'Descrizione non disponibile'
-      };
-    }
-    
-    // Normalizza le domande
-    let questions: Question[] = [];
-    
-    // Debug del percorso delle domande
-    console.log('Tentativi di estrazione domande:');
-    if (quizData.questions) {
-      console.log('- Da quizData.questions:', Array.isArray(quizData.questions) ? 
-                 `Array con ${quizData.questions.length} elementi` : typeof quizData.questions);
-    }
-    if (quizData.content && quizData.content.questions) {
-      console.log('- Da quizData.content.questions:', Array.isArray(quizData.content.questions) ? 
-                 `Array con ${quizData.content.questions.length} elementi` : typeof quizData.content.questions);
-    }
-    
-    // Tenta di estrarre le domande da tutte le possibili posizioni/formati
-    if (quizData.questions) {
-      if (Array.isArray(quizData.questions)) {
-        questions = normalizeQuestions(quizData.questions);
-      } else if (typeof quizData.questions === 'object') {
-        questions = normalizeQuestions([quizData.questions]);
-      }
-    } else if (quizData.content && quizData.content.questions) {
-      questions = normalizeQuestions(quizData.content.questions);
-    } else if (data.questions) {
-      questions = normalizeQuestions(data.questions);
-    } else if (data.content && data.content.questions) {
-      questions = normalizeQuestions(data.content.questions);
-    }
-    
-    // Se non abbiamo trovato domande, usa i default
-    if (questions.length === 0) {
-      console.log('Nessuna domanda trovata nel quiz, uso domande di default');
-      questions = defaultQuestions();
-    } else {
-      console.log(`Normalizzate ${questions.length} domande. Prima domanda:`, {
-        id: questions[0].id,
-        text: questions[0].text,
-        opzioni: questions[0].options ? 
-          `${questions[0].options.length} opzioni` + 
-          (questions[0].options.length > 0 ? 
-           ` (prima: ${questions[0].options[0].text})` : '') : 
-          'nessuna'
-      });
-    }
-    
-    // Calcola il punteggio massimo
-    const maxScore = questions.reduce((sum: number, q: any) => sum + (q.points || 1), 0);
-    
-    const result: Quiz = {
-      id: quizData.id || quizData.uuid || '',
-      uuid: quizData.uuid || '',
-      templateId: quizData.template_id || quizData.templateId || quizData.quiz_id || '',
-      studentId: quizData.student_id || quizData.studentId || '',
-      title: quizData.title || 'Quiz senza titolo',
-      description: quizData.description || 'Nessuna descrizione disponibile',
-      isCompleted: quizData.is_completed || quizData.isCompleted || false,
-      startedAt: quizData.started_at ? new Date(quizData.started_at) : undefined,
-      completedAt: quizData.completed_at ? new Date(quizData.completed_at) : undefined,
-      score: quizData.score || 0,
-      maxScore: quizData.max_score || maxScore || 100,
-      questions: questions,
-      timeLimit: quizData.time_limit || quizData.timeLimit || 0,
-      pathId: quizData.pathId || ''
-    };
-    
-    console.log('Quiz normalizzato finale:', result);
-    
-    // Prima di restituire, verifichiamo i dati normalizzati
-    console.log('[DEBUG QuizService] Quiz normalizzato - verifica UUID:', {
-      id: result.id,
-      uuid: result.uuid,
-      uuidLength: result.uuid ? result.uuid.length : 0,
-      hasValidUuid: result.uuid && result.uuid.includes('-')
-    });
-    
-    // Se ancora non abbiamo un UUID valido, proviamo a generarne uno per il debug
-    if (!result.uuid || !result.uuid.includes('-')) {
-      console.log('[DEBUG QuizService] ATTENZIONE: UUID mancante o non valido dopo normalizzazione!');
-      
-      // Genera un UUID fittizio per il debug
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[DEBUG QuizService] Generazione UUID fittizio per debug');
-        // Genera un UUID v4 semplificato
-        result.uuid = 'debug-' + Math.random().toString(36).substring(2, 15) + 
-                       '-' + Math.random().toString(36).substring(2, 15) +
-                       '-' + Date.now().toString(36);
-        console.log('[DEBUG QuizService] UUID fittizio generato:', result.uuid);
-      }
-    }
-    
-    return result;
-  }
-
-  /**
-   * Mappa il livello di difficoltà dal valore numerico del backend
-   * alle stringhe usate nel frontend
-   */
-  private static mapDifficultyLevel(level: any): 'easy' | 'medium' | 'hard' {
-    console.log('Conversione difficoltà:', level, 'tipo:', typeof level);
-    
-    if (level === 'easy' || level === 'medium' || level === 'hard') {
-      return level as 'easy' | 'medium' | 'hard';
-    }
-    
-    // Se è una stringa numerica, convertila in numero
-    if (typeof level === 'string' && !isNaN(Number(level))) {
-      level = Number(level);
-    }
-    
-    // Se è un numero, mappa secondo la logica del backend
-    if (typeof level === 'number') {
-      if (level === 1) return 'easy';
-      if (level === 2) return 'medium';
-      if (level === 3) return 'hard';
-    }
-    
-    // Valore di default
-    return 'medium';
-  }
-
-  /**
-   * Mappa il livello di difficoltà dalle stringhe del frontend
-   * al valore numerico usato dal backend
-   */
-  private static mapDifficultyLevelToApi(level: 'easy' | 'medium' | 'hard'): number {
-    if (level === 'easy') return 1;
-    if (level === 'medium') return 2;
-    if (level === 'hard') return 3;
-    return 2; // Medium come default
-  }
-
-  /**
    * Ottiene o crea un tentativo di quiz specificando l'ID del quiz
    * L'endpoint restituirà un UUID che possiamo usare per l'invio
    */
@@ -1586,7 +1485,8 @@ class QuizService {
         const numericQuizId = !isNaN(parseInt(quizId)) ? parseInt(quizId) : quizId;
         console.log(`[DEBUG QuizService] Cerco tentativi esistenti per quiz_id=${numericQuizId}`);
         
-        const attempts = await ApiService.get<any[]>(`${API_URL}/quiz-attempts?quiz_id=${numericQuizId}`);
+        const attempts = await ApiService.get<any[]>(`${API_URL}/api/quiz-attempts?quiz_id=${numericQuizId}`);
+        console.log('[DEBUG QuizService] Risposta ricerca tentativi:', attempts);
         
         if (Array.isArray(attempts) && attempts.length > 0 && attempts[0].uuid) {
           console.log('[DEBUG QuizService] Trovato tentativo esistente:', attempts[0].uuid);
@@ -1599,82 +1499,86 @@ class QuizService {
       }
       
       // Se non ci sono tentativi esistenti, crea un nuovo tentativo
+      console.log('[DEBUG QuizService] Procedo con la creazione di un nuovo tentativo');
+      
+      // Formato dati per la richiesta in base allo schema QuizAttemptCreate
+      const numericQuizId = !isNaN(parseInt(quizId)) ? parseInt(quizId) : quizId;
+      
+      // Il formato corretto richiede quiz_id come intero (non stringa)
+      const requestBody = {
+        quiz_id: numericQuizId,
+        started_at: new Date().toISOString(), // Aggiungiamo il timestamp di inizio
+        completed_at: null,
+        score: 0.0,
+        max_score: 0.0,
+        passed: false,
+        additional_data: null
+      };
+      
+      console.log('[DEBUG QuizService] Tentativo 1: Creazione tentativo con URL: ' +
+                 `${API_URL}/api/quizzes/${numericQuizId}/attempt`);
+      
       try {
-        // Formato dati per la richiesta in base allo schema QuizAttemptCreate
-        const numericQuizId = !isNaN(parseInt(quizId)) ? parseInt(quizId) : quizId;
+        // Usa il formato con l'ID del quiz nell'URL invece che nel body 
+        const response = await ApiService.post<any>(
+          `${API_URL}/api/quizzes/${numericQuizId}/attempt`,
+          {}
+        );
         
-        // Il formato corretto richiede quiz_id come intero (non stringa)
-        const requestBody = {
-          quiz_id: numericQuizId,
-          started_at: new Date().toISOString(), // Aggiungiamo il timestamp di inizio
-          completed_at: null,
-          score: 0.0,
-          max_score: 0.0,
-          passed: false,
-          additional_data: null
-        };
-        
-        console.log('[DEBUG QuizService] Creazione tentativo - corpo richiesta:', requestBody);
+        console.log('[DEBUG QuizService] Risposta creazione tentativo (format 1):', response);
+        if (response && response.uuid) {
+          console.log('[DEBUG QuizService] Creato nuovo tentativo con UUID:', response.uuid);
+          return response.uuid;
+        }
+      } catch (firstError) {
+        console.error('[DEBUG QuizService] Errore nel primo formato di tentativo:', firstError);
         
         try {
-          // Usa il formato con l'ID del quiz nell'URL invece che nel body 
+          console.log('[DEBUG QuizService] Tentativo 2: URL alternativo: ' +
+                     `${API_URL}/api/quiz-attempts`);
+          
           const response = await ApiService.post<any>(
-            `${API_URL}/quizzes/${numericQuizId}/attempt`,
-            {}
+            `${API_URL}/api/quiz-attempts`,
+            requestBody
           );
           
-          console.log('[DEBUG QuizService] Risposta creazione tentativo (format 1):', response);
+          console.log('[DEBUG QuizService] Risposta creazione tentativo (format 2):', response);
           if (response && response.uuid) {
-            console.log('[DEBUG QuizService] Creato nuovo tentativo con UUID:', response.uuid);
+            console.log('[DEBUG QuizService] Creato nuovo tentativo con UUID (format 2):', response.uuid);
             return response.uuid;
           }
-        } catch (firstError) {
-          console.error('[DEBUG QuizService] Errore nel primo formato di tentativo:', firstError);
+        } catch (secondError) {
+          console.error('[DEBUG QuizService] Errore anche nel secondo tentativo:', secondError);
           
+          // Ultimo tentativo: format 3 - con solo quiz_id come required field
           try {
-            console.log('[DEBUG QuizService] Tentativo alternativo con quiz_id nel body');
+            console.log('[DEBUG QuizService] Tentativo 3: Solo quiz_id nell\'URL: ' +
+                       `${API_URL}/api/quiz-attempts`);
+            
             const response = await ApiService.post<any>(
-              `${API_URL}/quiz-attempts`,
-              requestBody
+              `${API_URL}/api/quiz-attempts`,
+              { quiz_id: numericQuizId }
             );
             
+            console.log('[DEBUG QuizService] Risposta creazione tentativo (format 3):', response);
             if (response && response.uuid) {
-              console.log('[DEBUG QuizService] Creato nuovo tentativo con UUID (format 2):', response.uuid);
+              console.log('[DEBUG QuizService] Creato nuovo tentativo con UUID (format 3):', response.uuid);
               return response.uuid;
             }
-          } catch (secondError) {
-            console.error('[DEBUG QuizService] Errore anche nel secondo tentativo:', secondError);
-            
-            // Ultimo tentativo: format 3 - con solo quiz_id come required field
-            try {
-              console.log('[DEBUG QuizService] Ultimo tentativo: solo quiz_id');
-              const response = await ApiService.post<any>(
-                `${API_URL}/quiz-attempts`,
-                { quiz_id: numericQuizId }
-              );
-              
-              if (response && response.uuid) {
-                console.log('[DEBUG QuizService] Creato nuovo tentativo con UUID (format 3):', response.uuid);
-                return response.uuid;
-              }
-            } catch (thirdError) {
-              console.error('[DEBUG QuizService] Tutti i tentativi di creazione falliti:', thirdError);
-            }
+          } catch (thirdError) {
+            console.error('[DEBUG QuizService] Falliti tutti i tentativi di creazione:', thirdError);
+            throw thirdError;
           }
         }
-        
-        console.warn('[DEBUG QuizService] Tutti i tentativi di creazione sono falliti');
-        return undefined;
-      } catch (err) {
-        console.error('[DEBUG QuizService] Errore nella creazione di un nuovo tentativo:', err);
-        return undefined;
       }
-    } catch (err) {
-      console.error('[DEBUG QuizService] Errore globale in getOrCreateQuizAttempt:', err);
+      
+      console.error('[DEBUG QuizService] Tutti i tentativi di creazione hanno fallito senza errori espliciti');
       return undefined;
+    } catch (error) {
+      console.error('[DEBUG QuizService] Errore nella creazione del tentativo:', error);
+      throw error;
     }
   }
 }
 
-// Esportiamo direttamente la classe QuizService come default export
 export default QuizService;
