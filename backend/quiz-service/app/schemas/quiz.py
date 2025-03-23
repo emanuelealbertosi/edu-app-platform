@@ -214,6 +214,7 @@ class Question(QuestionInDBBase):
 # Schemas per i quiz concreti
 class QuizBase(BaseModel):
     path_id: Optional[str] = None
+    node_uuid: Optional[str] = None  # UUID del nodo specifico nel percorso
     student_id: str
 
 class QuizCreate(QuizBase):
@@ -221,6 +222,7 @@ class QuizCreate(QuizBase):
 
 class QuizUpdate(QuizBase):
     path_id: Optional[str] = None
+    node_uuid: Optional[str] = None  # UUID del nodo specifico nel percorso
     student_id: Optional[str] = None
     is_completed: Optional[bool] = None
 
@@ -240,6 +242,8 @@ class QuizSummary(BaseModel):
     id: Optional[int] = None
     uuid: Optional[str] = None
     template_id: Optional[int] = None
+    path_id: Optional[str] = None
+    node_uuid: Optional[str] = None  # UUID del nodo specifico nel percorso
     student_id: Optional[str] = None
     created_at: Optional[datetime] = None
     is_completed: Optional[bool] = False

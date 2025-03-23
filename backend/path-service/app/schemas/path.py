@@ -287,6 +287,7 @@ class UpdateNodeStatus(BaseModel):
     status: CompletionStatus
     score: Optional[int] = None
     feedback: Optional[str] = None
+    already_completed: Optional[bool] = False  # Flag per indicare se il nodo era già stato completato in precedenza
 
 # Schema per l'assegnazione di un percorso a uno studente
 class PathAssign(BaseModel):

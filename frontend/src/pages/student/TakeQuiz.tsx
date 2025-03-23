@@ -353,7 +353,7 @@ const TakeQuiz: React.FC = () => {
         
         // Mostra SEMPRE la notifica quando il quiz è già completato
         NotificationsService.warning(
-          result.message || "Questo quiz è già stato completato. Il punteggio mostrato è quello del tentativo precedente.",
+          result.message || "Questo quiz è già stato completato in precedenza. Non verranno assegnati ulteriori punti.",
           'Quiz Già Completato'
         );
         
@@ -365,8 +365,9 @@ const TakeQuiz: React.FC = () => {
           message: result.message
         });
       } else {
+        // Risultato per la prima volta che il quiz viene completato
         NotificationsService.success(
-          `Quiz completato con successo! Punteggio: ${result.score}/${result.maxScore}`,
+          `Quiz completato con successo! Hai guadagnato ${result.score} punti.`,
           'Quiz Completato'
         );
       }

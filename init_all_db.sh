@@ -68,5 +68,10 @@ cd $BACKEND_DIR/reward-service
 python init_db.py
 echo "   Database reward-service inizializzato."
 
+echo "8. Applicazione di aggiornamenti strutturali ai database..."
+cd $BACKEND_DIR/quiz-service
+python update_db.py
+echo "   Database quiz-service aggiornato con le ultime modifiche strutturali."
+
 echo "=== Tutti i database sono stati inizializzati con successo! ==="
 echo "Ora puoi avviare i servizi con lo script lancia-locale.sh" 

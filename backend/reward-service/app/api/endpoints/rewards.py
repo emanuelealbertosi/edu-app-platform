@@ -6,9 +6,14 @@ from app.db.base import get_db
 from app.db.repositories.reward_repository import RewardRepository, RewardCategoryRepository
 from app.schemas.reward import (
     RewardCreate, RewardUpdate, RewardInDB, RewardWithCategory,
-    RewardCategoryCreate, RewardCategoryUpdate, RewardCategoryInDB, RewardCategoryWithRewards
+    RewardCategoryCreate, RewardCategoryUpdate, RewardCategoryInDB, RewardCategoryWithRewards,
+    RewardHistoryCreate, RewardHistoryResponse
 )
-from app.api.dependencies.auth import get_current_active_user, get_current_admin_user
+from app.api.dependencies.auth import get_current_active_user, get_current_admin_user, get_current_service_or_admin_user
+from app.db.models.reward import RewardHistory
+from app.crud.reward import (
+    create_reward_history, get_user_reward_history, get_user_total_points
+)
 
 router = APIRouter()
 
@@ -246,3 +251,156 @@ async def get_reward_stats(
     
     print(f"Restituisco statistiche: {stats}")
     return stats
+
+
+@router.post("/assign", response_model=Dict[str, Any])
+async def assign_reward_from_path(
+    reward_data: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_service_or_admin_user)
+):
+    """
+    Assegna punti o ricompense a uno studente quando completa un percorso o un'attività.
+    Può essere chiamato solo dai servizi interni o da admin.
+    
+    Parametri attesi nel body:
+    - student_id: ID dello studente
+    - points: Numero di punti da assegnare
+    - type: Tipo di attività completata (path_completion, quiz_completion, etc.)
+    - path_id: ID del percorso (opzionale)
+    - title: Titolo dell'attività completata (opzionale)
+    - description: Descrizione dell'attività completata (opzionale)
+    """
+    import logging
+    logger = logging.getLogger("reward-service")
+    
+    try:
+        # Log dei dati ricevuti
+        logger.info(f"Ricevuta richiesta di assegnazione punti: {reward_data}")
+        
+        # Verifica che i campi obbligatori siano presenti
+        required_fields = ["student_id", "points", "type"]
+        for field in required_fields:
+            if field not in reward_data:
+                logger.error(f"Campo obbligatorio mancante: {field}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Campo obbligatorio mancante: {field}"
+                )
+        
+        student_id = reward_data["student_id"]
+        points = float(reward_data["points"])
+        activity_type = reward_data["type"]
+        title = reward_data.get("title", f"Completamento {activity_type}")
+        description = reward_data.get("description", f"Hai guadagnato {points} punti per aver completato un'attività")
+        
+        # Verifica se lo studente esiste
+        # Questo controllo può essere fatto solo se abbiamo l'AuthService integrato
+        # Per ora lo saltiamo
+        
+        # Aggiorna il punteggio dell'utente
+        from app.db.repositories.user_repository import UserRepository
+        user = UserRepository.get_by_id(db, student_id)
+        
+        if not user:
+            # Se l'utente non esiste, lo creiamo
+            user = UserRepository.create(db, {"id": student_id, "points": points})
+            logger.info(f"Creato nuovo utente: {student_id} con {points} punti")
+        else:
+            # Altrimenti aggiorniamo i punti
+            old_points = user.points
+            user.points += points
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            logger.info(f"Aggiornati punti per {student_id}: {old_points} -> {user.points}")
+        
+        # Crea un record nella cronologia delle ricompense
+        from app.db.repositories.reward_history_repository import RewardHistoryRepository
+        history_entry = RewardHistoryRepository.create(db, {
+            "user_id": student_id,
+            "points": points,
+            "activity_type": activity_type,
+            "activity_id": reward_data.get("path_id"),
+            "title": title,
+            "description": description
+        })
+        
+        logger.info(f"Creato record nella cronologia: {history_entry.id}")
+        
+        # Ritorna un messaggio di successo
+        return {
+            "success": True,
+            "user_id": student_id,
+            "points_added": points,
+            "total_points": user.points,
+            "message": f"Assegnati {points} punti all'utente {student_id}"
+        }
+    
+    except HTTPException:
+        # Rilancia le HTTPException
+        raise
+    except Exception as e:
+        logger.error(f"Errore durante l'assegnazione dei punti: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Errore durante l'assegnazione dei punti: {str(e)}"
+        )
+
+# =============== Routes per la gestione della cronologia delle ricompense ===============
+
+@router.post("/history", response_model=RewardHistoryResponse, status_code=status.HTTP_201_CREATED)
+async def create_history_entry(
+    history: RewardHistoryCreate,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_service_or_admin_user)
+):
+    """
+    Crea una nuova voce nella cronologia delle ricompense.
+    Può essere utilizzato sia dai servizi che dagli amministratori.
+    """
+    return create_reward_history(db=db, history=history)
+
+
+@router.get("/history/user/{user_id}", response_model=List[RewardHistoryResponse])
+async def get_user_history(
+    user_id: str,
+    skip: int = Query(0, description="Numero di record da saltare"),
+    limit: int = Query(100, description="Numero massimo di record da restituire"),
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_active_user)
+):
+    """
+    Ottiene la cronologia delle ricompense di un utente.
+    Un utente può vedere solo la propria cronologia, a meno che non sia un amministratore.
+    """
+    # Verifica che l'utente stia richiedendo la propria cronologia o sia un amministratore
+    if current_user["id"] != user_id and current_user["role"] != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Non hai i permessi per accedere alla cronologia di un altro utente"
+        )
+    
+    return get_user_reward_history(db=db, user_id=user_id, skip=skip, limit=limit)
+
+
+@router.get("/points/user/{user_id}", response_model=float)
+async def get_total_points(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: Dict[str, Any] = Depends(get_current_active_user)
+):
+    """
+    Ottiene il totale dei punti accumulati da un utente.
+    Un utente può vedere solo i propri punti, a meno che non sia un amministratore.
+    """
+    # Verifica che l'utente stia richiedendo i propri punti o sia un amministratore
+    if current_user["id"] != user_id and current_user["role"] != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Non hai i permessi per accedere ai punti di un altro utente"
+        )
+    
+    return get_user_total_points(db=db, user_id=user_id)

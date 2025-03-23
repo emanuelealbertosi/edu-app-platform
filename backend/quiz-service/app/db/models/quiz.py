@@ -132,8 +132,9 @@ class Quiz(Base):
     # Relazione con il tentativo del quiz
     attempt = relationship("QuizAttempt", back_populates="quiz", uselist=False, cascade="all, delete-orphan")
     
-    # Collegamento con il percorso concreto (da implementare con path-service)
+    # Collegamento con il percorso concreto (path-service)
     path_id = Column(String, nullable=True)  # UUID del percorso concreto
+    node_uuid = Column(String, nullable=True)  # UUID del nodo specifico nel percorso
     
     # Studente a cui è assegnato il quiz
     student_id = Column(String)  # UUID dello studente
@@ -223,6 +224,7 @@ class QuizAttempt(Base):
     score = Column(Float, default=0.0)  # Punteggio ottenuto
     max_score = Column(Float, default=0.0)  # Punteggio massimo possibile
     passed = Column(Boolean, default=False)  # Se il quiz è stato superato
+    feedback = Column(Text, nullable=True)  # Feedback sul tentativo
     
     # Dati aggiuntivi in formato JSON
     additional_data = Column(JSON, nullable=True)

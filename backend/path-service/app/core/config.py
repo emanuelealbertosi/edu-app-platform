@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     # Service URLs
     AUTH_SERVICE_URL: str = os.getenv("AUTH_SERVICE_URL", "http://localhost:8001")
     QUIZ_SERVICE_URL: str = os.getenv("QUIZ_SERVICE_URL", "http://localhost:8002")
+    REWARD_SERVICE_URL: str = os.getenv("REWARD_SERVICE_URL", "http://localhost:8004")
     
     # Server settings
     SERVER_HOST: str = os.getenv("SERVER_HOST", "0.0.0.0")

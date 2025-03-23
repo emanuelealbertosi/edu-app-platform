@@ -166,24 +166,43 @@ async def submit_quiz_answers(
     if db_quiz.path_id:
         try:
             logger.info(f"Quiz ha un path_id: {db_quiz.path_id}. Inviando notifica al path-service per aggiornamento stato nodo.")
-            path_service_url = os.getenv("PATH_SERVICE_URL", "http://path-service:8000")
-            url = f"{path_service_url}/api/paths/nodes/status"
             
-            # Importa il token di servizio
+            # Importa il token di servizio e l'URL del path service
             from app.core.config import settings
+            
+            # Usa l'URL dal file di configurazione invece di os.getenv
+            path_service_url = settings.PATH_SERVICE_URL
+            logger.warning(f"DEBUG - Path Service URL: {path_service_url}")
+            
+            url = f"{path_service_url}/api/paths/nodes/status"
             
             status = "completed" if result["passed"] else "attempted"
             
+            # Log dettagliato dei punteggi prima di inviare al path-service
+            logger.warning(f"DEBUG - Risultato da inviare al path-service: passed={result['passed']}, score={result['score']}, max={result['max_score']}")
+            
+            # Il node_uuid deve corrispondere all'effettivo UUID del nodo nel path-service
+            # Il path_id del quiz a volte è path_id, a volte è node_uuid
+            node_identifier = None
+            if hasattr(db_quiz, 'node_uuid') and db_quiz.node_uuid:
+                node_identifier = str(db_quiz.node_uuid)
+                logger.warning(f"DEBUG - Usando node_uuid dal quiz: {node_identifier}")
+            else:
+                node_identifier = str(db_quiz.path_id)
+                logger.warning(f"DEBUG - Usando path_id come fallback: {node_identifier}")
+            
             payload = {
-                "node_uuid": str(db_quiz.node_uuid),
+                "node_uuid": node_identifier,
                 "status": status,
                 "score": result["score"],
-                "feedback": "Quiz completato con successo" if result["passed"] else "Quiz non superato",
+                "feedback": f"Quiz completato con punteggio {result['score']}/{result['max_score']}" if result["passed"] else f"Quiz non superato. Punteggio: {result['score']}/{result['max_score']}",
                 "already_completed": quiz_already_completed
             }
             
             if quiz_already_completed:
-                payload["feedback"] = "Quiz già completato in precedenza. " + f"Quiz completato con punteggio {result['score']}/{result['max_score']}"
+                payload["feedback"] = f"Quiz già completato in precedenza. Punteggio: {result['score']}/{result['max_score']}"
+                # Imposta lo score a 0 se il quiz è già stato completato per evitare di accreditare punti multiple volte
+                payload["score"] = 0
             
             # Prepara gli headers con autenticazione di servizio
             headers = {
@@ -269,7 +288,7 @@ async def get_quiz_results(
 @router.post("/{attempt_uuid}/submit", response_model=QuizResult)
 async def submit_quiz_answers_by_uuid(
     attempt_uuid: str,
-    answers: SubmitQuizAnswers,
+    quiz_attempt_data: SubmitQuizAnswers,
     db: Session = Depends(get_db),
     current_user: TokenData = Depends(get_current_active_user)
 ):
@@ -282,7 +301,7 @@ async def submit_quiz_answers_by_uuid(
     """
     try:
         logger.warning(f"DEBUG - Ricevuta richiesta di invio risposte per UUID: {attempt_uuid}")
-        logger.warning(f"DEBUG - Contenuto answers: {answers}")
+        logger.warning(f"DEBUG - Contenuto quiz_attempt_data: {quiz_attempt_data}")
         logger.warning(f"DEBUG - user_id: {current_user.user_id}, ruolo: {current_user.role}")
         
         # Fase 1: Verificare a cosa si riferisce l'UUID fornito (tentativo, quiz o template)
@@ -308,16 +327,22 @@ async def submit_quiz_answers_by_uuid(
                 
                 # 1.3.1. Se è un template, creo un nuovo quiz concreto da esso
                 from app.schemas.quiz import QuizCreate
+                
+                # Estrai il path_id dai parametri della query, se presente
+                path_id = quiz_attempt_data.path_id if hasattr(quiz_attempt_data, 'path_id') else None
+                
+                logger.warning(f"DEBUG - Creazione quiz da template per percorso: {path_id}")
+                
                 quiz_create = QuizCreate(
                     template_id=template.id,
                     student_id=current_user.user_id,
-                    path_id=None  # Non associato a un percorso specifico
+                    path_id=path_id  # Usa il path_id se presente, altrimenti sarà None
                 )
                 
                 try:
                     # Creo il quiz concreto
                     db_quiz = QuizRepository.create_from_template(db, quiz_create)
-                    logger.warning(f"DEBUG - Creato nuovo quiz da template: ID={db_quiz.id}, template_id={template.id}")
+                    logger.warning(f"DEBUG - Creato nuovo quiz da template: ID={db_quiz.id}, template_id={template.id}, path_id={path_id}")
                 except Exception as e:
                     logger.error(f"DEBUG - ERRORE nella creazione del quiz da template: {str(e)}", exc_info=True)
                     raise HTTPException(
@@ -418,9 +443,9 @@ async def submit_quiz_answers_by_uuid(
         # Rimosso il controllo bloccante qui, ora gestiamo il caso nel repository
         
         # 3.4. Invio delle risposte
-        logger.warning(f"DEBUG - Invio risposte per tentativo {db_attempt.id}, numero risposte: {len(answers.answers)}")
+        logger.warning(f"DEBUG - Invio risposte per tentativo {db_attempt.id}, numero risposte: {len(quiz_attempt_data.answers)}")
         try:
-            result = QuizAttemptRepository.submit_answers(db, db_attempt, answers)
+            result = QuizAttemptRepository.submit_answers(db, db_attempt, quiz_attempt_data)
             logger.warning(f"DEBUG - Risultato ottenuto: {result}")
             
             # Se il quiz era già stato completato, prepara il risultato ma NON uscire ancora
@@ -434,24 +459,43 @@ async def submit_quiz_answers_by_uuid(
             if db_quiz.path_id:
                 try:
                     logger.info(f"Quiz ha un path_id: {db_quiz.path_id}. Inviando notifica al path-service per aggiornamento stato nodo.")
-                    path_service_url = os.getenv("PATH_SERVICE_URL", "http://path-service:8000")
-                    url = f"{path_service_url}/api/paths/nodes/status"
                     
-                    # Importa il token di servizio
+                    # Importa il token di servizio e l'URL del path service
                     from app.core.config import settings
+                    
+                    # Usa l'URL dal file di configurazione invece di os.getenv
+                    path_service_url = settings.PATH_SERVICE_URL
+                    logger.warning(f"DEBUG - Path Service URL: {path_service_url}")
+                    
+                    url = f"{path_service_url}/api/paths/nodes/status"
                     
                     status = "completed" if result["passed"] else "attempted"
                     
+                    # Log dettagliato dei punteggi prima di inviare al path-service
+                    logger.warning(f"DEBUG - Risultato da inviare al path-service: passed={result['passed']}, score={result['score']}, max={result['max_score']}")
+                    
+                    # Il node_uuid deve corrispondere all'effettivo UUID del nodo nel path-service
+                    # Il path_id del quiz a volte è path_id, a volte è node_uuid
+                    node_identifier = None
+                    if hasattr(db_quiz, 'node_uuid') and db_quiz.node_uuid:
+                        node_identifier = str(db_quiz.node_uuid)
+                        logger.warning(f"DEBUG - Usando node_uuid dal quiz: {node_identifier}")
+                    else:
+                        node_identifier = str(db_quiz.path_id)
+                        logger.warning(f"DEBUG - Usando path_id come fallback: {node_identifier}")
+                    
                     payload = {
-                        "node_uuid": str(db_quiz.node_uuid),
+                        "node_uuid": node_identifier,
                         "status": status,
                         "score": result["score"],
-                        "feedback": "Quiz completato con successo" if result["passed"] else "Quiz non superato",
+                        "feedback": f"Quiz completato con punteggio {result['score']}/{result['max_score']}" if result["passed"] else f"Quiz non superato. Punteggio: {result['score']}/{result['max_score']}",
                         "already_completed": quiz_already_completed
                     }
                     
                     if quiz_already_completed:
-                        payload["feedback"] = "Quiz già completato in precedenza. " + f"Quiz completato con punteggio {result['score']}/{result['max_score']}"
+                        payload["feedback"] = f"Quiz già completato in precedenza. Punteggio: {result['score']}/{result['max_score']}"
+                        # Imposta lo score a 0 se il quiz è già stato completato per evitare di accreditare punti multiple volte
+                        payload["score"] = 0
                     
                     # Prepara gli headers con autenticazione di servizio
                     headers = {

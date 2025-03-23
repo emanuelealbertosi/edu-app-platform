@@ -183,6 +183,9 @@ class QuizRepository:
         Raises:
             ValueError: Se il template non esiste
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         # Ottieni il template
         template = db.query(QuizTemplate).options(
             joinedload(QuizTemplate.questions).joinedload(QuestionTemplate.answer_options)
@@ -195,8 +198,13 @@ class QuizRepository:
         db_quiz = Quiz(
             template_id=template.id,
             student_id=quiz_create.student_id,
-            path_id=quiz_create.path_id
+            path_id=quiz_create.path_id,
+            node_uuid=quiz_create.path_id  # Imposta node_uuid uguale a path_id se presente
         )
+        
+        # Log informazioni importanti
+        logger.warning(f"DEBUG - create_from_template - Creando quiz da template {template.id} con path_id={quiz_create.path_id} e node_uuid={db_quiz.node_uuid}")
+        
         db.add(db_quiz)
         db.commit()
         db.refresh(db_quiz)
@@ -327,6 +335,7 @@ class QuizRepository:
         # Elabora le risposte
         total_score = 0
         max_score = 0
+        all_correct = True  # Flag per verificare se tutte le risposte sono corrette
         
         for answer_data in submit_data.answers:
             question_uuid = answer_data.get("question_uuid")
@@ -363,14 +372,54 @@ class QuizRepository:
                 db.add(student_answer)
             
             total_score += score
+            
+            # Se una risposta non è corretta, imposta il flag a False
+            if not is_correct:
+                all_correct = False
         
-        # Aggiorna il tentativo
-        attempt.completed_at = datetime.now()
+        # Aggiorna il tentativo con il punteggio e la data di completamento
         attempt.score = total_score
         attempt.max_score = max_score
+        attempt.completed_at = datetime.utcnow()
         
-        # Imposta il quiz come completato
+        # Calcola la percentuale di punteggio ottenuto
+        percentage_score = (total_score / max_score * 100) if max_score > 0 else 0
+        
+        # Il quiz è considerato passato se tutte le risposte sono corrette o se è stato raggiunto almeno il 60% del punteggio
+        attempt.passed = all_correct or (max_score > 0 and percentage_score >= 60)
+        
+        logger.warning(f"DEBUG - Repository submit_answers - Punteggio finale: {total_score}/{max_score} ({percentage_score:.1f}%)")
+        logger.warning(f"DEBUG - Repository submit_answers - Quiz superato: {attempt.passed}")
+        
+        # Il quiz è considerato completato una volta che è stato sottomesso
         quiz.is_completed = True
+        
+        # Ottieni il template del quiz
+        quiz_template = db.query(QuizTemplate).filter(QuizTemplate.id == quiz.template_id).first()
+        if quiz_template:
+            logger.warning(f"DEBUG - Repository submit_answers - Il template del quiz ha {quiz_template.points} punti")
+            
+            # Se non ci sono domande con punti, usa il punteggio del template
+            if max_score == 0:
+                logger.warning(f"DEBUG - Repository submit_answers - Nessuna domanda con punti, uso quelli del template: {quiz_template.points}")
+                max_score = float(quiz_template.points)
+                attempt.max_score = max_score
+                # Ricalcola il punteggio in base al punteggio massimo dal template
+                if attempt.passed:
+                    logger.warning(f"DEBUG - Repository submit_answers - Quiz superato, imposto score = max_score: {max_score}")
+                    attempt.score = max_score
+                    total_score = max_score
+            else:
+                # Se il quiz è superato ma il punteggio è zero, usa il punteggio del template
+                if attempt.passed and total_score == 0:
+                    logger.warning(f"DEBUG - Repository submit_answers - Quiz superato ma punteggio zero, uso punteggio template: {quiz_template.points}")
+                    total_score = float(quiz_template.points)
+                    attempt.score = total_score
+                else:
+                    # Altrimenti usa il punteggio effettivo delle domande
+                    logger.warning(f"DEBUG - Repository submit_answers - Uso il punteggio effettivo delle domande: {total_score}")
+        
+        logger.warning(f"DEBUG - Repository submit_answers - Quiz completato: score={total_score}/{max_score} ({percentage_score:.1f}%), passed={attempt.passed}")
         
         db.add(attempt)
         db.add(quiz)
@@ -393,10 +442,11 @@ class QuizRepository:
         """
         import logging
         logger = logging.getLogger(__name__)
-        logger.warning(f"DEBUG - _evaluate_answer - Tipo domanda: {question.question_type}")
-        logger.warning(f"DEBUG - _evaluate_answer - Valore risposta: {answer_value}, tipo: {type(answer_value)}")
+        logger.warning(f"DEBUG - _evaluate_answer - Valutazione risposta per domanda: id={question.id}, uuid={question.uuid}, tipo={question.question_type}, points={question.points}")
+        logger.warning(f"DEBUG - _evaluate_answer - Risposta da valutare: {answer_value}")
         
         is_correct = False
+        # Punteggio iniziale sempre zero, poi modificato in base alla correttezza della risposta
         score = 0
         
         if question.question_type == "single_choice" or question.question_type == "QuestionType.SINGLE_CHOICE":
@@ -692,36 +742,41 @@ class QuizAttemptRepository:
         ]
         
         # Determina se il quiz era già stato completato
-        already_completed = quiz.is_completed
-        
-        # Se il quiz è stato appena completato, aggiorna lo stato
-        if attempt.completed_at and not already_completed:
-            logger.warning(f"DEBUG - Repository get_results - Tentativo {attempt.id} completato per la prima volta")
-            already_completed = False
-        elif already_completed and attempt.completed_at:
-            logger.warning(f"DEBUG - Repository get_results - Tentativo {attempt.id} già completato in precedenza")
-        
-        # Preparare un messaggio appropriato
+        # Il quiz è already_completed solo se è già stato completato in precedenza 
+        # e non è stato appena completato ora (per distinguere il primo completamento dai successivi)
+        already_completed = False
         message = None
-        if already_completed:
-            message = "Questo quiz è già stato completato in precedenza. Il punteggio mostrato è quello del tentativo precedente."
         
-        # Prepara i risultati
+        if attempt.completed_at:
+            # Controlla se ci sono altri tentativi completati precedentemente
+            # per questo quiz (diversi dall'attuale)
+            previous_attempts = db.query(QuizAttempt).filter(
+                QuizAttempt.quiz_id == quiz.id,
+                QuizAttempt.completed_at != None,
+                QuizAttempt.id != attempt.id
+            ).count()
+            
+            already_completed = previous_attempts > 0
+            logger.warning(f"DEBUG - Repository get_results - Tentativo {attempt.id} già completato in precedenza: {already_completed}")
+            
+            if already_completed:
+                message = "Questo quiz è già stato completato in precedenza. Non verranno assegnati ulteriori punti."
+        
         return {
-            "uuid": attempt.uuid,
-            "quiz_uuid": quiz.uuid,
+            "uuid": str(attempt.uuid),
+            "quiz_uuid": str(quiz.uuid),
             "score": attempt.score,
             "max_score": attempt.max_score,
             "passed": attempt.passed,
             "started_at": attempt.started_at,
             "completed_at": attempt.completed_at,
-            "feedback": attempt.additional_data.get("feedback") if attempt.additional_data else None,
+            "feedback": attempt.feedback,
             "correct_answers": correct_answers,
             "total_questions": total_questions,
             "percentage": percentage,
             "answers": answers_data,
             "already_completed": already_completed,
-            "message": message
+            "message": message,
         }
     
     @staticmethod
@@ -924,6 +979,10 @@ class QuizAttemptRepository:
                 elif question_id_or_uuid in questions_by_order:
                     question = questions_by_order[question_id_or_uuid]
                     logger.warning(f"DEBUG - Repository submit_answers - Domanda trovata per order numerico: {question_id_or_uuid}")
+                # Prova anche con conversione a stringa
+                elif str(question_id_or_uuid) in questions_by_str_id:
+                    question = questions_by_str_id[str(question_id_or_uuid)]
+                    logger.warning(f"DEBUG - Repository submit_answers - Domanda trovata per ID numerico convertito a stringa: {question_id_or_uuid}")
             
             if not question:
                 logger.warning(f"DEBUG - Repository submit_answers - Domanda non trovata con identificatore: {question_id_or_uuid}")
@@ -932,6 +991,14 @@ class QuizAttemptRepository:
                 if len(questions) == 1:
                     question = questions[0]
                     logger.warning(f"DEBUG - Repository submit_answers - Usando l'unica domanda disponibile: ID={question.id}, UUID={question.uuid}")
+                    # Aggiungiamo log dettagliato sulle opzioni di risposta di questa domanda
+                    logger.warning(f"DEBUG - Repository submit_answers - Dettagli della domanda usata come fallback:")
+                    logger.warning(f"DEBUG - Repository submit_answers - Testo domanda: {question.text}")
+                    logger.warning(f"DEBUG - Repository submit_answers - Tipo domanda: {question.question_type}")
+                    logger.warning(f"DEBUG - Repository submit_answers - Punti domanda: {question.points}")
+                    logger.warning(f"DEBUG - Repository submit_answers - Opzioni di risposta:")
+                    for idx, opt in enumerate(question.answer_options):
+                        logger.warning(f"DEBUG - Repository submit_answers - Opzione {idx}: ID={opt.id}, UUID={opt.uuid}, testo={opt.text}, corretta={opt.is_correct}")
                 else:
                     # Log aggiuntivi per debug
                     logger.warning(f"DEBUG - Repository submit_answers - Non è stato possibile trovare la domanda. Dettagli domande disponibili:")
@@ -998,11 +1065,39 @@ class QuizAttemptRepository:
         # Calcola la percentuale di punteggio ottenuto
         percentage_score = (total_score / max_score * 100) if max_score > 0 else 0
         
-        # Il quiz è considerato passato se tutte le risposte sono corrette
-        attempt.passed = all_correct
+        # Il quiz è considerato passato se tutte le risposte sono corrette o se è stato raggiunto almeno il 60% del punteggio
+        attempt.passed = all_correct or (max_score > 0 and percentage_score >= 60)
+        
+        logger.warning(f"DEBUG - Repository submit_answers - Punteggio finale: {total_score}/{max_score} ({percentage_score:.1f}%)")
+        logger.warning(f"DEBUG - Repository submit_answers - Quiz superato: {attempt.passed}")
         
         # Il quiz è considerato completato una volta che è stato sottomesso
         quiz.is_completed = True
+        
+        # Ottieni il template del quiz
+        quiz_template = db.query(QuizTemplate).filter(QuizTemplate.id == quiz.template_id).first()
+        if quiz_template:
+            logger.warning(f"DEBUG - Repository submit_answers - Il template del quiz ha {quiz_template.points} punti")
+            
+            # Se non ci sono domande con punti, usa il punteggio del template
+            if max_score == 0:
+                logger.warning(f"DEBUG - Repository submit_answers - Nessuna domanda con punti, uso quelli del template: {quiz_template.points}")
+                max_score = float(quiz_template.points)
+                attempt.max_score = max_score
+                # Ricalcola il punteggio in base al punteggio massimo dal template
+                if attempt.passed:
+                    logger.warning(f"DEBUG - Repository submit_answers - Quiz superato, imposto score = max_score: {max_score}")
+                    attempt.score = max_score
+                    total_score = max_score
+            else:
+                # Se il quiz è superato ma il punteggio è zero, usa il punteggio del template
+                if attempt.passed and total_score == 0:
+                    logger.warning(f"DEBUG - Repository submit_answers - Quiz superato ma punteggio zero, uso punteggio template: {quiz_template.points}")
+                    total_score = float(quiz_template.points)
+                    attempt.score = total_score
+                else:
+                    # Altrimenti usa il punteggio effettivo delle domande
+                    logger.warning(f"DEBUG - Repository submit_answers - Uso il punteggio effettivo delle domande: {total_score}")
         
         logger.warning(f"DEBUG - Repository submit_answers - Quiz completato: score={total_score}/{max_score} ({percentage_score:.1f}%), passed={attempt.passed}")
         

@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # URL dei servizi
     AUTH_SERVICE_URL: str
     
+    # Token di autenticazione tra servizi
+    SERVICE_TOKEN: str = os.getenv("SERVICE_TOKEN", "shared_service_token_for_microservices")
+    
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         """

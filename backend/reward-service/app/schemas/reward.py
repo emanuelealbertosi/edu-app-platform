@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field, field_validator, computed_field
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 import uuid
+from enum import Enum
 
 from app.db.models.reward import RewardType, RewardRarity, RewardRequestStatus
 
@@ -49,39 +50,37 @@ class RewardCategoryWithRewards(RewardCategoryInDB):
     }
 
 
+class RewardType(str, Enum):
+    """Enum per i tipi di ricompensa"""
+    POINTS = "points"  # Punti
+    BADGE = "badge"    # Badge
+    COUPON = "coupon"  # Coupon/Voucher
+
+
 class RewardBase(BaseModel):
-    """Schema base per ricompense"""
+    """Schema base per le ricompense"""
     name: str
     description: Optional[str] = None
-    reward_type: RewardType
-    rarity: RewardRarity = RewardRarity.COMMON
-    icon_url: Optional[str] = None
-    image_url: Optional[str] = None
-    points_value: int = 0
-    requirements: Optional[Dict[str, Any]] = None
-    is_active: bool = True
-    is_public: bool = True
+    type: RewardType
+    enabled: bool = True
+    data: Optional[Dict[str, Any]] = None
 
 
 class RewardCreate(RewardBase):
-    """Schema per la creazione di ricompense"""
-    category_id: str
-    created_by: str
+    """Schema per la creazione delle ricompense"""
+    pass
 
 
 class RewardUpdate(BaseModel):
-    """Schema per l'aggiornamento di ricompense"""
+    """Schema per l'aggiornamento delle ricompense"""
     name: Optional[str] = None
     description: Optional[str] = None
-    reward_type: Optional[RewardType] = None
-    rarity: Optional[RewardRarity] = None
-    icon_url: Optional[str] = None
-    image_url: Optional[str] = None
-    points_value: Optional[int] = None
-    requirements: Optional[Dict[str, Any]] = None
-    is_active: Optional[bool] = None
-    is_public: Optional[bool] = None
-    category_id: Optional[str] = None
+    type: Optional[RewardType] = None
+    enabled: Optional[bool] = None
+    data: Optional[Dict[str, Any]] = None
+
+    class Config:
+        orm_mode = True
 
 
 class RewardInDB(RewardBase):
@@ -262,3 +261,81 @@ class PendingReward(BaseModel):
     model_config = {
         "from_attributes": True
     }
+
+
+class Config:
+    orm_mode = True
+
+
+class RewardHistoryBase(BaseModel):
+    """Schema base per la cronologia delle ricompense"""
+    user_id: str
+    points: float = 0.0
+    activity_type: str
+    activity_id: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+
+
+class RewardHistoryCreate(RewardHistoryBase):
+    """Schema per la creazione della cronologia delle ricompense"""
+    pass
+
+
+class RewardHistoryResponse(RewardHistoryBase):
+    """Schema per la risposta della cronologia delle ricompense"""
+    id: str
+    timestamp: datetime
+
+    class Config:
+        orm_mode = True
+
+
+class RewardGiftBase(BaseModel):
+    """Schema base per i premi delle ricompense"""
+    name: str
+    description: Optional[str] = None
+    points_required: int
+    quantity: Optional[int] = None  # None = illimitato
+    enabled: bool = True
+    data: Optional[Dict[str, Any]] = None
+
+
+class RewardGiftCreate(RewardGiftBase):
+    """Schema per la creazione dei premi delle ricompense"""
+    pass
+
+
+class RewardGiftUpdate(BaseModel):
+    """Schema per l'aggiornamento dei premi delle ricompense"""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    points_required: Optional[int] = None
+    quantity: Optional[int] = None
+    enabled: Optional[bool] = None
+    data: Optional[Dict[str, Any]] = None
+
+    class Config:
+        orm_mode = True
+
+
+class RewardGiftResponse(RewardGiftBase):
+    """Schema per la risposta dei premi delle ricompense"""
+    id: str
+    reward_id: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True
+
+
+class RewardResponse(RewardBase):
+    """Schema per la risposta delle ricompense"""
+    id: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    gifts: List[RewardGiftResponse] = []
+
+    class Config:
+        orm_mode = True

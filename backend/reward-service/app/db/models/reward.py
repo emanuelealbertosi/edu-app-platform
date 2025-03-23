@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum as SQLEnum, Text, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Enum as SQLEnum, Text, JSON, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import enum
@@ -71,6 +71,7 @@ class Reward(Base):
     category = relationship("RewardCategory", back_populates="rewards")
     user_rewards = relationship("UserReward", back_populates="reward", cascade="all, delete-orphan")
     progress_records = relationship("RewardProgress", back_populates="reward", cascade="all, delete-orphan")
+    gifts = relationship("RewardGift", back_populates="reward", cascade="all, delete-orphan")
 
 
 class UserReward(Base):
@@ -129,3 +130,36 @@ class RewardRequest(Base):
     
     # Relazioni
     reward = relationship("Reward")
+
+
+class RewardHistory(Base):
+    """Modello per la cronologia delle ricompense e dei punti assegnati"""
+    __tablename__ = "reward_history"
+    
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, nullable=False)  # ID dell'utente
+    points = Column(Float, default=0.0)  # Punti assegnati
+    activity_type = Column(String, nullable=False)  # Tipo di attività (es. path_completion, quiz_completion)
+    activity_id = Column(String, nullable=True)  # ID dell'attività (es. ID del percorso, ID del quiz)
+    title = Column(String, nullable=True)  # Titolo dell'attività
+    description = Column(String, nullable=True)  # Descrizione dell'attività
+    timestamp = Column(DateTime, default=datetime.utcnow)  # Data e ora dell'assegnazione
+
+
+class RewardGift(Base):
+    """Modello per i premi delle ricompense"""
+    __tablename__ = "reward_gifts"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    reward_id = Column(String, ForeignKey("rewards.id"), nullable=False)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    points_required = Column(Integer, nullable=False)
+    quantity = Column(Integer, nullable=True)  # None = illimitato
+    enabled = Column(Boolean, default=True)
+    data = Column(JSON, nullable=True)  # Dati aggiuntivi sul premio
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relazioni
+    reward = relationship("Reward", back_populates="gifts")

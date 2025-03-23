@@ -2,6 +2,8 @@ from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from datetime import datetime
+import requests
+import os
 
 from app.db.models.path import (
     Path, PathNode, PathTemplate, PathNodeTemplate,
@@ -11,6 +13,7 @@ from app.schemas.path import (
     PathCreate, PathUpdate,
     PathNodeCreate, PathNodeUpdate, UpdateNodeStatus
 )
+from app.core.config import settings
 
 class PathRepository:
     """Repository per la gestione dei percorsi educativi."""
@@ -290,14 +293,34 @@ class PathRepository:
         logger = logging.getLogger("path-service")
         
         try:
-            logger.info(f"Aggiornamento stato nodo: uuid={node_uuid}, nuovi dati={status_update}")
+            logger.info(f"Aggiornamento stato nodo: uuid={node_uuid}")
+            logger.info(f"PAYLOAD RICEVUTO: {status_update.model_dump()}")
             
             node = db.query(PathNode).filter(PathNode.uuid == node_uuid).first()
             if not node:
                 logger.error(f"Nodo con UUID {node_uuid} non trovato nel database")
                 return None
             
-            logger.info(f"Nodo trovato: id={node.id}, path_id={node.path_id}, stato attuale={node.status}")
+            logger.info(f"Nodo trovato: id={node.id}, path_id={node.path_id}, stato attuale={node.status}, già completato={node.completed_at is not None}")
+            
+            # Se il nodo è già completato e il flag already_completed è True,
+            # non aggiorniamo punteggio e stato (per evitare assegnazioni multiple)
+            already_completed = getattr(status_update, 'already_completed', False)
+            
+            if node.status == CompletionStatus.COMPLETED and node.completed_at and already_completed:
+                logger.warning(f"Nodo già completato e flag already_completed=True. Non verranno assegnati nuovi punti.")
+                logger.warning(f"Score ricevuto ma non accreditato: {status_update.score}")
+                
+                # Aggiorna solo il feedback se fornito
+                if status_update.feedback is not None:
+                    node.feedback = status_update.feedback
+                    logger.info(f"Feedback aggiornato: {node.feedback}")
+                    # Salva solo l'aggiornamento del feedback
+                    db.add(node)
+                    db.commit()
+                    db.refresh(node)
+                
+                return node
             
             # Aggiorna lo stato del nodo
             old_status = node.status
@@ -356,6 +379,14 @@ class PathRepository:
             db: Sessione del database
             path_id: ID del percorso da aggiornare
         """
+        import logging
+        import traceback
+        import requests
+        import os
+        from app.core.config import settings
+        
+        logger = logging.getLogger("path-service")
+        
         path = db.query(Path).filter(Path.id == path_id).first()
         if not path:
             return
@@ -380,10 +411,18 @@ class PathRepository:
         path.current_score = current_score
         path.completion_percentage = completion_percentage
         
+        # Verifica se il percorso è stato appena completato
+        just_completed = False
+        
         # Determina lo stato del percorso
         if completed_nodes == total_nodes:
+            if path.status != CompletionStatus.COMPLETED:
+                just_completed = True
+                logger.info(f"PERCORSO COMPLETATO! ID={path.id}, student_id={path.student_id}, score={current_score}")
+            
             path.status = CompletionStatus.COMPLETED
-            path.completed_at = datetime.now()
+            if not path.completed_at:
+                path.completed_at = datetime.now()
         elif completed_nodes > 0:
             path.status = CompletionStatus.IN_PROGRESS
             if not path.started_at:
@@ -391,5 +430,47 @@ class PathRepository:
         else:
             path.status = CompletionStatus.NOT_STARTED
         
+        # Salva le modifiche
         db.add(path)
         db.commit()
+        
+        # Notifica il reward service se il percorso è stato appena completato
+        if just_completed:
+            try:
+                # Ottieni l'URL del reward service dalle impostazioni
+                reward_service_url = settings.REWARD_SERVICE_URL
+                
+                # Prepara i dati per il reward service
+                payload = {
+                    "student_id": path.student_id,
+                    "path_id": path.id,
+                    "points": current_score,
+                    "type": "path_completion",
+                    "title": f"Percorso completato: {path.title or 'Senza titolo'}",
+                    "description": f"Hai completato un percorso e guadagnato {current_score} punti!"
+                }
+                
+                # Prepara gli headers con autenticazione di servizio
+                headers = {
+                    "X-Service-Role": "path_service",
+                    "X-Service-Token": settings.SERVICE_TOKEN,
+                    "Content-Type": "application/json"
+                }
+                
+                # URL completo dell'endpoint
+                url = f"{reward_service_url}/api/rewards/assign"
+                
+                logger.info(f"Invio notifica al reward service: URL={url}, payload={payload}")
+                
+                # Invia la richiesta al reward service
+                response = requests.post(url, json=payload, headers=headers, timeout=5)
+                
+                # Log della risposta
+                if response.status_code == 200:
+                    logger.info(f"Risposta dal reward service: {response.json()}")
+                else:
+                    logger.error(f"Errore nella risposta dal reward service: status={response.status_code}, response={response.text}")
+            
+            except Exception as e:
+                logger.error(f"Errore durante la chiamata al reward service: {str(e)}")
+                logger.error(traceback.format_exc())
