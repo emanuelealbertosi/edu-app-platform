@@ -3,6 +3,8 @@
 # Script per la gestione dell'ambiente di sviluppo locale
 # Autore: Cascade AI
 # Data: 2025-03-10
+# Modificato per utilizzare PostgreSQL locale anziché Docker
+# Modificato per assumere che PostgreSQL sia già in esecuzione
 
 # Directory del progetto
 PROJECT_DIR=$(pwd)
@@ -11,8 +13,10 @@ BACKEND_DIR="$PROJECT_DIR/backend"
 FRONTEND_DIR="$PROJECT_DIR/frontend"
 LOG_FILE="$PROJECT_DIR/edu_app.log"
 
-# Nome del container PostgreSQL
-DB_CONTAINER_NAME="edu_app_postgres"
+# Configurazione PostgreSQL locale
+PG_USER="postgres"
+PG_HOST="localhost"
+PG_PORT="5432"
 
 # Inizializza/resetta il file di log
 init_logfile() {
@@ -20,38 +24,29 @@ init_logfile() {
     echo "Logs verranno salvati in: $LOG_FILE"
 }
 
-# Verifica se il database Docker è in esecuzione e lo avvia se necessario
-check_and_start_db() {
-    echo "Verifico lo stato del database PostgreSQL..." | tee -a "$LOG_FILE"
+# Verifica informativa sui database (non blocca l'esecuzione)
+check_db_info() {
+    echo "Verifico lo stato dei database PostgreSQL..." | tee -a "$LOG_FILE"
     
-    # Controlla se il container esiste e il suo stato
-    if docker ps -a --format "{{.Names}}" | grep -q "^${DB_CONTAINER_NAME}$"; then
-        # Il container esiste, verifica se è in esecuzione
-        if ! docker ps --format "{{.Names}}" | grep -q "^${DB_CONTAINER_NAME}$"; then
-            echo "Il database Docker esiste ma non è in esecuzione. Avvio..." | tee -a "$LOG_FILE"
-            docker start ${DB_CONTAINER_NAME} | tee -a "$LOG_FILE"
+    # Verifica se i database necessari esistono
+    DB_NAMES=("edu_app_auth" "edu_app_quiz" "edu_app_path" "edu_app_reward")
+    MISSING_DBS=false
+    
+    for DB_NAME in "${DB_NAMES[@]}"; do
+        if ! sudo -u postgres psql -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw $DB_NAME; then
+            echo "⚠️ Database $DB_NAME non esiste." | tee -a "$LOG_FILE"
+            MISSING_DBS=true
         else
-            echo "Il database Docker è già in esecuzione." | tee -a "$LOG_FILE"
+            echo "✅ Database $DB_NAME esiste." | tee -a "$LOG_FILE"
         fi
-    else
-        # Il container non esiste, deve essere creato con docker-compose
-        echo "Il container del database non esiste. Avvio con docker-compose..." | tee -a "$LOG_FILE"
-        docker-compose -f "$PROJECT_DIR/docker-compose.dev.yml" up -d postgres | tee -a "$LOG_FILE"
-    fi
-    
-    # Aspetta che il database sia pronto
-    echo "Attesa che il database sia pronto..." | tee -a "$LOG_FILE"
-    for i in {1..30}; do
-        if docker exec ${DB_CONTAINER_NAME} pg_isready -U postgres &>/dev/null; then
-            echo "Database PostgreSQL pronto!" | tee -a "$LOG_FILE"
-            return 0
-        fi
-        echo -n "." | tee -a "$LOG_FILE"
-        sleep 1
     done
     
-    echo "\nImpossibile connettersi al database dopo 30 secondi." | tee -a "$LOG_FILE"
-    return 1
+    if [ "$MISSING_DBS" = true ]; then
+        echo "⚠️ Alcuni database necessari non esistono. Esegui './init_all_db.sh' per crearli." | tee -a "$LOG_FILE"
+        echo "⚠️ I servizi potrebbero non funzionare correttamente." | tee -a "$LOG_FILE"
+    else
+        echo "✅ Tutti i database necessari esistono." | tee -a "$LOG_FILE"
+    fi
 }
 
 # Funzione per mostrare messaggio di utilizzo
@@ -115,8 +110,8 @@ setup() {
         echo "Node.js non trovato. Installalo per configurare il frontend." | tee -a "$LOG_FILE"
     fi
     
-    # Verifica e avvia il database Docker
-    check_and_start_db
+    # Verifica informativa sui database
+    check_db_info
     
     echo "Configurazione completata!" | tee -a "$LOG_FILE"
 }
@@ -126,36 +121,34 @@ start_backend() {
     echo "Avvio servizi backend..." | tee -a "$LOG_FILE"
     activate_venv
     
-    # Verifica e avvia il database se necessario
-    if ! check_and_start_db; then
-        echo "ERRORE: Impossibile avviare o connettersi al database. I servizi backend potrebbero non funzionare correttamente." | tee -a "$LOG_FILE"
-    fi
+    # Verifica informativa sui database
+    check_db_info
     
     # Per ora avviamo i servizi in terminali separati
     echo "Avvio auth-service..." | tee -a "$LOG_FILE"
     if [ -f "$BACKEND_DIR/auth-service/app/main.py" ]; then
-        (cd "$BACKEND_DIR/auth-service" && source "$VENV_DIR/bin/activate" && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8001 2>&1 | tee -a "$LOG_FILE") &
+        (cd "$BACKEND_DIR/auth-service" && source "$VENV_DIR/bin/activate" && POSTGRES_SERVER=$PG_HOST POSTGRES_PORT=$PG_PORT python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8001 2>&1 | tee -a "$LOG_FILE") &
     else
         echo "auth-service non disponibile." | tee -a "$LOG_FILE"
     fi
     
     echo "Avvio quiz-service..." | tee -a "$LOG_FILE"
     if [ -f "$BACKEND_DIR/quiz-service/app/main.py" ]; then
-        (cd "$BACKEND_DIR/quiz-service" && source "$VENV_DIR/bin/activate" && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8002 2>&1 | tee -a "$LOG_FILE") &
+        (cd "$BACKEND_DIR/quiz-service" && source "$VENV_DIR/bin/activate" && POSTGRES_SERVER=$PG_HOST POSTGRES_PORT=$PG_PORT python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8002 2>&1 | tee -a "$LOG_FILE") &
     else
         echo "quiz-service non disponibile." | tee -a "$LOG_FILE"
     fi
     
     echo "Avvio path-service..." | tee -a "$LOG_FILE"
     if [ -f "$BACKEND_DIR/path-service/app/main.py" ]; then
-        (cd "$BACKEND_DIR/path-service" && source "$VENV_DIR/bin/activate" && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8003 2>&1 | tee -a "$LOG_FILE") &
+        (cd "$BACKEND_DIR/path-service" && source "$VENV_DIR/bin/activate" && POSTGRES_SERVER=$PG_HOST POSTGRES_PORT=$PG_PORT python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8003 2>&1 | tee -a "$LOG_FILE") &
     else
         echo "path-service non disponibile." | tee -a "$LOG_FILE"
     fi
     
     echo "Avvio reward-service..." | tee -a "$LOG_FILE"
     if [ -f "$BACKEND_DIR/reward-service/app/main.py" ]; then
-        (cd "$BACKEND_DIR/reward-service" && source "$VENV_DIR/bin/activate" && python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8004 2>&1 | tee -a "$LOG_FILE") &
+        (cd "$BACKEND_DIR/reward-service" && source "$VENV_DIR/bin/activate" && POSTGRES_SERVER=$PG_HOST POSTGRES_PORT=$PG_PORT python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8004 2>&1 | tee -a "$LOG_FILE") &
     else
         echo "reward-service non disponibile." | tee -a "$LOG_FILE"
     fi
@@ -210,23 +203,32 @@ stop_services() {
 show_status() {
     echo "Stato dei servizi:" | tee -a "$LOG_FILE"
     
-    # Controllo stato del database
+    # Controllo stato del database PostgreSQL locale
     echo "Database PostgreSQL:" | tee -a "$LOG_FILE"
-    if docker ps --format "{{.Names}}" | grep -q "^${DB_CONTAINER_NAME}$"; then
-        echo "✅ Database Docker (${DB_CONTAINER_NAME}) è in esecuzione" | tee -a "$LOG_FILE"
+    if sudo -u postgres pg_isready -h $PG_HOST -p $PG_PORT &>/dev/null; then
+        echo "✅ PostgreSQL locale è in esecuzione e accetta connessioni" | tee -a "$LOG_FILE"
         
-        # Controlla se il database è pronto per le connessioni
-        if docker exec ${DB_CONTAINER_NAME} pg_isready -U postgres &>/dev/null; then
-            echo "✅ Database accetta connessioni" | tee -a "$LOG_FILE"
-        else
-            echo "❌ Database in esecuzione ma non accetta connessioni" | tee -a "$LOG_FILE"
+        # Mostra dettagli di PostgreSQL
+        PG_VERSION=$(sudo -u postgres psql -c "SELECT version();" -t 2>/dev/null | xargs)
+        if [ -n "$PG_VERSION" ]; then
+            echo "   Versione: $PG_VERSION" | tee -a "$LOG_FILE"
+            echo "   Host: $PG_HOST" | tee -a "$LOG_FILE"
+            echo "   Porta: $PG_PORT" | tee -a "$LOG_FILE"
         fi
         
-        # Mostra informazioni sul container
-        echo "Dettagli:" | tee -a "$LOG_FILE"
-        docker ps --filter "name=${DB_CONTAINER_NAME}" --format "ID: {{.ID}}\nPort: {{.Ports}}\nStatus: {{.Status}}\nCreated: {{.CreatedAt}}" | tee -a "$LOG_FILE"
+        # Mostra i database esistenti
+        echo "   Database:" | tee -a "$LOG_FILE"
+        DB_NAMES=("edu_app_auth" "edu_app_quiz" "edu_app_path" "edu_app_reward")
+        for DB_NAME in "${DB_NAMES[@]}"; do
+            if sudo -u postgres psql -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw $DB_NAME; then
+                echo "      ✅ $DB_NAME" | tee -a "$LOG_FILE"
+            else
+                echo "      ❌ $DB_NAME (mancante)" | tee -a "$LOG_FILE"
+            fi
+        done
     else
-        echo "❌ Database Docker (${DB_CONTAINER_NAME}) non è in esecuzione" | tee -a "$LOG_FILE"
+        echo "❌ PostgreSQL locale non è in esecuzione o non accetta connessioni" | tee -a "$LOG_FILE"
+        echo "⚠️ Assicurati che PostgreSQL sia avviato prima di utilizzare i servizi" | tee -a "$LOG_FILE"
     fi
     
     echo "" | tee -a "$LOG_FILE"

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import MainLayout from '../../components/layout/MainLayout';
 import PageTransition from '../../components/animations/PageTransition';
@@ -34,14 +34,21 @@ import {
   CircularProgress,
   FormGroup,
   Checkbox,
+  Chip,
+  Stack,
+  Snackbar,
 } from '@mui/material';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import NavigateNextIcon from '@mui/icons-material/NavigateNext';
-import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
+import {
+  CheckCircle as CheckCircleIcon,
+  NavigateNext as NavigateNextIcon,
+  NavigateBefore as NavigateBeforeIcon,
+  AccessTime as AccessTimeIcon,
+  Info as InfoIcon
+} from '@mui/icons-material';
 import StarsIcon from '@mui/icons-material/Stars';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import QuizService, { Quiz, QuizResult, Question } from '../../services/QuizService';
 import { NotificationsService } from '../../services/NotificationsService';
+import { LOCAL_STORAGE_KEYS } from '../../constants';
 
 // Importazione componenti di animazione
 import { 
@@ -96,148 +103,57 @@ const TakeQuiz: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<QuizResult | null>(null);
   const [completed, setCompleted] = useState(false);
+  const [quizAlreadyReviewed, setQuizAlreadyReviewed] = useState(false);
 
   useEffect(() => {
     const fetchQuiz = async () => {
+      if (!quizId) return;
+      
       try {
         setLoading(true);
         setError(null);
         
-        // Check if quizId is defined
-        if (!quizId) {
-          setError('ID del quiz mancante');
-          setLoading(false);
-          return;
+        console.log(`[DEBUG TakeQuiz] Fetching quiz with ID: ${quizId} for path: ${pathId || 'not specified'}`);
+        
+        // Ottieni il quiz in base al contesto (percorso o standalone)
+        let quizData;
+        if (pathId) {
+          console.log(`[DEBUG TakeQuiz] Fetching quiz from path context using getPathQuiz`);
+          quizData = await QuizService.getPathQuiz(pathId, quizId);
+        } else {
+          console.log(`[DEBUG TakeQuiz] Fetching standalone quiz using getQuiz`);
+          quizData = await QuizService.getQuiz(quizId);
         }
         
-        console.log(`[DEBUG TakeQuiz] Starting to load quiz ID=${quizId} pathId=${pathId || 'none'}`);
+        console.log('[DEBUG TakeQuiz] Quiz data received:', quizData);
         
-        let quizData;
-        
-        // Se il quiz è stato avviato da un percorso, carica l'istanza specifica
-        if (pathId) {
-          console.log(`[DEBUG TakeQuiz] Loading quiz ${quizId} from path ${pathId}`);
-          try {
-            // IMPORTANT: Log the API request explicitly to help trace any issues
-            console.log(`[DEBUG TakeQuiz] Calling QuizService.getPathQuiz(${pathId}, ${quizId})`);
-            quizData = await QuizService.getPathQuiz(pathId, quizId);
-            console.log(`[DEBUG TakeQuiz] Successfully loaded quiz from path:`, {
-              id: quizData.id,
-              templateId: quizData.templateId,
-              title: quizData.title,
-              questionCount: quizData.questions?.length || 0,
-              firstQuestionText: quizData.questions?.[0]?.text?.substring(0, 30) + '...' || 'No questions'
-            });
-            
-            // Verify we have questions
-            if (!quizData.questions || !Array.isArray(quizData.questions) || quizData.questions.length === 0) {
-              console.error(`[DEBUG TakeQuiz] Quiz loaded from path has no questions. Attempting fallback...`);
-              throw new Error('Quiz loaded from path has no questions');
-            }
-          } catch (pathError) {
-            console.error('[DEBUG TakeQuiz] Error loading quiz from path:', pathError);
-            
-            // Fallback: try loading the quiz as a template
-            console.log('[DEBUG TakeQuiz] Attempting fallback with template quiz');
-            try {
-              console.log(`[DEBUG TakeQuiz] Calling QuizService.getQuizTemplateById(${quizId})`);
-              quizData = await QuizService.getQuizTemplateById(quizId);
-              console.log(`[DEBUG TakeQuiz] Successfully loaded quiz template:`, {
-                id: quizData.id,
-                title: quizData.title,
-                questionCount: quizData.questions?.length || 0,
-                firstQuestionText: quizData.questions?.[0]?.text?.substring(0, 30) + '...' || 'No questions'
-              });
-              
-              // Adapt the template format to the quiz format
-              if (quizData) {
-                quizData = {
-                  id: quizData.id,
-                  templateId: quizData.id,
-                  title: quizData.title,
-                  description: quizData.description,
-                  isCompleted: false,
-                  score: 0,
-                  maxScore: (quizData.questions.reduce((sum: number, q: Question) => sum + (q.points || 1), 0) as number),
-                  questions: quizData.questions,
-                  timeLimit: quizData.timeLimit,
-                  pathId: pathId
-                };
-              }
-            } catch (templateError) {
-              console.error('[DEBUG TakeQuiz] Error loading quiz template:', templateError);
-              throw new Error('Failed to load quiz: both path quiz and template approaches failed');
-            }
+        // Se abbiamo recuperato il quiz con successo
+        if (quizData) {
+          setQuiz(quizData);
+          
+          // Se il quiz è già stato completato, mostra una notifica (solo se ha completedAt)
+          if (quizData.isCompleted && quizData.completedAt) {
+            NotificationsService.warning(
+              "Questo quiz è già stato completato in precedenza. Completarlo di nuovo non aggiungerà ulteriori punti.",
+              "Quiz già completato"
+            );
           }
           
-          // Add path info to the quiz
-          if (quizData) {
-            quizData.pathId = pathId;
+          // Registra il tempo di inizio
+          setStartTime(new Date());
+          setQuestionStartTime(new Date());
+          
+          // Se c'è un time limit, calcola il tempo rimanente
+          if (quizData.timeLimit) {
+            setRemainingTime(quizData.timeLimit * 60); // Converti da minuti a secondi
           }
         } else {
-          // Load the normal quiz (template)
-          console.log(`[DEBUG TakeQuiz] Loading template quiz ${quizId}`);
-          quizData = await QuizService.getQuiz(quizId);
-          console.log(`[DEBUG TakeQuiz] Successfully loaded standard quiz:`, {
-            id: quizData.id,
-            uuid: quizData.uuid,
-            uuidPresent: !!quizData.uuid,
-            uuidRaw: JSON.stringify(quizData.uuid),
-            uuidLength: quizData.uuid ? quizData.uuid.length : 0,
-            rawData: JSON.stringify(quizData).substring(0, 200) + '...',
-            templateId: quizData.templateId,
-            title: quizData.title,
-            questionCount: quizData.questions?.length || 0,
-            firstQuestionText: quizData.questions?.[0]?.text?.substring(0, 30) + '...' || 'No questions'
-          });
+          throw new Error('Quiz non trovato o formato non valido');
         }
-        
-        if (quizData) {
-          console.log('[DEBUG TakeQuiz] Quiz data loaded. Details:', {
-            id: quizData.id,
-            templateId: quizData.templateId,
-            title: quizData.title,
-            questionCount: quizData.questions?.length || 0
-          });
-          
-          // Verify we have questions before setting the quiz
-          if (!quizData.questions || !Array.isArray(quizData.questions) || quizData.questions.length === 0) {
-            console.error(`[DEBUG TakeQuiz] Quiz has no questions`);
-            setError('Il quiz non contiene domande. Contatta l\'amministratore del sistema.');
-            setLoading(false);
-            return;
-          }
-          
-          // Normalize the quiz according to frontend conventions
-          setQuiz({
-            id: quizData.id,
-            uuid: quizData.uuid || '',
-            title: quizData.title || 'Quiz senza titolo',
-            description: quizData.description || 'Nessuna descrizione disponibile',
-            pathId: quizData.pathId || pathId || '',
-            pathTitle: quizData.pathTitle,
-            timeLimit: quizData.timeLimit || 0,
-            questions: quizData.questions || [],
-            maxScore: quizData.maxScore || (quizData.questions?.reduce((sum: number, q: Question) => sum + (q.points || 1), 0) as number) || 0,
-            templateId: quizData.templateId || '',
-            studentId: quizData.studentId || '',
-            isCompleted: quizData.isCompleted || false,
-            score: quizData.score || 0
-          });
-          
-          // Set the timer if there's a time limit
-          if (quizData.timeLimit && quizData.timeLimit > 0) {
-            setRemainingTime(quizData.timeLimit * 60); // convert to seconds
-            setStartTime(new Date());
-          }
-        }
-      } catch (err) {
-        console.error('[DEBUG TakeQuiz] Error during quiz loading:', err);
-        setError('Si è verificato un errore durante il caricamento del quiz. Riprova più tardi.');
-        NotificationsService.error(
-          'Non è stato possibile caricare il quiz',
-          'Errore di caricamento'
-        );
+      } catch (err: any) {
+        console.error('[DEBUG TakeQuiz] Error fetching quiz:', err);
+        setError(err.message || 'Si è verificato un errore nel caricamento del quiz');
+        NotificationsService.error('Errore nel caricamento del quiz', 'Errore');
       } finally {
         setLoading(false);
       }
@@ -424,11 +340,36 @@ const TakeQuiz: React.FC = () => {
       setResult(result);
       setCompleted(true);
       
-      // Messaggio di successo
-      NotificationsService.success(
-        `Quiz completato con successo! Punteggio: ${result.score}/${result.maxScore}`,
-        'Quiz Completato'
-      );
+      // Messaggio di successo basato sul risultato
+      if (result?.already_completed) {
+        // IMPORTANTE: Aggiungi un log forzato per verificare che questa condizione venga raggiunta
+        console.warn('[DEBUG TakeQuiz] Quiz già completato rilevato:', {
+          alreadyCompleted: result.already_completed,
+          message: result.message || "Nessun messaggio fornito",
+          score: result.score,
+          maxScore: result.maxScore,
+          percentage: result.percentage
+        });
+        
+        // Mostra SEMPRE la notifica quando il quiz è già completato
+        NotificationsService.warning(
+          result.message || "Questo quiz è già stato completato. Il punteggio mostrato è quello del tentativo precedente.",
+          'Quiz Già Completato'
+        );
+        
+        // Registra sempre il warning nei log
+        console.warn('[DEBUG TakeQuiz] Quiz già completato:', {
+          quizId: quiz.id,
+          quizUuid: quizUuid,
+          alreadyCompleted: true,
+          message: result.message
+        });
+      } else {
+        NotificationsService.success(
+          `Quiz completato con successo! Punteggio: ${result.score}/${result.maxScore}`,
+          'Quiz Completato'
+        );
+      }
       
       // Reindirizzamento dopo un breve ritardo per mostrare il risultato
       setTimeout(() => {
@@ -560,63 +501,151 @@ const TakeQuiz: React.FC = () => {
     }
   };
 
-  if (loading && !quiz) {
+  if (loading) {
     return (
-      <AnimatedPage transitionType="fade">
-        <MainLayout title="Svolgimento Quiz">
-          <Box sx={{ p: 3, maxWidth: 1000, mx: 'auto' }}>
-            <FadeIn>
-              <Box display="flex" justifyContent="center" alignItems="center" height="50vh" flexDirection="column">
-                <LoadingIndicator text="Caricamento quiz..." />
-                <Typography variant="body1" sx={{ mt: 2 }}>
-                  Preparazione delle domande in corso...
-                </Typography>
-              </Box>
-            </FadeIn>
-          </Box>
-        </MainLayout>
-      </AnimatedPage>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
+        <LoadingIndicator text="Caricamento quiz..." size={50} />
+      </Box>
     );
   }
 
   if (error) {
     return (
-      <AnimatedPage transitionType="fade">
-        <MainLayout title="Svolgimento Quiz">
-          <Box sx={{ p: 3, maxWidth: 1000, mx: 'auto' }}>
-            <SlideInUp>
-              <Alert severity="error" sx={{ mb: 3 }}>
-                {error}
-              </Alert>
-              <Button variant="contained" onClick={() => navigate(-1)}>
-                Torna indietro
-              </Button>
-            </SlideInUp>
+      <Box sx={{ padding: 3, textAlign: 'center' }}>
+        <Typography variant="h5" component="h1" color="error" gutterBottom>
+          Errore
+        </Typography>
+        <Typography>{error}</Typography>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={() => navigate(-1)}
+          sx={{ mt: 2 }}
+        >
+          Torna indietro
+        </Button>
+      </Box>
+    );
+  }
+
+  // Mostra un avviso se il quiz è stato completato in precedenza
+  if (quiz?.isCompleted && quiz?.completedAt && !quizCompleted && !quizAlreadyReviewed) {
+    return (
+      <Box sx={{ padding: 3 }}>
+        <Paper 
+          elevation={3} 
+          sx={{ 
+            padding: 3, 
+            textAlign: 'center',
+            border: '2px solid #FFC107',
+            backgroundColor: '#FFF8E1'
+          }}
+        >
+          <Typography variant="h5" component="h1" gutterBottom sx={{ color: '#FF8F00' }}>
+            Quiz già completato
+          </Typography>
+          <Typography paragraph>
+            Hai già completato questo quiz in precedenza. Se continui, potrai rivedere le domande ma il tuo punteggio precedente rimarrà invariato.
+          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 2 }}>
+            <Button
+              variant="outlined"
+              color="secondary"
+              onClick={() => navigate(-1)}
+            >
+              Torna indietro
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => setQuizAlreadyReviewed(true)}
+            >
+              Continua comunque
+            </Button>
           </Box>
-        </MainLayout>
-      </AnimatedPage>
+        </Paper>
+      </Box>
+    );
+  }
+
+  if (!quiz || !quiz.questions || quiz.questions.length === 0) {
+    return (
+      <Box sx={{ padding: 3, textAlign: 'center' }}>
+        <Typography variant="h5" component="h1" color="error" gutterBottom>
+          Quiz non valido
+        </Typography>
+        <Typography>Il quiz non contiene domande o non è correttamente configurato.</Typography>
+        <Button
+          variant="contained"
+          color="primary"
+          onClick={() => navigate(-1)}
+          sx={{ mt: 2 }}
+        >
+          Torna indietro
+        </Button>
+      </Box>
     );
   }
 
   if (completed) {
+    // Calcola sempre una percentuale di fallback in caso non arrivi dal backend
+    const calculatedPercentage = result?.percentage || 
+      (result?.maxScore && result?.maxScore > 0 ? 
+        Math.round((result?.score / result?.maxScore) * 100) : 0);
+    
     return (
       <AnimatedPage transitionType="fade">
-        <MainLayout title="Quiz Completato">
+        <MainLayout title={result?.already_completed ? "Quiz Già Completato" : "Quiz Completato"}>
           <Box sx={{ p: 3, maxWidth: 1000, mx: 'auto' }}>
             <FadeIn>
               <Box textAlign="center" py={4}>
-                <CheckCircleIcon color="success" sx={{ fontSize: 80, mb: 2 }} />
+                {result?.already_completed ? (
+                  <>
+                    <InfoIcon color="warning" sx={{ fontSize: 80, mb: 2 }} />
+                    <Typography 
+                      variant="h5" 
+                      bgcolor="warning.light" 
+                      color="warning.dark" 
+                      p={2} 
+                      mb={3} 
+                      borderRadius={2}
+                    >
+                      {result.message || "Questo quiz è già stato completato in precedenza."}
+                    </Typography>
+                  </>
+                ) : (
+                  <CheckCircleIcon color="success" sx={{ fontSize: 80, mb: 2 }} />
+                )}
                 <Typography variant="h4" gutterBottom>
-                  Quiz completato!
+                  {result?.already_completed ? "Quiz Già Completato" : "Quiz Completato!"}
                 </Typography>
                 <Typography variant="h5" color="primary" gutterBottom>
                   Hai ottenuto: {result?.score}/{result?.maxScore} punti
+                </Typography>
+                <Typography variant="body1" gutterBottom>
+                  Percentuale: {calculatedPercentage}%
                 </Typography>
                 <Typography variant="body1" paragraph>
                   {result?.pointsAwarded !== null && result?.pointsAwarded !== undefined && (
                     <>Hai guadagnato <strong>{result?.pointsAwarded}</strong> punti premio!</>
                   )}
                 </Typography>
+                
+                {/* Messaggio se il quiz era già stato completato */}
+                {result?.already_completed && (
+                  <Box sx={{ 
+                    mt: 2, 
+                    p: 2, 
+                    backgroundColor: '#FFF8E1', 
+                    borderRadius: 1,
+                    border: '1px solid #FFC107'
+                  }}>
+                    <Typography variant="body1" color="warning.dark">
+                      <InfoIcon sx={{ verticalAlign: 'middle', mr: 1 }} />
+                      {result.message || "Questo quiz era già stato completato in precedenza."}
+                    </Typography>
+                  </Box>
+                )}
                 
                 <SlideInUp delay={0.4}>
                   <Box display="flex" justifyContent="center" mt={4} gap={2}>
@@ -644,8 +673,30 @@ const TakeQuiz: React.FC = () => {
   }
 
   return (
-    <MainLayout title="Quiz">
+    <MainLayout title={quiz?.isCompleted && quiz?.completedAt ? "Quiz (Già Completato)" : "Quiz"}>
       <Box sx={{ p: 3, position: 'relative' }}>
+        {/* Indicatore per quiz già completato */}
+        {quiz?.isCompleted && quiz?.completedAt && (
+          <Box 
+            sx={{ 
+              backgroundColor: 'warning.light',
+              color: 'warning.dark',
+              p: 2,
+              mb: 3,
+              borderRadius: 2,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2
+            }}
+          >
+            <InfoIcon />
+            <Typography variant="body1">
+              <strong>Attenzione:</strong> Questo quiz è già stato completato in precedenza. 
+              Il completamento di nuovo non aggiungerà ulteriori punti.
+            </Typography>
+          </Box>
+        )}
+        
         {/* Debug Panel - Only shown in development mode */}
         {process.env.NODE_ENV === 'development' && (
           <Paper 
@@ -741,6 +792,22 @@ const TakeQuiz: React.FC = () => {
                         <>Hai guadagnato <strong>{result?.pointsAwarded}</strong> punti premio!</>
                       )}
                     </Typography>
+                    
+                    {/* Messaggio se il quiz era già stato completato */}
+                    {result?.already_completed && (
+                      <Box sx={{ 
+                        mt: 2, 
+                        p: 2, 
+                        backgroundColor: '#FFF8E1', 
+                        borderRadius: 1,
+                        border: '1px solid #FFC107'
+                      }}>
+                        <Typography variant="body1" color="warning.dark">
+                          <InfoIcon sx={{ verticalAlign: 'middle', mr: 1 }} />
+                          {result.message || "Questo quiz era già stato completato in precedenza."}
+                        </Typography>
+                      </Box>
+                    )}
                     
                     <SlideInUp delay={0.4}>
                       <Box display="flex" justifyContent="center" mt={4} gap={2}>

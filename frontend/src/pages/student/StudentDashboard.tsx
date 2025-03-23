@@ -364,14 +364,30 @@ const StudentDashboard: React.FC = () => {
                 <CardSkeleton count={2} />
               ) : (
                 <Grid container spacing={3}>
-                  {quizzes.filter(q => !q.completed).length > 0 ? (
+                  {quizzes.length > 0 ? (
                     quizzes
-                      .filter(q => !q.completed)
                       .slice(0, 3)
                       .map((quiz, index) => (
                         <Grid item xs={12} md={4} key={quiz.id}>
                           <HoverAnimation>
-                            <Card>
+                            <Card sx={{
+                              position: 'relative',
+                              borderTop: quiz.completed ? '4px solid' : 'none',
+                              borderColor: 'success.main'
+                            }}>
+                              {quiz.completed && (
+                                <Chip
+                                  label="Completato"
+                                  color="success"
+                                  size="small"
+                                  sx={{
+                                    position: 'absolute',
+                                    top: 10,
+                                    right: 10,
+                                    fontWeight: 'bold'
+                                  }}
+                                />
+                              )}
                               <CardContent>
                                 <Typography variant="h6" gutterBottom>
                                   {quiz.title}
@@ -382,8 +398,8 @@ const StudentDashboard: React.FC = () => {
                                   </Typography>
                                 )}
                                 <Chip
-                                  label="Da completare"
-                                  color="warning"
+                                  label={quiz.completed ? "Completato" : "Da completare"}
+                                  color={quiz.completed ? "success" : "warning"}
                                   size="small"
                                   sx={{ mt: 1 }}
                                 />
@@ -394,9 +410,9 @@ const StudentDashboard: React.FC = () => {
                                   to={`/student/quiz/${quiz.id}`}
                                   size="small"
                                   color="primary"
-                                  variant="contained"
+                                  variant={quiz.completed ? "outlined" : "contained"}
                                 >
-                                  Inizia
+                                  {quiz.completed ? "Rivedi" : "Inizia"}
                                 </Button>
                               </CardActions>
                             </Card>
@@ -406,7 +422,7 @@ const StudentDashboard: React.FC = () => {
                   ) : (
                     <Grid item xs={12}>
                       <Typography variant="body1" color="textSecondary">
-                        Non hai quiz da completare al momento.
+                        Non hai quiz disponibili al momento.
                       </Typography>
                     </Grid>
                   )}

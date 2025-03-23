@@ -46,8 +46,7 @@ const AssignedPaths = React.lazy(() => import('./pages/student/AssignedPaths'));
 const PathDetail = React.lazy(() => import('./pages/student/PathDetail'));
 const TakeQuiz = React.lazy(() => import('./pages/student/TakeQuiz'));
 const RewardsStore = React.lazy(() => import('./pages/student/RewardsStore'));
-
-
+const QuizResults = React.lazy(() => import('./pages/student/QuizResults'));
 
 // Componente di caricamento migliorato
 const LoadingComponent = () => (
@@ -161,6 +160,11 @@ function App() {
                 <Route path="/student/path/:pathId/quiz/:quizId" element={
                   <ProtectedRoute requiredRole="student">
                     <TakeQuiz />
+                  </ProtectedRoute>
+                } />
+                <Route path="/student/path/:pathId/quiz/:quizId/results" element={
+                  <ProtectedRoute requiredRole="student">
+                    <QuizResults />
                   </ProtectedRoute>
                 } />
                 <Route path="/student/quiz/:quizId" element={

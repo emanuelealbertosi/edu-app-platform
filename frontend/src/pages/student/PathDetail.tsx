@@ -61,6 +61,8 @@ const PathDetail: React.FC = () => {
   const [path, setPath] = useState<PathDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [runDiagnosticLoading, setRunDiagnosticLoading] = useState<boolean>(false);
+  const [refreshCount, setRefreshCount] = useState<number>(0);
 
   useEffect(() => {
     const fetchPathDetail = async () => {
@@ -196,7 +198,7 @@ const PathDetail: React.FC = () => {
     };
 
     fetchPathDetail();
-  }, [pathId]);
+  }, [pathId, refreshCount]);
 
   const getStatusLabel = (status: string) => {
     switch (status) {
@@ -237,24 +239,43 @@ const PathDetail: React.FC = () => {
     }
   };
 
-  const handleStartQuiz = (quizId: string, quizTemplateId?: string) => {
-    if (!pathId) return;
+  const handleStartQuiz = async (quiz: Quiz) => {
+    try {
+      console.log(`Starting quiz with ID: ${quiz.id}, template ID: ${quiz.templateId}`);
+      
+      // Determina l'ID da usare per il quiz (template_id o id diretto)
+      const quizId = quiz.templateId || quiz.id;
+      if (!quizId) {
+        throw new Error('ID Quiz o ID Template non disponibile');
+      }
+      
+      // Se il quiz è completato, vai alla pagina di riepilogo
+      if (quiz.status === 'completed') {
+        console.log(`Quiz ${quizId} is already completed, navigating to review page`);
+        navigate(`/student/path/${pathId}/quiz/${quizId}/results`);
+        return;
+      }
+      
+      // Altrimenti, avvia il quiz
+      console.log(`Navigating to quiz page for quiz ID: ${quizId}`);
+      navigate(`/student/path/${pathId}/quiz/${quizId}`);
+      
+      // Imposta un timer per controllare lo stato del percorso dopo un po' di tempo
+      // Questo aiuterà ad aggiornare la UI se il quiz viene completato
+      setTimeout(() => {
+        checkPathStatus();
+      }, 10000); // Controlla dopo 10 secondi
+      
+    } catch (error) {
+      console.error('Error navigating to quiz:', error);
+      NotificationsService.error('Errore durante l\'avvio del quiz. Riprova più tardi.', 'Errore');
+    }
+  };
 
-    // Clear preference order for IDs to use:
-    // 1. Template ID is preferred as it directly points to the questions
-    // 2. Node ID as fallback
-    const idToUse = quizTemplateId || quizId;
-    
-    // Add detailed logging for debugging
-    console.log(`[DEBUG PathDetail] Starting quiz with:`, {
-      pathId,
-      nodeId: quizId,
-      templateId: quizTemplateId,
-      usingId: idToUse
-    });
-    
-    // Always navigate to the chosen ID
-    navigate(`/student/path/${pathId}/quiz/${idToUse}`);
+  // Funzione per controllare lo stato aggiornato del percorso
+  const checkPathStatus = () => {
+    console.log("Controllando lo stato aggiornato del percorso...");
+    setRefreshCount(prevCount => prevCount + 1);
   };
 
   // Add function to run API diagnostic
@@ -351,6 +372,32 @@ const PathDetail: React.FC = () => {
             <Typography variant="body1" paragraph>
               {path.description}
             </Typography>
+            
+            {/* Banner di completamento del percorso */}
+            {path.status === 'completato' && (
+              <Paper 
+                sx={{ 
+                  mt: 2, 
+                  p: 3, 
+                  bgcolor: 'success.light', 
+                  color: 'success.dark',
+                  borderRadius: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 2
+                }}
+              >
+                <CheckCircleIcon sx={{ fontSize: 36 }} />
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    Percorso Completato!
+                  </Typography>
+                  <Typography variant="body1">
+                    Hai completato con successo tutti i quiz di questo percorso. Il punteggio è stato aggiunto al tuo profilo.
+                  </Typography>
+                </Box>
+              </Paper>
+            )}
           </FadeIn>
 
           <SlideInUp delay={0.2}>
@@ -382,9 +429,26 @@ const PathDetail: React.FC = () => {
                         height: '100%', 
                         display: 'flex', 
                         flexDirection: 'column',
-                        opacity: quiz.status === 'locked' ? 0.7 : 1
+                        opacity: quiz.status === 'locked' ? 0.7 : 1,
+                        borderTop: quiz.status === 'completed' ? '4px solid' : 'none',
+                        borderColor: 'success.main',
+                        position: 'relative'
                       }}
                     >
+                      {quiz.status === 'completed' && (
+                        <Chip
+                          label="Completato"
+                          color="success"
+                          size="small"
+                          icon={<CheckCircleIcon />}
+                          sx={{
+                            position: 'absolute',
+                            top: 10,
+                            right: 10,
+                            fontWeight: 'bold'
+                          }}
+                        />
+                      )}
                       <CardContent sx={{ flexGrow: 1 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                           <Typography variant="h6" component="h2">
@@ -397,12 +461,19 @@ const PathDetail: React.FC = () => {
                         </Typography>
                         
                         {quiz.status === 'completed' && (
-                          <Box sx={{ mt: 2, p: 1, bgcolor: 'success.light', borderRadius: 1 }}>
-                            <Typography variant="body2">
+                          <Box sx={{ 
+                            mt: 2, 
+                            p: 1.5, 
+                            bgcolor: 'success.light', 
+                            borderRadius: 1,
+                            border: '1px solid',
+                            borderColor: 'success.main' 
+                          }}>
+                            <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'success.dark' }}>
                               Completato il: {new Date(quiz.completedAt!).toLocaleDateString()}
                             </Typography>
-                            <Typography variant="body2">
-                              Punti guadagnati: {quiz.pointsAwarded}
+                            <Typography variant="body2" sx={{ color: 'success.dark' }}>
+                              Punti guadagnati: {quiz.pointsAwarded || 0}
                             </Typography>
                           </Box>
                         )}
@@ -413,9 +484,10 @@ const PathDetail: React.FC = () => {
                           fullWidth
                           size="large"
                           disabled={quiz.status === 'locked'}
-                          onClick={() => handleStartQuiz(quiz.id, quiz.templateId)}
+                          onClick={() => handleStartQuiz(quiz)}
+                          startIcon={quiz.status === 'completed' ? <CheckCircleIcon /> : undefined}
                         >
-                          {quiz.status === 'completed' ? 'Rivedi' : quiz.status === 'locked' ? 'Bloccato' : 'Inizia quiz'}
+                          {quiz.status === 'completed' ? 'Rivedi Quiz' : quiz.status === 'locked' ? 'Bloccato' : 'Inizia Quiz'}
                         </Button>
                       </CardActions>
                     </Card>

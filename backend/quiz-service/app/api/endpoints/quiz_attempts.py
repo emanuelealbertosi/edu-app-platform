@@ -149,51 +149,84 @@ async def submit_quiz_answers(
     
     # Invia le risposte
     logger.debug(f"Invio risposte per tentativo {attempt.id}")
-    attempt = QuizAttemptRepository.submit_answers(db, attempt, answers)
+    result = QuizAttemptRepository.submit_answers(db, attempt, answers)
     
-    # Se il quiz è stato completato con successo, notifica il path service
-    if attempt.passed:
+    # Recupera il quiz aggiornato dopo l'invio delle risposte
+    db_quiz = QuizRepository.get(db, quiz_id=attempt.quiz_id)
+    logger.info(f"Quiz recuperato: ID={db_quiz.id}, path_id={db_quiz.path_id}, is_completed={db_quiz.is_completed}")
+    
+    # Se il quiz era già stato completato, prepara il risultato ma NON uscire ancora
+    # perché dobbiamo assicurarci che il path-service venga notificato
+    quiz_already_completed = False
+    if result.get("already_completed", False):
+        logger.warning(f"DEBUG - Quiz già completato in precedenza, ma continuo per notificare il path-service")
+        quiz_already_completed = True
+    
+    # Notifica sempre il path-service se il quiz ha un path_id, indipendentemente dal risultato
+    if db_quiz.path_id:
         try:
-            # Ottieni il nodo del percorso associato al quiz
-            path_service_url = f"{settings.PATH_SERVICE_URL}/api/paths/nodes/status"
+            logger.info(f"Quiz ha un path_id: {db_quiz.path_id}. Inviando notifica al path-service per aggiornamento stato nodo.")
+            path_service_url = os.getenv("PATH_SERVICE_URL", "http://path-service:8000")
+            url = f"{path_service_url}/api/paths/nodes/status"
             
-            # Verifica che il quiz abbia un path_id valido
-            if not db_quiz.path_id:
-                logger.error(f"Quiz {db_quiz.id} non ha un path_id valido")
-                return attempt
-                
-            node_data = {
-                "node_uuid": db_quiz.path_id,  # UUID del nodo del percorso
-                "status": "completed",  # Stato di completamento (usando l'enum)
-                "score": attempt.score,  # Punteggio ottenuto
-                "feedback": "Quiz completato con successo"  # Feedback opzionale
+            # Importa il token di servizio
+            from app.core.config import settings
+            
+            status = "completed" if result["passed"] else "attempted"
+            
+            payload = {
+                "node_uuid": str(db_quiz.node_uuid),
+                "status": status,
+                "score": result["score"],
+                "feedback": "Quiz completato con successo" if result["passed"] else "Quiz non superato",
+                "already_completed": quiz_already_completed
             }
             
-            # Invia la notifica al path service con il ruolo quiz_service
+            if quiz_already_completed:
+                payload["feedback"] = "Quiz già completato in precedenza. " + f"Quiz completato con punteggio {result['score']}/{result['max_score']}"
+            
+            # Prepara gli headers con autenticazione di servizio
             headers = {
                 "X-Service-Role": "quiz_service",
-                "X-Service-Token": settings.SERVICE_TOKEN  # Token per l'autenticazione tra servizi
+                "X-Service-Token": settings.SERVICE_TOKEN,
+                "Content-Type": "application/json"
             }
             
-            logger.info(f"Invio notifica al path service: URL={path_service_url}, node_uuid={db_quiz.path_id}")
-            logger.info(f"Dati della notifica: {node_data}")
-            logger.info(f"Headers della notifica: {headers}")
+            logger.info(f"Invio notifica al path-service: URL={url}, payload={payload}")
+            response = requests.post(url, json=payload, headers=headers, timeout=5)
             
-            # Invia la notifica al path service
-            response = requests.post(path_service_url, json=node_data, headers=headers, timeout=10)
-            logger.info(f"Risposta del path service: status={response.status_code}, text={response.text}")
-            
-            if response.status_code != 200:
-                logger.error(f"Errore nella notifica al path service: {response.text}")
-            else:
-                logger.info(f"Notifica al path service inviata con successo per il nodo {db_quiz.path_id}")
+            if response.status_code == 200:
+                path_response = response.json()
+                logger.info(f"Risposta dal path-service: {path_response}")
                 
+                # Log dei dettagli del percorso aggiornato
+                if "path_id" in path_response:
+                    logger.info(f"Path aggiornato: id={path_response.get('path_id')}")
+                
+                # Log della percentuale di completamento
+                path_url = f"{path_service_url}/api/paths/{db_quiz.path_id}"
+                path_response = requests.get(path_url, headers=headers)
+                
+                if path_response.status_code == 200:
+                    path_data = path_response.json()
+                    completion_percentage = path_data.get("completion_percentage", 0)
+                    current_score = path_data.get("current_score", 0)
+                    path_status = path_data.get("status", "unknown")
+                    logger.info(f"Stato aggiornato del percorso: path_id={db_quiz.path_id}, " 
+                                f"completion_percentage={completion_percentage}%, "
+                                f"score={current_score}, status={path_status}")
+                    
+                    if path_status == "completed":
+                        logger.info(f"PERCORSO COMPLETATO! path_id={db_quiz.path_id}, student_id={current_user['user_id']}")
+                else:
+                    logger.error(f"Errore nella risposta dal path-service: status={response.status_code}, response={response.text}")
         except Exception as e:
-            import traceback
-            logger.error(f"Errore durante la notifica al path service: {str(e)}")
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.error(f"Errore durante la chiamata al path-service: {str(e)}")
+    else:
+        logger.info("Quiz non ha un path_id associato. Nessuna notifica inviata al path-service.")
     
-    return attempt
+    # Ora possiamo restituire il risultato
+    return result
 
 @router.get("/{attempt_uuid}/results", response_model=QuizResult)
 async def get_quiz_results(
@@ -382,12 +415,7 @@ async def submit_quiz_answers_by_uuid(
             )
         
         # 3.3. Verifica che il tentativo non sia già completato
-        if db_attempt.completed_at is not None:
-            logger.warning(f"DEBUG - ERRORE: Tentativo {db_attempt.id} già completato")
-            raise HTTPException(
-                status_code=400,
-                detail="Questo tentativo è già stato completato"
-            )
+        # Rimosso il controllo bloccante qui, ora gestiamo il caso nel repository
         
         # 3.4. Invio delle risposte
         logger.warning(f"DEBUG - Invio risposte per tentativo {db_attempt.id}, numero risposte: {len(answers.answers)}")
@@ -395,23 +423,35 @@ async def submit_quiz_answers_by_uuid(
             result = QuizAttemptRepository.submit_answers(db, db_attempt, answers)
             logger.warning(f"DEBUG - Risultato ottenuto: {result}")
             
-            # Se il quiz è stato completato correttamente, notifica il path-service
-            if result["passed"] and db_quiz.path_id:
+            # Se il quiz era già stato completato, prepara il risultato ma NON uscire ancora
+            # perché dobbiamo assicurarci che il path-service venga notificato
+            quiz_already_completed = False
+            if result.get("already_completed", False):
+                logger.warning(f"DEBUG - Quiz già completato in precedenza, ma continuo per notificare il path-service")
+                quiz_already_completed = True
+            
+            # Notifica sempre il path-service se il quiz ha un path_id, indipendentemente dal risultato
+            if db_quiz.path_id:
                 try:
-                    # Invia una richiesta al path-service per aggiornare lo stato del nodo del percorso
-                    # Ottieni l'URL del path-service dall'ambiente o usa un default
+                    logger.info(f"Quiz ha un path_id: {db_quiz.path_id}. Inviando notifica al path-service per aggiornamento stato nodo.")
                     path_service_url = os.getenv("PATH_SERVICE_URL", "http://path-service:8000")
+                    url = f"{path_service_url}/api/paths/nodes/status"
                     
                     # Importa il token di servizio
                     from app.core.config import settings
                     
-                    # Costruisci i dati da inviare - usa il formato corretto per lo status (CompletionStatus.COMPLETED)
-                    path_data = {
-                        "node_uuid": str(db_quiz.path_id),
-                        "status": "completed",  # Usa esattamente il valore dell'enum definito in path-service
+                    status = "completed" if result["passed"] else "attempted"
+                    
+                    payload = {
+                        "node_uuid": str(db_quiz.node_uuid),
+                        "status": status,
                         "score": result["score"],
-                        "feedback": f"Quiz completato con punteggio {result['score']}/{result['max_score']}"
+                        "feedback": "Quiz completato con successo" if result["passed"] else "Quiz non superato",
+                        "already_completed": quiz_already_completed
                     }
+                    
+                    if quiz_already_completed:
+                        payload["feedback"] = "Quiz già completato in precedenza. " + f"Quiz completato con punteggio {result['score']}/{result['max_score']}"
                     
                     # Prepara gli headers con autenticazione di servizio
                     headers = {
@@ -420,24 +460,40 @@ async def submit_quiz_answers_by_uuid(
                         "Content-Type": "application/json"
                     }
                     
-                    logger.warning(f"DEBUG - Notifica al path-service per aggiornamento nodo: node_uuid={path_data['node_uuid']}, data={path_data}")
-                    
-                    # Invia la richiesta REST al path-service con gli headers appropriati
-                    response = requests.post(
-                        f"{path_service_url}/api/paths/nodes/status",
-                        json=path_data,
-                        headers=headers,
-                        timeout=5
-                    )
+                    logger.info(f"Invio notifica al path-service: URL={url}, payload={payload}")
+                    response = requests.post(url, json=payload, headers=headers, timeout=5)
                     
                     if response.status_code == 200:
-                        logger.warning(f"DEBUG - Path-service notificato con successo: {response.json()}")
-                    else:
-                        logger.error(f"DEBUG - Errore nella notifica al path-service: {response.status_code} - {response.text}")
+                        path_response = response.json()
+                        logger.info(f"Risposta dal path-service: {path_response}")
+                        
+                        # Log dei dettagli del percorso aggiornato
+                        if "path_id" in path_response:
+                            logger.info(f"Path aggiornato: id={path_response.get('path_id')}")
+                        
+                        # Log della percentuale di completamento
+                        path_url = f"{path_service_url}/api/paths/{db_quiz.path_id}"
+                        path_response = requests.get(path_url, headers=headers)
+                        
+                        if path_response.status_code == 200:
+                            path_data = path_response.json()
+                            completion_percentage = path_data.get("completion_percentage", 0)
+                            current_score = path_data.get("current_score", 0)
+                            path_status = path_data.get("status", "unknown")
+                            logger.info(f"Stato aggiornato del percorso: path_id={db_quiz.path_id}, " 
+                                        f"completion_percentage={completion_percentage}%, "
+                                        f"score={current_score}, status={path_status}")
+                            
+                            if path_status == "completed":
+                                logger.info(f"PERCORSO COMPLETATO! path_id={db_quiz.path_id}, student_id={current_user['user_id']}")
+                        else:
+                            logger.error(f"Errore nella risposta dal path-service: status={response.status_code}, response={response.text}")
                 except Exception as e:
-                    # Non blocchiamo il flusso principale in caso di errore nella notifica
-                    logger.error(f"DEBUG - Eccezione durante la notifica al path-service: {str(e)}", exc_info=True)
+                    logger.error(f"Errore durante la chiamata al path-service: {str(e)}")
+            else:
+                logger.info("Quiz non ha un path_id associato. Nessuna notifica inviata al path-service.")
             
+            # Ora possiamo restituire il risultato
             return result
         except Exception as e:
             logger.error(f"DEBUG - ERRORE durante l'invio delle risposte: {str(e)}", exc_info=True)

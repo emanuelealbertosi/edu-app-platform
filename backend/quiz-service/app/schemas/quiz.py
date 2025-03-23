@@ -324,5 +324,7 @@ class QuizResult(BaseModel):
     total_questions: int = 0
     percentage: float = Field(0.0, ge=0.0, le=100.0)
     answers: List[Dict[str, Any]] = []
+    already_completed: bool = False
+    message: Optional[str] = None
     
     model_config = {"from_attributes": True}

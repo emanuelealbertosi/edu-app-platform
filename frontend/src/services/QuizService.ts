@@ -83,10 +83,11 @@ export interface QuizSubmission {
 export interface QuizResult {
   score: number;
   maxScore: number;
-  correctAnswers: number;
-  totalQuestions: number;
+  percentage: number;
+  passed: boolean;
   pointsAwarded?: number;
-  feedback?: string;
+  already_completed?: boolean;
+  message?: string;
 }
 
 /**
@@ -269,7 +270,14 @@ class QuizService {
       rawUuid: JSON.stringify(data.uuid),
       hasUuid: 'uuid' in data,
       template_id: data.template_id,
-      is_completed: data.is_completed
+      is_completed: data.is_completed,
+      completed_at: data.completed_at,
+      statusDetails: {
+        isCompleted: Boolean(data.is_completed),
+        hasCompletedAt: Boolean(data.completed_at),
+        hasScore: data.score !== undefined && data.score !== null,
+        score: data.score
+      }
     });
     
     // Gestisce il caso in cui i dati provengano da un nodo percorso
@@ -313,6 +321,21 @@ class QuizService {
       };
     }
     
+    // Determinazione robusta dello stato di completamento
+    const isReallyCompleted = Boolean(
+      quizData.is_completed && 
+      (quizData.completed_at || quizData.completedAt) && 
+      (quizData.score !== undefined && quizData.score !== null)
+    );
+    
+    // Log dettagliato della determinazione dello stato completato
+    console.log('[DEBUG QuizService] Stato completamento:', {
+      isCompletedFlag: Boolean(quizData.is_completed),
+      hasCompletedAt: Boolean(quizData.completed_at || quizData.completedAt),
+      hasScore: quizData.score !== undefined && quizData.score !== null,
+      determinedAsCompleted: isReallyCompleted
+    });
+    
     // Debug info per problemi di identificazione
     console.log('[DEBUG QuizService] Dati normalizzati:', {
       id: quizData.id,
@@ -320,7 +343,7 @@ class QuizService {
       title: quizData.title || quizData.template?.title,
       templateId: quizData.template_id,
       pathId: quizData.path_id,
-      isCompleted: quizData.is_completed,
+      isCompleted: isReallyCompleted,
       studentId: quizData.student_id
     });
     
@@ -337,9 +360,9 @@ class QuizService {
       studentId: quizData.student_id || '',
       title: quizData.title || quizData.template?.title || 'Quiz senza titolo',
       description: quizData.description || quizData.template?.description || '',
-      isCompleted: quizData.is_completed || false,
+      isCompleted: isReallyCompleted,
       startedAt: quizData.started_at ? new Date(quizData.started_at) : undefined,
-      completedAt: quizData.completed_at ? new Date(quizData.completed_at) : undefined,
+      completedAt: (quizData.completed_at || quizData.completedAt) ? new Date(quizData.completed_at || quizData.completedAt) : undefined,
       score: quizData.score || 0,
       maxScore: quizData.max_score || 0,
       timeLimit: quizData.time_limit || quizData.timeLimit,
@@ -1355,9 +1378,9 @@ class QuizService {
       
       // Adatta il formato delle risposte per rispettare le aspettative dell'API
       const formattedSubmission = {
-        quiz_id: parseInt(quizId),
+        quiz_id: quizId,  // Manteniamo l'ID originale, potrebbe essere un UUID
         answers: submission.answers.map(answer => ({
-          question_id: answer.questionId,
+          question_uuid: answer.questionId,  // Rinominato in question_uuid per chiarezza
           selected_option_id: answer.selectedOptionId,
           text_answer: answer.textAnswer
         }))
@@ -1431,9 +1454,9 @@ class QuizService {
       
       // Adatta il formato delle risposte per rispettare le aspettative dell'API
       const formattedSubmission = {
-        quiz_id: parseInt(quizId),
+        quiz_id: quizId,  // Manteniamo l'ID originale, potrebbe essere un UUID
         answers: submission.answers.map(answer => ({
-          question_id: answer.questionId,
+          question_uuid: answer.questionId,  // Rinominato in question_uuid per chiarezza
           selected_option_id: answer.selectedOptionId,
           text_answer: answer.textAnswer
         }))
@@ -1577,6 +1600,36 @@ class QuizService {
     } catch (error) {
       console.error('[DEBUG QuizService] Errore nella creazione del tentativo:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Recupera i risultati di un quiz completato
+   * @param quizId ID del quiz di cui recuperare i risultati
+   * @returns Dati del risultato del quiz
+   */
+  static async getQuizResults(quizId: string) {
+    try {
+      console.log(`Fetching results for quiz ID: ${quizId}`);
+      const response = await ApiService.get(`${API_URL}/api/quizzes/${quizId}/results`);
+      
+      console.log('Quiz results retrieved:', response);
+      
+      return {
+        id: quizId,
+        title: response.title || 'Quiz',
+        description: response.description,
+        score: response.score || 0,
+        maxScore: response.maxScore || 0,
+        percentage: response.percentage || 0,
+        pointsAwarded: response.pointsAwarded,
+        alreadyCompleted: response.already_completed,
+        message: response.message,
+        completedAt: response.completedAt
+      };
+    } catch (error) {
+      console.error('Error fetching quiz results:', error);
+      throw new Error('Impossibile recuperare i risultati del quiz');
     }
   }
 }
